@@ -32,7 +32,7 @@ Use one installation method to avoid confusing the panels. CCX and Portable keep
 Use saved copies. Generated structure and colors need review. Host idle crashes have also occurred without the plugin; changing installation methods is not a guaranteed fix. Code: GPL-3.0-only, see LICENSE. Model licenses are separate. Matching source: https://github.com/ImMappyJ/ps-ai
 `;
 export async function createEnvironmentPackage(root,target){
-  const names=['LICENSE','scripts/check-environment.ps1','scripts/prepare-environment.ps1','scripts/install-ccx.ps1','config/settings.example.json','config/compatibility.json','README.md','README.en.md','COMFYUI.md','COMFYUI.en.md','assets/icon.png','assets/1.png','assets/2.png'];
+  const names=['LICENSE','scripts/check-environment.ps1','scripts/prepare-environment.ps1','scripts/install-ccx.ps1','config/settings.example.json','config/compatibility.json','README.md','README.en.md','COMFYUI.md','COMFYUI.en.md','assets/icon.png','assets/1.png','assets/2.png','src/workflow.ts','src/profile.ts'];
   const entries={};for(const name of names)entries[name]=new Uint8Array(await fs.readFile(path.join(root,name)));
   await fs.writeFile(target,zipSync(entries,{level:9}));return Object.keys(entries);
 }

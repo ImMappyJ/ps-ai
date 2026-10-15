@@ -56,3 +56,10 @@ test('CCX 根目录包含单宿主清单和有效资源，不携带模型/源码
     await fs.writeFile(path.join(input,'model.gguf'),'model');await assert.rejects(createPackage(input,archive),/文件/);
   }finally{await fs.rm(root,{recursive:true,force:true});}
 });
+test('独立环境工具的 Markdown 相对链接都指向归档内文件',async()=>{
+  // @ts-expect-error Packaging is plain JS.
+  const {createEnvironmentPackage}=await import('../scripts/package.mjs');const dir=await fs.mkdtemp(path.join(os.tmpdir(),'ps-ai-env-links-'));
+  try{const archive=path.join(dir,'environment.zip');await createEnvironmentPackage(process.cwd(),archive);const entries=unzipSync(await fs.readFile(archive));
+    for(const [name,bytes] of Object.entries(entries)){if(!name.endsWith('.md'))continue;for(const match of strFromU8(bytes).matchAll(/\]\(([^\s)]+)\)/g)){const target=match[1].split('#')[0];if(!target||/^https?:/.test(target))continue;const resolved=path.posix.normalize(path.posix.join(path.posix.dirname(name),target));assert.ok(entries[resolved],`${name} -> ${target}`);}}
+  }finally{await fs.rm(dir,{recursive:true,force:true});}
+});
