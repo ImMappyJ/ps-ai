@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "baseUrl": "http://localhost:8188",
+  "models": {
+    "unet": "qwen-image-2.1-Q4_K_M.gguf",
+    "clip": "qwen3vl_8b_int8_convrot.safetensors",
+    "vae": "qwen_image_2.1_vae_bf16.safetensors"
+  },
+  "language": "zh-CN"
+}

@@ -1,0 +1,111 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {panelHarness} from './uxp-harness';
+import {defaultSettings} from '../src/profile';
+import {decodePng} from '../src/image';
+
+test('保存地址与语言后重载仍使用新后端，英文界面保留参数',async()=>{
+  const h=await panelHarness();try{
+    assert.ok(h.el('backend-url'));h.el('backend-url').value='http://localhost:8199/';h.el('language').value='en-US';h.el('seed').value='123';h.click('save-settings');await h.wait();
+    const saved=JSON.parse(String(h.files['settings.json']));assert.equal(saved.baseUrl,'http://localhost:8199');assert.equal(saved.language,'en-US');assert.equal(h.el('generate').textContent,'Generate');assert.equal(h.el('seed').value,'123');
+    h.click('tab-t2i');h.click('generate');await h.wait();assert.equal(h.records()[0].baseUrl,'http://localhost:8199');assert.match(h.el('status').textContent,/candidate/i);
+    const reload=await panelHarness({settings:saved});try{assert.equal(reload.el('backend-url').value,saved.baseUrl);assert.equal(reload.el('generate').textContent,'Generate');}finally{await reload.close();}
+  }finally{await h.close();}
+});
+test('切换后端后恢复或取消旧任务时不向新后端发送请求',async()=>{
+  const h=await panelHarness();try{
+    h.files['history.json']=JSON.stringify([{id:'11111111-1111-4111-8111-111111111111',clientId:'22222222-2222-4222-8222-222222222222',createdAt:new Date().toISOString(),state:'unknown',graph:{},baseUrl:'http://localhost:8188'}]);
+    h.el('backend-url').value='http://localhost:8199';h.click('save-settings');await h.wait();h.click('recover');await h.wait();assert.match(h.el('status').textContent,/8188/);assert.equal(h.records()[0].state,'unknown');
+  }finally{await h.close();}
+});
+test('英文界面翻译进度与宿主错误，保留用户提示词和参考用途值',async()=>{
+  const h=await panelHarness({settings:{...defaultSettings(),language:'en-US'},noDocuments:true});try{
+    assert.equal(h.el('usage').value,'服装');h.click('generate');await h.wait();assert.match(h.el('status').textContent,/Photoshop document/);assert.doesNotMatch(h.el('status').textContent,/[一-龥]/);
+    h.click('tab-t2i');h.el('count').value='0';h.click('generate');await h.wait();assert.match(h.el('status').textContent,/1–4/);assert.doesNotMatch(h.el('progress-label').textContent,/[一-龥]/);
+  }finally{await h.close();}
+});
+test('单独切换语言保留已连接状态和未保存的地址草稿',async()=>{
+  const h=await panelHarness();try{
+    assert.equal(h.el('connection').textContent,'已连接');h.el('backend-url').value='http://localhost:8199';h.el('language').value='en-US';h.change('language');await h.wait();
+    assert.equal(h.el('connection').textContent,'Connected');assert.equal(h.el('backend-url').value,'http://localhost:8199');assert.equal(JSON.parse(String(h.files['settings.json'])).baseUrl,'http://localhost:8188');
+  }finally{await h.close();}
+});
+
+test('透明原图上传保留 alpha，预览及导出候选使用来源轮廓；编辑尺寸异常拒绝应用',async()=>{
+  const h=await panelHarness({source:{width:2,height:2,rgba:new Uint8Array([0,0,0,0,40,60,80,128,80,100,120,255,120,140,160,255])}});
+  try{h.el('resolution').value='32';h.click('generate');await h.wait();
+    assert.equal(h.uploads[0].image.rgba[3],0);assert.equal(h.uploads[0].image.rgba[h.uploads[0].image.rgba.length-1],255);
+    assert.equal(h.records()[0].state,'ready');assert.equal((h.records()[0].params as any).preserveAlpha,true);
+    const output=decodePng(new Uint8Array(h.files[String(h.records()[0].outputFile)] as Uint8Array));assert.equal(output.width,32);
+    h.click('export');await new Promise(r=>setTimeout(r,60));const saved=decodePng(h.files[`ps-ai-${h.records()[0].id.slice(0,8)}.png`] as Uint8Array);assert.equal(saved.rgba[3],0);assert.equal(saved.rgba[saved.rgba.length-1],255);
+    assert.match(h.el('status').textContent,/候选/);assert.equal(h.errors.length,0);
+  }finally{await h.close();}
+  const bad=await panelHarness({output:{width:2,height:2,rgba:new Uint8Array(16).fill(255)}});
+  try{bad.click('generate');await bad.wait();assert.equal(bad.records()[0].state,'output-error');assert.match(bad.el('status').textContent,/尺寸/);assert.equal(bad.el('apply').disabled,true);}finally{await bad.close();}
+});
+
+test('生成及选区预览不依赖 Photoshop 原生预览编码器，诊断记录不含提示词',async()=>{
+  const h=await panelHarness({nativePreviewUnavailable:true});try{
+    h.click('capture');await new Promise(r=>setTimeout(r,60));
+    assert.match(h.el('source-preview').src,/^data:image\/png;base64,/);
+    const thumbnail=decodePng(new Uint8Array(Buffer.from(h.el('source-preview').src.split(',')[1],'base64')));
+    assert.equal(thumbnail.width,2);assert.equal(thumbnail.height,2);assert.deepEqual(Array.from(thumbnail.rgba),new Array(16).fill(255));
+    h.click('tab-t2i');h.click('generate');await h.wait();
+    assert.equal(h.records()[0].state,'ready');assert.match(h.el('detail-preview').src,/^data:image\/png;base64,/);
+    assert.equal(h.errors.length,0);
+    const trace=JSON.parse(String(h.files['runtime-trace.json']));
+    assert.ok(trace.events.some((e:any)=>e.stage==='capture.pixels.read'));
+    assert.ok(trace.events.some((e:any)=>e.stage==='candidate.ready'));
+    assert.doesNotMatch(JSON.stringify(trace),/blue lightning|qwen.*safetensors/);
+  }finally{await h.close();}
+});
+test('取消期间等待后端确认，完成的候选保留且进度不宣称整批完成',async()=>{
+  const h=await panelHarness();try{h.click('tab-t2i');h.setJobStatus('running');h.click('generate');await new Promise(r=>setTimeout(r,80));h.progress(h.posts[0].prompt_id,5,25);h.click('cancel');h.progress(h.posts[0].prompt_id,20,25);assert.equal(h.el('progress-bar').getAttribute('value'),'20');await new Promise(r=>setTimeout(r,2000));assert.match(h.el('progress-label').textContent,/取消/);h.setJobStatus('ready');await h.wait();assert.equal(h.el('task-progress').getAttribute('aria-busy'),'false');assert.equal(h.records()[0].state,'ready');assert.match(h.el('progress-label').textContent,/保留/);assert.equal(h.el('progress-bar').getAttribute('value'),'0');}finally{h.setJobStatus('ready');await h.close();}
+});
+test('生成显示真实任务进度，忽略其他 ID，轮询不覆盖步数，成功与错误结束忙碌状态',async()=>{
+  const h=await panelHarness();try{h.click('tab-t2i');h.holdCheck();h.click('generate');await new Promise(r=>setTimeout(r,30));assert.equal(h.el('task-progress').style.display,'block');assert.match(h.el('progress-label').textContent,/检查/);h.setJobStatus('queued');h.releaseCheck();await new Promise(r=>setTimeout(r,60));const id=h.posts[0].prompt_id;assert.match(h.el('progress-label').textContent,/排队/);assert.equal(h.el('progress-bar').getAttribute('value'),'0');h.setJobStatus('running');h.progress('00000000-0000-0000-0000-000000000000',10,25);assert.equal(h.el('progress-bar').getAttribute('value'),'0');h.progress(id,10,25);assert.equal(h.el('progress-bar').getAttribute('value'),'40');assert.match(h.el('progress-label').textContent,/10 \/ 25/);h.progress(id,NaN,0);assert.equal(h.el('progress-bar').getAttribute('value'),'40');await new Promise(r=>setTimeout(r,2100));assert.equal(h.el('progress-bar').getAttribute('value'),'40');assert.match(h.el('status').textContent,/10 \/ 25/);h.setJobStatus('ready');await h.wait();assert.equal(h.el('progress-bar').getAttribute('value'),'100');assert.equal(h.el('task-progress').getAttribute('aria-busy'),'false');h.el('count').value='0';h.click('generate');await new Promise(r=>setTimeout(r,50));assert.equal(h.el('task-progress').getAttribute('aria-busy'),'false');assert.equal(h.el('progress-bar').getAttribute('value'),'0');}finally{h.releaseCheck();h.setJobStatus('ready');await h.close();}
+});
+test('提交自动捕获不展开预览，手动预览才显示；保护范围改变后收起过期预览',async()=>{
+  const h=await panelHarness();try{h.click('generate');await new Promise(r=>setTimeout(r,80));await h.wait();assert.equal(h.posts.length,1);assert.equal(h.el('selection-previews').style.display,'none');h.click('capture');await new Promise(r=>setTimeout(r,40));assert.equal(h.el('selection-previews').style.display,'flex');h.click('clear-protection');await new Promise(r=>setTimeout(r,20));assert.equal(h.el('selection-previews').style.display,'none');}finally{await h.close();}
+});
+test('复用独立氛围素材历史时隐藏选区操作并保留应用位置',async()=>{
+  const h=await panelHarness({uxpSelect:true});try{h.click('tab-t2i');h.click('generate');await new Promise(r=>setTimeout(r,80));await h.wait();const records=h.records();Object.assign(records[0].params as Record<string,unknown>,{workspace:'cosplay',mode:'atmosphere',destination:'document'});h.files['history.json']=JSON.stringify(records);h.click('repeat-history');await new Promise(r=>setTimeout(r,30));assert.equal(h.el('mode').value,'atmosphere');assert.equal(h.el('destination').value,'document');assert.equal(h.el('selection-tools').style.display,'none');}finally{await h.close();}
+});
+test('紧凑面板折叠配置和进阶参数，展开收起保留输入与模型',async()=>{
+  const h=await panelHarness();try{assert.equal(h.el('settings-body').style.display,'none');assert.equal(h.el('advanced-body').style.display,'none');h.click('toggle-settings');assert.equal(h.el('settings-body').style.display,'block');h.el('seed').value='123';h.click('toggle-advanced');h.click('toggle-advanced');assert.equal(h.el('seed').value,'123');assert.equal(h.el('model-unet').value,defaultSettings().models.unet);}finally{await h.close();}
+});
+test('生图新文档隐藏选区辅助，切回局部编辑恢复；无候选时禁用应用',async()=>{
+  const h=await panelHarness({uxpSelect:true});try{assert.equal(h.el('apply').disabled,true);h.click('tab-t2i');assert.equal(h.el('selection-tools').style.display,'none');assert.equal(h.el('prompt').getAttribute('placeholder'),'描述要生成的画面、主体与风格');h.click('generate');await new Promise(r=>setTimeout(r,80));await h.wait();assert.equal(h.el('apply').disabled,true);assert.equal(h.el('new-document').disabled,false);h.click('tab-local');assert.equal(h.el('selection-tools').style.display,'block');}finally{await h.close();}
+});
+test('UXP 动态下拉框显式选择默认模式和首次历史记录',async()=>{
+  const h=await panelHarness({uxpSelect:true});try{assert.equal(h.el('mode').value,'edit');h.click('tab-t2i');assert.equal(h.el('mode').value,'generate');h.click('generate');await new Promise(r=>setTimeout(r,80));await h.wait();assert.equal(h.records().length,1);assert.equal(h.el('history').value,h.records()[0].id);}finally{await h.close();}
+});
+test('UXP 未交互的参考用途有有效默认项并保存到任务参数',async()=>{
+  const h=await panelHarness({uxpSelect:true});try{assert.equal(h.el('usage').value,'服装');h.click('tab-t2i');h.click('generate');await new Promise(r=>setTimeout(r,80));await h.wait();assert.equal((h.records()[0].params as Record<string,unknown>).usage,'服装');}finally{await h.close();}
+});
+test('复用旧历史时缺失或非法参考用途保持有效默认项',async()=>{
+  const h=await panelHarness({uxpSelect:true});try{h.click('tab-t2i');h.click('generate');await new Promise(r=>setTimeout(r,80));await h.wait();for(const usage of [undefined,'unknown']){const records=h.records();(records[0].params as Record<string,unknown>).usage=usage;h.files['history.json']=JSON.stringify(records);h.click('repeat-history');await new Promise(r=>setTimeout(r,30));assert.equal(h.el('usage').value,'服装');}}finally{await h.close();}
+});
+test('启动配置读取未完成时锁定保存和生成，旧读取不覆盖新配置',async()=>{
+  const h=await panelHarness({delaySettings:true,settings:defaultSettings()});try{h.el('model-unet').value='new.gguf';h.click('save-settings');h.click('generate');await new Promise(r=>setTimeout(r,30));assert.equal(h.el('save-settings').disabled,true);assert.equal(JSON.parse(String(h.files['settings.json'])).models.unet,defaultSettings().models.unet);assert.equal(h.posts.length,0);h.releaseSettings();await new Promise(r=>setTimeout(r,70));assert.equal(h.el('save-settings').disabled,false);h.click('tab-t2i');h.click('generate');await new Promise(r=>setTimeout(r,80));await h.wait();assert.equal(h.posts.length,1);assert.equal(h.posts[0].prompt['1'].inputs.unet_name,defaultSettings().models.unet);}finally{h.releaseSettings();await h.close();}
+});
+test('无打开文档时文字生图仍可提交，不读取会抛错的 activeDocument',async()=>{
+  const h=await panelHarness({noDocuments:true});try{h.click('tab-t2i');h.click('generate');await new Promise(r=>setTimeout(r,80));await h.wait();assert.equal(h.posts.length,1);assert.equal(h.records()[0].state,'ready');}finally{await h.close();}
+});
+test('保存的可迁移模型配置用于连接检查、提交图与历史',async()=>{
+  const settings=defaultSettings();settings.models={unet:'custom/qwen.gguf',clip:'custom/clip.safetensors',vae:'custom/vae.safetensors'};
+  const h=await panelHarness({settings,models:settings.models});try{h.click('tab-t2i');h.click('generate');await new Promise(r=>setTimeout(r,80));await h.wait();assert.equal(h.posts.length,1);assert.equal(h.posts[0].prompt['1'].inputs.unet_name,settings.models.unet);assert.deepEqual(h.records()[0].models,settings.models);}finally{await h.close();}
+});
+test('损坏配置阻止生成，显式保存有效配置后可继续',async()=>{
+  const h=await panelHarness({settings:{schemaVersion:99}});try{h.click('tab-t2i');h.click('generate');await new Promise(r=>setTimeout(r,50));assert.equal(h.posts.length,0);assert.match(h.el('status').textContent,/配置|设置/);h.click('save-settings');await new Promise(r=>setTimeout(r,50));assert.equal(JSON.parse(String(h.files['settings.json'])).schemaVersion,1);h.click('generate');await new Promise(r=>setTimeout(r,80));await h.wait();assert.equal(h.posts.length,1);}finally{await h.close();}
+});
+test('UXP option.value 需要显式属性，默认分辨率可生成候选',async()=>{
+  const h=await panelHarness({uxpSelect:true});try{h.click('tab-t2i');h.click('generate');await new Promise(r=>setTimeout(r,50));await h.wait();assert.equal(h.posts.length,1);assert.equal(h.posts[0].prompt['4'].inputs.resolution,992);assert.equal(h.records()[0].state,'ready');}finally{await h.close();}
+});
+test('连续点击生成时先锁定，再读取历史，仅有一个提交',async()=>{
+  const h=await panelHarness();try{h.click('tab-t2i');h.holdHistory();h.click('generate');h.click('generate');await new Promise(r=>setTimeout(r,30));h.releaseHistory();await new Promise(r=>setTimeout(r,60));await h.wait();assert.equal(h.posts.length,1);assert.equal(h.records().length,1);}finally{h.releaseHistory();await h.close();}
+});
+test('点击生成后在服务检查阶段换文档，不捕获或提交新活动文档',async()=>{
+  const h=await panelHarness();try{h.holdCheck();h.click('generate');await new Promise(r=>setTimeout(r,30));h.setDocument(22);h.releaseCheck();await new Promise(r=>setTimeout(r,60));await h.wait();assert.deepEqual(h.captured,[]);assert.equal(h.posts.length,0);assert.match(h.el('status').textContent,/文档/);}finally{h.releaseCheck();await h.close();}
+});
+test('历史检查尚未完成时取消，不提交后续 GPU 任务',async()=>{
+  const h=await panelHarness();try{h.click('tab-t2i');h.holdHistory();h.click('generate');h.click('cancel');h.releaseHistory();await new Promise(r=>setTimeout(r,70));await h.wait();assert.equal(h.posts.length,0);}finally{h.releaseHistory();await h.close();}
+});

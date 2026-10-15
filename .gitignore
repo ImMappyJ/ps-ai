@@ -1,0 +1,46 @@
+node_modules/
+dist/
+release/
+artifacts/
+.references/
+.tools/
+.superpowers/
+*.log
+__pycache__/
+
+# Local handoff, planning state, editor settings and operating-system caches
+HANDOFF.md
+README.github.md
+# Internal notes and machine evidence stay local. Public guides live at the root.
+docs/
+scripts/photoshop-network.ps1
+tests/network-isolation.test.ts
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+.uxprc
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+
+# Runtime input/output and private diagnostics (publish reviewed screenshots explicitly)
+PluginData/
+input/
+output/
+temp/
+cache/
+models/
+*.dmp
+*.psd
+*.psb
+*.safetensors
+*.gguf
+*.ckpt
+*.ccx
+*.zip
+environment-report*.json
+ccx-install-report*.json
+photoshop-network-report*.json

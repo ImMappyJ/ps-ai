@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "preset": "qwen-image-2.1-gguf-q4-experimental",
+  "status": "experimental; Windows Photoshop 27.0 tested, broader host stability unverified",
+  "photoshop": {
+    "tested": "27.0",
+    "minimumManifest": "27.0",
+    "mode": "RGB / Grayscale 8/16-bit (native sRGB, Adobe RGB and Gray Gamma 2.2 matrix passed)",
+    "modelPixels": "sRGB 8-bit",
+    "unsupported": [
+      "CMYK",
+      "Lab",
+      "Indexed",
+      "Bitmap",
+      "Multichannel",
+      "RGB 32-bit HDR"
+    ]
+  },
+  "toolchain": {
+    "nodeTested": "24.21.0",
+    "npmTested": "11.19.0"
+  },
+  "service": {
+    "baseUrl": "http://localhost:8188",
+    "listenAddress": "127.0.0.1",
+    "cancelRoute": "/api/jobs/{job_id}/cancel",
+    "callerAssignedPromptId": true,
+    "allowedProtocols": [
+      "http",
+      "https"
+    ],
+    "addressPolicy": "HTTP(S) origin with configurable host and port; no credentials, URL path, query or fragment"
+  },
+  "backend": {
+    "repository": "https://github.com/Comfy-Org/ComfyUI",
+    "version": "0.37.4",
+    "commit": "8ff6dc384ba5c410266b40e137799e049459d4f2"
+  },
+  "gguf": {
+    "repository": "https://github.com/leejet/ComfyUI-GGUF",
+    "commit": "373048b8403a7820620065210a691263d4da0a61"
+  },
+  "nodes": [
+    "UnetLoaderGGUF",
+    "CLIPLoader",
+    "VAELoader",
+    "TextEncodeQwenImage21",
+    "QwenImage21Cache",
+    "KSampler",
+    "VAEDecode",
+    "SaveImage",
+    "LoadImage",
+    "JoinImageWithAlpha"
+  ],
+  "models": [
+    {
+      "key": "unet",
+      "directory": "diffusion_models",
+      "filename": "qwen-image-2.1-Q4_K_M.gguf",
+      "bytes": 4604557984,
+      "sha256": "833439e91bc1152d28f37aa198c7f6f4218b7de95754c2f7a318a2422ab4b2f8",
+      "repository": "Janchan123/Qwen-Image-2.1-Uncensored-GGUF",
+      "revision": "2a9f9f126b8cad42b48f8b1ac3c89bb884eeeee4",
+      "repositoryPath": "qwen-image-2.1-Q4_K_M.gguf"
+    },
+    {
+      "key": "clip",
+      "directory": "text_encoders",
+      "filename": "qwen3vl_8b_int8_convrot.safetensors",
+      "bytes": 9350798360,
+      "sha256": "8bfd0f6e12abf2d2d697ecc888e5e90b0d6741d6708f05799f53afa560452e8f",
+      "repository": "Comfy-Org/Qwen-Image-2.1",
+      "revision": "df94239739eef7205973a145ffa6f441f7b64e84",
+      "repositoryPath": "text_encoders/qwen3vl_8b_int8_convrot.safetensors"
+    },
+    {
+      "key": "vae",
+      "directory": "vae",
+      "filename": "qwen_image_2.1_vae_bf16.safetensors",
+      "bytes": 675509688,
+      "sha256": "bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9",
+      "repository": "Comfy-Org/Qwen-Image-2.1",
+      "revision": "df94239739eef7205973a145ffa6f441f7b64e84",
+      "repositoryPath": "vae/qwen_image_2.1_vae_bf16.safetensors"
+    }
+  ],
+  "modelLicense": "https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE",
+  "workflow": {
+    "template": "qwen21-local-v2-rgba",
+    "architecture": "Qwen-Image 2.1",
+    "loader": "UnetLoaderGGUF",
+    "alternateModels": "Compatible Qwen 2.1 GGUF weights only; each combination requires an inference test",
+    "unsupported": [
+      "Stable Diffusion",
+      "SDXL",
+      "Flux",
+      "arbitrary workflow import"
+    ]
+  }
+}

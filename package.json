@@ -1,0 +1,28 @@
+{
+  "name": "ps-ai",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "PS-AI FOR ME — Photoshop local Qwen-Image 2.1 editing panel",
+  "scripts": {
+    "test": "node --import tsx --test --test-timeout=15000 tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && node scripts/build.mjs",
+    "p0": "node --import tsx scripts/p0-live.ts",
+    "package": "npm run test && npm run build && node scripts/package.mjs"
+  },
+  "dependencies": {
+    "pako": "1.0.11",
+    "upng-js": "2.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.0",
+    "@types/upng-js": "2.1.5",
+    "esbuild": "0.25.11",
+    "fflate": "0.8.3",
+    "linkedom": "0.18.12",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3"
+  },
+  "license": "GPL-3.0-only"
+}
