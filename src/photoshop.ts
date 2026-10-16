@@ -195,7 +195,7 @@ export class PhotoshopAdapter {
       const authorized=[...this.applications.entries()].filter(([,a])=>a.documentId===documentId&&a.layerId===layerId&&a.historyId===doc.activeHistoryState.id);
       layer.opacity=value;
       for(const [key,a] of authorized)this.applications.set(key,{...a,historyId:doc.activeHistoryState.id});
-    },{commandName:'PS-AI FOR ME 调整图层不透明度'});
+    },{commandName:'PS-AI 调整图层不透明度'});
   }
   async newDocument(image:Raster,name:string):Promise<number> {
     checkSize(image.width,image.height);

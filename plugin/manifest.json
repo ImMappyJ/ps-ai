@@ -1,7 +1,7 @@
 {
   "manifestVersion": 5,
   "id": "local.ps-ai",
-  "name": "PS-AI FOR ME",
+  "name": "PS-AI",
   "version": "0.4.0",
   "main": "index.html",
   "host": [
@@ -35,7 +35,7 @@
       "type": "panel",
       "id": "psai",
       "label": {
-        "default": "PS-AI FOR ME"
+        "default": "PS-AI"
       },
       "minimumSize": {
         "width": 300,
@@ -57,17 +57,23 @@
         {
           "width": 23,
           "height": 23,
-          "path": "icons/panel.png",
+          "path": "icons/panel-on-dark.png",
           "scale": [
             1,
             2
           ],
-          "theme": [
-            "all"
-          ],
+          "theme": ["darkest", "dark", "medium"],
           "species": [
             "chrome"
           ]
+        },
+        {
+          "width": 23,
+          "height": 23,
+          "path": "icons/panel-on-light.png",
+          "scale": [1, 2],
+          "theme": ["lightest", "light"],
+          "species": ["chrome"]
         }
       ]
     }

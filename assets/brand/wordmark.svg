@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="226" height="48" viewBox="0 0 226 48" role="img" aria-label="PS-AI">
+  <title>PS-AI</title>
+  <!-- Original geometric sans-serif outlines; no external font is required. -->
+  <g id="wordmark" fill="#121423" fill-rule="evenodd">
+    <path d="M0 2H21C32 2 38 8 38 18S32 34 21 34H8V46H0ZM8 10V26H20C27 26 30 23 30 18S27 10 20 10Z"/>
+    <path d="M50 34C55 38 61 40 68 40C75 40 79 38 79 34C79 30 76 29 68 27L62 26C53 24 49 20 49 14C49 5 56 0 67 0C75 0 82 3 87 7L82 13C78 10 73 8 67 8C61 8 57 10 57 14C57 17 60 18 67 20L73 21C83 23 87 27 87 34C87 43 80 48 68 48C59 48 51 45 46 40Z"/>
+    <path d="M100 21H120V28H100Z"/>
+    <path d="M149 2H159L178 46H169L165 36H143L139 46H130ZM146 29H162L154 10Z"/>
+    <path d="M191 2H199V46H191Z"/>
+  </g>
+</svg>

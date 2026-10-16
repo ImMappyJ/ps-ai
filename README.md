@@ -1,12 +1,14 @@
 <p align="center">
-  <img src="assets/icon.png" width="72" alt="PS-AI FOR ME">
+  <img src="assets/brand/avatar.png" width="72" alt="PS-AI">
 </p>
-<h1 align="center">PS-AI FOR ME</h1>
+<h1 align="center">PS-AI</h1>
 <p align="center"><strong>简体中文</strong> · <a href="README.en.md">English</a></p>
 
-PS-AI FOR ME 将 ComfyUI 接到 Photoshop 中，用于局部修图、COSPLAY 服装和道具处理，以及文字生图。圈选区域、描述修改要求，在面板里生成并预览候选，确认后应用为带蒙版的新图层。
+PS-AI 将 ComfyUI 接到 Photoshop 中，用于局部修图、COSPLAY 服装和道具处理，以及文字生图。圈选区域、描述修改要求，在面板里生成并预览候选，确认后应用为带蒙版的新图层。
 
 已发布版本为 **0.3.0（实验版）**；当前源码是尚未发布的 **0.4.0 开发版本**，增加配置向导、色彩检查和编辑范围预览。安装发行包时请查看对应版本的说明。生成结果可能需要手工修整，建议在已保存的副本上使用。不包含常规人像磨皮、去痘和肤色精修功能。
+
+0.3.0 中的面板名称仍是 `PS-AI FOR ME`。0.4.0 开发版改用 `PS-AI` 名称和 Morph Frame 标识，插件 ID 与 `PS-AI-FOR-ME` 安装目录保持不变。
 
 ## 看看效果
 
@@ -123,6 +125,8 @@ npm run build
 欢迎提交 PR，尽量让每次改动集中解决一个问题。提交前运行 `npm ci`、`npm test`、`npm run build`；改动工作流时，同步更新兼容清单和中英文说明。开发使用独立分支，讨论和评审放在 Issue／PR。交接笔记、调试记录和本机报告留在本地。
 
 ## 许可与鸣谢
+
+项目图形与使用规则见 [品牌资源](BRAND.md)。修改 SVG 后运行 `npm run brand:export`，用 `npm run brand:check` 检查各尺寸导出是否同步。
 
 代码采用 [GNU GPL v3.0](LICENSE)（GPL-3.0-only）。分发修改版或二进制时，应提供对应源码、构建脚本和许可证。权重另行授权，不包含在仓库或插件包中；截图也不授予其中第三方角色或素材的权利。
 

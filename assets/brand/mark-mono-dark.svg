@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="PS-AI"><title>PS-AI</title><defs>
+    <linearGradient id="morph-ink" gradientUnits="userSpaceOnUse" x1="18" y1="16" x2="114" y2="110">
+      <stop stop-color="#7C5CFF"/>
+      <stop offset="1" stop-color="#E35DCC"/>
+    </linearGradient>
+  </defs><g id="symbol" fill="#121423">
+    <path d="M30 16H68V32H34V94H70V110H30C23 110 18 105 18 98V28C18 21 23 16 30 16Z"/>
+    <path d="M84 16C103 16 114 31 114 47C114 64 103 73 86 79L68 85C59 88 55 92 53 98H35C38 84 46 75 60 70L78 63C89 59 96 54 96 47C96 39 91 33 84 33H80V16Z"/>
+  </g></svg>

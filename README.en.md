@@ -1,12 +1,14 @@
 <p align="center">
-  <img src="assets/icon.png" width="72" alt="PS-AI FOR ME">
+  <img src="assets/brand/avatar.png" width="72" alt="PS-AI">
 </p>
-<h1 align="center">PS-AI FOR ME</h1>
+<h1 align="center">PS-AI</h1>
 <p align="center"><a href="README.md">简体中文</a> · <strong>English</strong></p>
 
-PS-AI FOR ME connects ComfyUI to Photoshop for local edits, COSPLAY outfits and props, and text-to-image generation. Select an area, describe the change and preview candidates in the panel, then apply a result as a new layer with an editable mask.
+PS-AI connects ComfyUI to Photoshop for local edits, COSPLAY outfits and props, and text-to-image generation. Select an area, describe the change and preview candidates in the panel, then apply a result as a new layer with an editable mask.
 
 **The published release is 0.3.0 (experimental).** This source tree is the unpublished **0.4.0 development version**, adding guided setup, color checks and edit-range previews. Use the documentation matching your installed release. Results may need manual cleanup, so work on saved copies. Routine skin smoothing, blemish removal and skin-tone retouching are not included.
+
+The 0.3.0 panel is still named `PS-AI FOR ME`. Development version 0.4.0 uses `PS-AI` and the Morph Frame identity. Plugin IDs and the `PS-AI-FOR-ME` installation directory stay the same.
 
 ## Example
 
@@ -123,6 +125,8 @@ Open an [Issue](https://github.com/ImMappyJ/ps-ai/issues) with OS, Photoshop / p
 PRs are welcome; keep each change focused on one problem. Run `npm ci`, `npm test` and `npm run build` before submitting. Update the compatibility manifest and both language versions when changing workflows. Use a separate branch and discuss changes in Issues / PRs. Keep handoff notes, debugging records and machine reports local.
 
 ## License and thanks
+
+See [brand assets and usage](BRAND.en.md). After editing the SVG sources, run `npm run brand:export` and use `npm run brand:check` to verify the exported sizes are current.
 
 Code: [GNU GPL v3.0](LICENSE), GPL-3.0-only. Distributing modified versions or binaries requires corresponding source, build scripts and the license. Weights have separate terms and are not included. Screenshots do not grant rights to third-party characters or artwork.
 

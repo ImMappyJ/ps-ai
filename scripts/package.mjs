@@ -1,5 +1,5 @@
 import fs from 'node:fs/promises';import path from 'node:path';import {pathToFileURL} from 'node:url';import {createHash} from 'node:crypto';import {zipSync,unzipSync,strToU8,strFromU8} from 'fflate';
-export const INSTALL_GUIDE=`# PS-AI FOR ME — 安装 / Installation
+export const INSTALL_GUIDE=`# PS-AI — 安装 / Installation
 
 [简体中文](#中文) · [English](#english)
 
@@ -9,7 +9,7 @@ export const INSTALL_GUIDE=`# PS-AI FOR ME — 安装 / Installation
 
 CCX：用 Adobe Creative Cloud 桌面应用安装包。关联到 UPIA 后双击没有反应时，用环境工具中的 scripts/install-ccx.ps1 -PackagePath 指定完整包路径；不要用 Photoshop 的“打开”导入。
 
-Portable：解压后把整个 PS-AI-FOR-ME 文件夹放入你实际安装的 Photoshop 的 Plug-ins 目录。manifest.json 应直接位于 PS-AI-FOR-ME 下，不要多套目录。重启后打开“增效工具 → PS-AI FOR ME (Portable)”。不需要编译或 CCX 安装器。其他版本及开发模式关闭时的加载仍需自行确认。
+Portable：解压后把整个 PS-AI-FOR-ME 文件夹放入你实际安装的 Photoshop 的 Plug-ins 目录。manifest.json 应直接位于 PS-AI-FOR-ME 下，不要多套目录。重启后打开“增效工具 → PS-AI (Portable)”。不需要编译或 CCX 安装器。其他版本及开发模式关闭时的加载仍需自行确认。
 
 启动兼容的 ComfyUI，打开面板的“模型与连接”，填写 HTTP(S) 地址，扫描并选择三个 Qwen 2.1 模型，保存配置、连接。模型、ComfyUI 不含在插件包内。完整后端指南在同版本环境工具的 COMFYUI.md，或 GitHub 仓库首页。
 
@@ -23,7 +23,7 @@ Experimental; tested on Windows Photoshop 27.0. Save your work and quit Photosho
 
 CCX: install using Adobe Creative Cloud desktop. If double-clicking a CCX associated with UPIA does nothing, run scripts/install-ccx.ps1 -PackagePath with the full package path from the environment tools. Photoshop File → Open does not install plugins.
 
-Portable: extract the ZIP, then copy the entire PS-AI-FOR-ME folder into your installed Photoshop Plug-ins directory. The manifest must be directly inside that folder. Restart and open Plugins → PS-AI FOR ME (Portable). No compilation or CCX installer is needed. Other versions and developer-mode-off loading still need validation.
+Portable: extract the ZIP, then copy the entire PS-AI-FOR-ME folder into your installed Photoshop Plug-ins directory. The manifest must be directly inside that folder. Restart and open Plugins → PS-AI (Portable). No compilation or CCX installer is needed. Other versions and developer-mode-off loading still need validation.
 
 Start a compatible ComfyUI. In Backend and models, enter its HTTP(S) address, scan and select the three Qwen 2.1 model files, save and connect. Models and ComfyUI are separate downloads. See COMFYUI.en.md in the matching environment tools or the repository README.
 
@@ -32,7 +32,9 @@ Use one installation method to avoid confusing the panels. CCX and Portable keep
 Use saved copies. Generated structure and colors need review. Host idle crashes have also occurred without the plugin; changing installation methods is not a guaranteed fix. Code: GPL-3.0-only, see LICENSE. Model licenses are separate. Matching source: https://github.com/ImMappyJ/ps-ai
 `;
 export async function createEnvironmentPackage(root,target){
-  const names=['LICENSE','scripts/check-environment.ps1','scripts/prepare-environment.ps1','scripts/install-ccx.ps1','config/settings.example.json','config/compatibility.json','README.md','README.en.md','COMFYUI.md','COMFYUI.en.md','assets/icon.png','assets/1.png','assets/2.png','assets/setup-zh.png','assets/setup-en.png','assets/comfyui-model-library.jpg','src/workflow.ts','src/profile.ts'];
+  const names=['LICENSE','scripts/check-environment.ps1','scripts/prepare-environment.ps1','scripts/install-ccx.ps1','config/settings.example.json','config/compatibility.json','README.md','README.en.md','COMFYUI.md','COMFYUI.en.md','BRAND.md','BRAND.en.md','assets/1.png','assets/2.png','assets/setup-zh.png','assets/setup-en.png','assets/comfyui-model-library.jpg','src/workflow.ts','src/profile.ts'];
+  const brand=['mark.svg','wordmark.svg','mark-on-dark.svg','mark-on-light.svg','mark-mono-dark.svg','mark-mono-light.svg','lockup-on-dark.svg','lockup-on-light.svg','lockup-mono-dark.svg','lockup-mono-light.svg','avatar.png','favicon.ico','wordmark-on-dark.png','overview.svg',...[16,23,24,32,46,48,64,96,128,256,512].map(n=>`icons/mark-${n}.png`),...[48,96,512].map(n=>`icons/app-${n}.png`)];
+  names.push(...brand.map(name=>'assets/brand/'+name),...[23,46].flatMap(size=>['light','dark'].map(color=>`assets/brand/icons/sidebar-${color}-${size}.png`)));
   const entries={};for(const name of names)entries[name]=new Uint8Array(await fs.readFile(path.join(root,name)));
   await fs.writeFile(target,zipSync(entries,{level:9}));return Object.keys(entries);
 }
@@ -62,9 +64,9 @@ export async function createPackage(directory,target){
 }
 export async function createPortablePackage(directory,target){
   const entries=await packageEntries(directory),manifest=JSON.parse(strFromU8(entries['manifest.json']));
-  if(manifest.id!=='local.ps-ai')throw new Error('文件夹版必须从 PS-AI FOR ME 正式构建生成');
-  manifest.id='local.ps-ai.portable';manifest.name='PS-AI FOR ME (Portable)';
-  for(const entry of manifest.entrypoints??[])if(entry.type==='panel')entry.label={...entry.label,default:'PS-AI FOR ME (Portable)'};
+  if(manifest.id!=='local.ps-ai')throw new Error('文件夹版必须从 PS-AI 正式构建生成');
+  manifest.id='local.ps-ai.portable';manifest.name='PS-AI (Portable)';
+  for(const entry of manifest.entrypoints??[])if(entry.type==='panel')entry.label={...entry.label,default:'PS-AI (Portable)'};
   entries['manifest.json']=strToU8(JSON.stringify(manifest,null,2));
   const guide=strToU8(INSTALL_GUIDE);
   entries['INSTALL.md']=guide;

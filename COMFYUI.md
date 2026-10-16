@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/icon.png" width="72" alt="PS-AI FOR ME">
+  <img src="assets/brand/avatar.png" width="72" alt="PS-AI">
 </p>
 <h1 align="center">ComfyUI 配置与模型适配</h1>
 <p align="center"><strong>简体中文</strong> · <a href="COMFYUI.en.md">English</a> · <a href="README.md">返回首页</a></p>

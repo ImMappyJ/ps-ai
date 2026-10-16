@@ -1,0 +1,2 @@
+# SVG source and derived vectors must use the same line endings for brand:check.
+assets/brand/*.svg text eol=lf

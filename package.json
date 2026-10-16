@@ -3,12 +3,14 @@
   "version": "0.4.0",
   "private": true,
   "type": "module",
-  "description": "PS-AI FOR ME — Photoshop local Qwen-Image 2.1 editing panel",
+  "description": "PS-AI — Photoshop local Qwen-Image 2.1 editing panel",
   "scripts": {
     "test": "node --import tsx --test --test-timeout=15000 tests/*.test.ts",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && node scripts/build.mjs",
     "p0": "node --import tsx scripts/p0-live.ts",
+    "brand:export": "node scripts/export-brand.mjs",
+    "brand:check": "node scripts/export-brand.mjs --check",
     "package": "npm run test && npm run build && node scripts/package.mjs"
   },
   "dependencies": {
@@ -16,6 +18,7 @@
     "upng-js": "2.1.0"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "2.6.2",
     "@types/node": "24.10.0",
     "@types/upng-js": "2.1.5",
     "esbuild": "0.25.11",
