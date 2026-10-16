@@ -1,10 +1,11 @@
 import {ComfyClient,uuid,OutputFile} from './client';import {JobCoordinator,JobRecord,PENDING_STATES} from './jobs';
 import {buildGraph,TEMPLATE_VERSION} from './workflow';import {intent,Workspace} from './intent';import {BackendSettings,defaultSettings,validateSettings} from './profile';
-import {Raster,encodePng,decodePng,resize,maskRaster,makeMapping} from './image';
+import {Raster,encodePng,decodePng,decodeModelPng,resize,maskRaster,makeMapping} from './image';
 import {PhotoshopAdapter,Capture,Protection,Snapshot} from './photoshop';import {Storage} from './storage';import {runHostProbe} from './p0-host';
 import {prepareEditCandidate} from './composite';
 import {t,setLanguage,errorText} from './i18n';
 import {normalizeBaseUrl} from './profile';
+import {rangePreview} from './range-preview';
 declare const require:(name:string)=>any;
 const ps=require('photoshop'),uxp=require('uxp'),store=new Storage(uxp),adapter=new PhotoshopAdapter(ps,uuid(),stage=>store.trace(stage));
 let settings:BackendSettings=defaultSettings(),settingsReady=false,client=new ComfyClient(),coordinator=new JobCoordinator(client,store);
@@ -50,7 +51,7 @@ async function preview(image:Raster,size=240):Promise<string> {
   return 'data:image/png;base64,'+encoded;
 }
 function activeDocumentId():number|undefined{return ps.app.documents.length?ps.app.activeDocument?.id:undefined;}
-async function captureArea(expectedDocumentId=activeDocumentId(),showPreview=true){capture=await adapter.capture(Number(el('margin').value)/100,protection,expectedDocumentId);const {snapshot:s,image}=capture;const colorInfo=!s.profile||/^(none|untagged|未标记|无)$/i.test(s.profile)?t(" · 未标记 ICC，颜色依赖 PS 工作空间；请在副本指定正确配置文件"):` · ${s.profile}`;el('source-info').textContent=t("文档 {0} · 区域 {1}×{2} · {3}{4}",s.documentId,image.width,image.height,protection?t('已扣除保护区'):t('未指定保护区'),colorInfo);el('source-preview').src=await preview(image);el('mask-preview').src=await preview(maskRaster(s.mask,image.width,image.height));if(showPreview)el('selection-previews').style.display='flex';}
+async function captureArea(expectedDocumentId=activeDocumentId(),showPreview=true){capture=await adapter.capture(Number(el('margin').value)/100,protection,expectedDocumentId);const {snapshot:s,image}=capture;const colorInfo=!s.profile||/^(none|untagged|未标记|无)$/i.test(s.profile)?t(" · 未标记 ICC，颜色依赖 PS 工作空间；请在副本指定正确配置文件"):` · ${s.profile}`;el('source-info').textContent=t("文档 {0} · 区域 {1}×{2} · {3}{4}",s.documentId,image.width,image.height,protection?t('已扣除保护区'):t('未指定保护区'),colorInfo);el('source-preview').src=await preview(image);el('mask-preview').src=await preview(rangePreview(image,s.mask,capture.protectionMask));if(showPreview)el('selection-previews').style.display='flex';}
 async function refreshHistory(){const records=await store.history();const list=el('history'),old=list.value;list.innerHTML='';for(const r of records)option(list,r.id,`${r.createdAt.slice(0,16)} · ${r.state} · ${String(r.userPrompt??'').slice(0,22)}`);if(records.length)list.value=records.some(r=>r.id===old)?old:records[0].id;}
 async function restoreSnapshot(record:JobRecord):Promise<Snapshot|undefined> {
   if(!record.snapshot)return undefined;const saved=record.snapshot as Omit<Snapshot,'mask'>;
@@ -59,7 +60,7 @@ async function restoreSnapshot(record:JobRecord):Promise<Snapshot|undefined> {
 async function addCandidate(record:JobRecord,bytes:Uint8Array){
   await store.trace('candidate.preview',record.id);
   const snapshot=await restoreSnapshot(record),params=record.params as any;
-  let image=decodePng(bytes);
+  let image=decodeModelPng(bytes,String(record.template??""));
   if(params.outputKind==='edit'&&snapshot){
     const expected=params.modelSize;if(!expected||image.width!==expected.width||image.height!==expected.height)throw new Error(t("候选尺寸与输入工作流不符，已保留原始输出；请检查后端，避免拉伸错位"));
     const source=decodePng(await store.readBinary(`${record.id}-source.png`));
@@ -68,6 +69,8 @@ async function addCandidate(record:JobRecord,bytes:Uint8Array){
     image=prepareEditCandidate(image,source,{preserveAlpha:params.preserveAlpha!==false,align:params.alignSubject!==false,matchColor:params.matchColor===true,mask});
     bytes=encodePng(image);
   }
+  // All exported candidates, including standalone assets, declare sRGB explicitly.
+  bytes=encodePng(image);
   const c:Candidate={job:record,bytes,image,preview:await preview(image),snapshot};
   if(candidates.length===4)candidates.shift();candidates.push(c);
   const list=el('candidate-select');list.innerHTML='';el('candidates').innerHTML='';
@@ -77,7 +80,7 @@ async function addCandidate(record:JobRecord,bytes:Uint8Array){
 async function showSelected(){const c=selected();el('detail-preview').src=zoomed?await preview(c.image,Math.max(c.image.width,c.image.height)):c.preview;el('detail-preview').style.width=zoomed?`${c.image.width}px`:'100%';el('detail-preview').style.height=zoomed?`${c.image.height}px`:'170px';candidateUi();}
 async function saveReady(record:JobRecord,images:OutputFile[]) {
   record.state='downloading';record.outputs=images;
-  try{await store.trace('candidate.download',record.id);const bytes=await client.output(images[0]);decodePng(bytes);await store.binary(`${record.id}-output.png`,bytes);record.outputFile=`${record.id}-output.png`;record.state='ready';await store.save(record);await addCandidate(record,bytes);}
+  try{await store.trace('candidate.download',record.id);const bytes=await client.output(images[0]);await store.binary(`${record.id}-output.png`,bytes);record.outputFile=`${record.id}-output.png`;decodeModelPng(bytes,String(record.template??""));record.state='ready';await store.save(record);await addCandidate(record,bytes);}
   catch(error){record.state='output-error';record.detail=error instanceof Error?error.message:String(error);await store.save(record);throw error;}
 }
 async function waitRecord(record:JobRecord):Promise<boolean> {
@@ -137,7 +140,7 @@ async function generate() {
   if(destination==='selection'&&expectedDocumentId===undefined)throw new Error(t("请先打开 Photoshop 文档并建立选区"));
     taskPhase(t("检查节点与本机模型…"));status(t("检查节点与本机模型…"));await client.check();
     // Always recapture at submission; a thumbnail saved earlier is not a fresh document state.
-    if(destination==='selection')await captureArea(expectedDocumentId,false);else capture=undefined;
+    if(destination==='selection')await captureArea(expectedDocumentId);else capture=undefined;
     const captured=capture,ref=reference;
     for(let index=0;index<count&&!stopBatch;index++) {
       batchPosition=t("候选 {0} / {1} · ",index+1,count);taskPhase(t("准备与上传输入…"));status(t("上传候选 {0} / {1} 的输入…",index+1,count));const id=uuid(),clientId=uuid();
@@ -195,6 +198,7 @@ on('generate',generate);on('apply',apply);on('recover',recover);
 on('cancel',async()=>{stopBatch=true;if(!busy&&current){lock(true);try{assertBackend(current);const result=await coordinator.cancel(current);if(result.state==='ready'){await saveReady(current,result.images!);status(t("任务已完成，候选已保留"));}else status(result.state==='cancelled'?t("取消已确认；生成文件保留"):t("取消尚未确认，请继续恢复或取消原任务"));await refreshHistory();}finally{lock(false);}}});
 el('mode').addEventListener('change',()=>{inputUi();if(workspace==='cosplay'&&el('mode').value==='reference'){fold('reference',true);el('guide').checked=false;status(t("角色参考默认使用原图 + 参考图；范围辅助可能影响颜色，请按需试验"));}});
 el('destination').addEventListener('change',inputUi);
+el('margin').addEventListener('change',()=>{capture=undefined;el('selection-previews').style.display='none';el('source-info').textContent=t('范围参数已改变，请重新预览选区');});
 el('candidate-select').addEventListener('change',()=>void guarded(showSelected));
 on('zoom',async()=>{zoomed=!zoomed;el('zoom').textContent=zoomed?t("适应预览"):t("100% 查看");await showSelected();});
 on('export',async()=>{const c=selected(),file=await uxp.storage.localFileSystem.getFileForSaving(`ps-ai-${c.job.id.slice(0,8)}.png`,{types:['png']});if(file)await file.write(new Uint8Array(c.bytes).buffer,{format:uxp.storage.formats.binary});});

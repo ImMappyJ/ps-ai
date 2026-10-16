@@ -3,6 +3,12 @@ import type {Language} from './profile';
 // Chinese source messages are stable keys. Model prompts and saved parameter values
 // are deliberately independent of the display language.
 export const english:Record<string,string>={
+  '橙色：实际编辑 · 蓝色：手动保护 · 灰色：只提供上下文。回填使用真实灰度蒙版。':'Amber: effective edit · Blue: manual protection · Gray: context only. The real feathered mask controls application.',
+  '范围参数已改变，请重新预览选区':'Range settings changed. Preview the selection again.',
+  '来源没有颜色配置文件；请在副本中指定正确配置文件后重试，原文档不会自动修改':'The source has no color profile. Assign the correct profile to a copy and try again. The original is not changed.',
+  'PNG 结构或校验错误，原始候选已保留，请检查后端输出':'Invalid PNG structure or checksum. The original candidate is retained; check the backend output.',
+  'PNG 色彩标记不兼容；仅接受 sRGB 8-bit，请在后端转换为 sRGB 后输出':'Unsupported PNG color metadata. Convert the backend output to sRGB 8-bit.',
+  'PNG 未标记 sRGB；只有已验证的 Qwen 2.1 模板允许按 sRGB 解释无标记输出':'PNG has no sRGB tag. Only the verified Qwen 2.1 template can interpret untagged output as sRGB.',
   '界面语言 / Language':'Language',
   '实验版':'Experimental','未连接':'Disconnected','已连接':'Connected','待检查':'Unchecked','连接':'Connect',
   '模型与连接':'Backend and models','模型与连接 ▸':'Backend and models ▸',

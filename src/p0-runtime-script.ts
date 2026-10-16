@@ -1,4 +1,4 @@
-import {ComfyClient,uuid} from './client';import {Storage} from './storage';import {PhotoshopAdapter} from './photoshop';import {encodePng,decodePng} from './image';
+import {ComfyClient,uuid} from './client';import {Storage} from './storage';import {PhotoshopAdapter} from './photoshop';import {encodePng,decodeModelPng,decodePng} from './image';
 declare const require:(name:string)=>any;
 declare const __P0_CANDIDATE__:string|null;
 declare const __P0_NETWORK__:boolean;
@@ -44,7 +44,7 @@ export async function main():Promise<void> {
     }
     if(__P0_NETWORK__&&__P0_CANDIDATE__) {
       trace.push('uxp-own-history');const status=await client.status(__P0_CANDIDATE__);if(status.state!=='ready')throw new Error(`Candidate is ${status.state}`);
-      trace.push('uxp-binary-output');const output=decodePng(await client.output(status.images![0]));result.candidate={id:__P0_CANDIDATE__,width:output.width,height:output.height};
+      trace.push('uxp-binary-output');const output=decodeModelPng(await client.output(status.images![0]),"qwen21-local-v2-rgba");result.candidate={id:__P0_CANDIDATE__,width:output.width,height:output.height};
     }
     if(!__P0_NETWORK__)result.network='not tested: standalone script network needs explicit UXP permission; plugin manifest declares loopback access';
     result.passed=true;

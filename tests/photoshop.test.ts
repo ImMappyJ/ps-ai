@@ -17,6 +17,20 @@ function host() {
 }
 function snap():Snapshot {return {documentId:11,width:100,height:80,profile:'sRGB IEC61966-2.1',mode:'rgb',depth:8,historyId:91,sessionId:'session-a',bounds:{left:40,top:30,right:42,bottom:32},mask:new Uint8Array([255,128,0,255]),sourceHash:'fixture'};}
 const patch={width:2,height:2,rgba:new Uint8Array([255,0,0,128,255,0,0,255,255,0,0,255,255,0,0,255])};
+
+test('未标记来源和参考图在像素读取前停止，不猜测工作色域且关闭自己的参考文档',async()=>{
+  for(const profile of ['', 'Untagged RGB', '未标记的 RGB']){
+    const h=host();h.doc.colorProfileName=profile;
+    await assert.rejects(h.adapter.capture(),/配置文件|profile/);
+    assert.equal(h.calls.some(c=>c[0]==='getPixels'),false);
+  }
+  const h=host();let closed=false;
+  const reference={...h.doc,id:22,colorProfileName:'',closeWithoutSaving:async()=>{closed=true;h.ps.app.documents=[h.doc];}};
+  h.ps.app.open=async()=>{h.ps.app.documents.push(reference);return reference;};
+  const modal=h.ps.core.executeAsModal;h.ps.core.executeAsModal=(fn:any)=>modal((ctx:any)=>fn({...ctx,hostControl:{...ctx.hostControl,registerAutoCloseDocument:async()=>{},unregisterAutoCloseDocument:async()=>{}}}));
+  await assert.rejects(h.adapter.importReference({name:'untagged.png'}),/配置文件|profile/);
+  assert.equal(closed,true);assert.equal(h.calls.some(c=>c[0]==='getPixels'),false);
+});
 test('没有打开文档时捕获给出明确错误，参考导入可独立读取并关闭自建文档',async()=>{
   const h=host();h.ps.app.documents=[];Object.defineProperty(h.ps.app,'activeDocument',{get(){if(!h.ps.app.documents.length)throw new Error('No active document');return h.ps.app.documents[0];},set(){},configurable:true});
   await assert.rejects(h.adapter.capture(),/请先打开/);
@@ -29,6 +43,8 @@ test('捕获真实选区灰度和透明裁边，保护区在原坐标减去',asy
   const c=await h.adapter.capture(0,p);
   assert.deepEqual(c.snapshot.bounds,{left:8,top:0,right:74,bottom:64});
   assert.equal(c.snapshot.mask[30*66+32],255);assert.equal(c.snapshot.mask[30*66+33],0);
+  assert.equal(c.selectionMask[30*66+33],128);assert.equal(c.protectionMask[30*66+33],255);
+  assert.equal(c.selectionMask[30*66+32],255);assert.equal(c.protectionMask[30*66+32],0);
   assert.equal(c.image.rgba[(30*66+32)*4],20);assert.equal(c.image.rgba[3],0);
   assert.equal(h.calls.filter(c=>c==='dispose').length,2);
 });

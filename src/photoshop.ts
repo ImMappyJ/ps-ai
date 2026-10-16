@@ -1,7 +1,8 @@
 import {Bounds,Raster,checkSize,expandPixels,maskRaster,effectiveMask,resize} from './image';
 import {retainSourceAlpha} from './composite';
+import {requireSourceProfile} from './color';
 export interface Snapshot {documentId:number;width:number;height:number;profile:string;mode:string;depth:unknown;historyId:number;sessionId:string;bounds:Bounds;mask:Uint8Array;sourceHash:string;clipBaseLayerId?:number}
-export interface Capture {snapshot:Snapshot;image:Raster}
+export interface Capture {snapshot:Snapshot;image:Raster;selectionMask:Uint8Array;protectionMask:Uint8Array}
 export interface Protection {documentId:number;width:number;height:number;bounds:Bounds;mask:Uint8Array;sessionId:string}
 export class PhotoshopAdapter {
   private applications=new Map<string,{documentId:number;historyId:number;layerId:number}>();
@@ -22,6 +23,7 @@ export class PhotoshopAdapter {
       if(owned)await context.hostControl.registerAutoCloseDocument(doc.id);
       try {
         checkSize(doc.width,doc.height);
+        requireSourceProfile(doc,this.ps.constants.ColorProfileType?.NONE);
         const bounds={left:0,top:0,right:doc.width,bottom:doc.height};
         const result=await this.ps.imaging.getPixels({documentID:doc.id,sourceBounds:bounds,colorSpace:'RGB',colorProfile:'sRGB IEC61966-2.1',componentSize:doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,applyAlpha:false});
         data=result.imageData;return expandPixels(await this.rgbData(data),result.sourceBounds,bounds,result.level??0);
@@ -38,6 +40,7 @@ export class PhotoshopAdapter {
     const depths=[this.ps.constants.BitsPerChannelType.EIGHT,this.ps.constants.BitsPerChannelType.SIXTEEN].filter(v=>v!==undefined);
     if(!modes.includes(doc.mode)||!depths.includes(doc.bitsPerChannel))throw new Error('支持 RGB / 灰度 8/16-bit；其他模式请先在副本中转换为 RGB，原文档不会自动转换');
     if(doc.quickMaskMode)throw new Error('请先退出快速蒙版模式');
+    requireSourceProfile(doc,this.ps.constants.ColorProfileType?.NONE);
     return doc;
   }
   private bounds(doc:any):Bounds {
@@ -88,10 +91,11 @@ export class PhotoshopAdapter {
       const bounds={left:Math.max(0,selection.left-pad),top:Math.max(0,selection.top-pad),right:Math.min(doc.width,selection.right+pad),bottom:Math.min(doc.height,selection.bottom+pad)};
       checkSize(bounds.right-bounds.left,bounds.bottom-bounds.top);
       let mask=await this.mask(doc.id,bounds);
+      const selectionMask=mask,protectionMask=new Uint8Array(mask.length);
       if(protection) {
         if(protection.sessionId!==this.sessionId||protection.documentId!==doc.id||protection.width!==doc.width||protection.height!==doc.height)throw new Error('保护区来源文档已改变，请重新指定');
         const p=expandPixels(maskRaster(protection.mask,protection.bounds.right-protection.bounds.left,protection.bounds.bottom-protection.bounds.top),protection.bounds,bounds);
-        const gray=new Uint8Array(mask.length);for(let i=0;i<gray.length;i++)gray[i]=p.rgba[i*4];mask=effectiveMask(mask,gray);
+        for(let i=0;i<protectionMask.length;i++)protectionMask[i]=p.rgba[i*4];mask=effectiveMask(mask,protectionMask);
       }
       if(!mask.some(v=>v>0))throw new Error('编辑范围完全被保护区覆盖');
       await this.checkpoint('capture.pixels.read');
@@ -106,7 +110,7 @@ export class PhotoshopAdapter {
       let hash=2166136261;for(const v of image.rgba)hash=Math.imul(hash^v,16777619);
       const clipBaseLayerId=await this.captureClippingBase(doc,bounds,image,mask);
       const snapshot:Snapshot={documentId:doc.id,width:doc.width,height:doc.height,profile:doc.colorProfileName,mode:doc.mode,depth:doc.bitsPerChannel,historyId:doc.activeHistoryState.id,sessionId:this.sessionId,bounds,mask,sourceHash:(hash>>>0).toString(16),...(clipBaseLayerId===undefined?{}:{clipBaseLayerId})};
-      return {snapshot,image};
+      return {snapshot,image,selectionMask,protectionMask};
     },{commandName:'ps-ai 捕获选区'});
   }
   async protection():Promise<Protection> {

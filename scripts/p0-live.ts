@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';import path from 'node:path';import {execFileSync} from 'node:child_process';
 import {ComfyClient,uuid} from '../src/client';import {JobCoordinator,JobRecord} from '../src/jobs';
-import {buildGraph} from '../src/workflow';import {decodePng,encodePng,Raster,maskRaster} from '../src/image';
+import {buildGraph} from '../src/workflow';import {decodeModelPng,decodePng,encodePng,Raster,maskRaster} from '../src/image';
 
 const client=new ComfyClient();
 const stamp=new Date().toISOString().replace(/[:.]/g,'-');
@@ -63,7 +63,7 @@ for(const probe of cases) {
       const status=await client.status(id);
       if(Date.now()-lastLog>30000){console.log(probe.name,status.state,Math.round((Date.now()-begin)/1000)+'s','VRAM',memory+'MiB');lastLog=Date.now();}
       if(status.state==='ready') {
-        const imageBytes=await client.output(status.images![0]);const image=decodePng(imageBytes);
+        const imageBytes=await client.output(status.images![0]);const image=decodeModelPng(imageBytes,"qwen21-local-v2-rgba");
         await fs.writeFile(path.join(root,`${probe.name}.png`),imageBytes);
         let transparent=0,partial=0,opaque=0;for(let i=3;i<image.rgba.length;i+=4){if(image.rgba[i]===0)transparent++;else if(image.rgba[i]===255)opaque++;else partial++;}
         const result={name:probe.name,id,state:'ready',seconds:Math.round((Date.now()-begin)/100)/10,peakVramMiB,width:image.width,height:image.height,alpha:{transparent,partial,opaque},outputs:status.images};
