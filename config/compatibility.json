@@ -129,6 +129,20 @@
     "format": "sRGB tagged RGB/RGBA PNG16 SDR",
     "modelInputs": "8-bit",
     "selectionMasks": "8-bit",
-    "status": "development; automated codec tests and actual backend inference passed; native acceptance in progress"
+    "status": "unpublished development version; automated codec, backend inference and native sRGB16 acceptance passed",
+    "nativeAcceptance": {
+      "date": "2026-10-16",
+      "host": "Windows Photoshop 27.0.0",
+      "gpu": "enabled",
+      "profile": "sRGB IEC61966-2.1",
+      "sourceDepth": 16,
+      "modes": "Six selection edits and two standalone assets at16; text-to-image at8 for backward compatibility",
+      "sourceLayerDifference": 0,
+      "outsideMaskDifference": 0,
+      "undoDifference": 0,
+      "knownValueNativeMaxError": "1/65535",
+      "gui": "Two serial16 candidates, same-capture replacement, exact PNG16 export, actual sampling-step progress and task-specific cancellation",
+      "limitations": "Output16 was native-tested in sRGB16, not a new all-profile16 matrix. Background/scene tests used a selected crop, not full-image quality grading. No calibrated-display or long-term crash-free acceptance."
+    }
   }
 }

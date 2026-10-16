@@ -19,7 +19,7 @@ const guidance:Record<DiagnosticCode,[string,string]>={
   'incompatible-api':['接口或模板不兼容','核对配置指南中的 ComfyUI、节点版本与固定模板；不要盲目更新。'],
   'resource-exhausted':['后端报告内存不足','先在 ComfyUI 确认本任务已结束，再降低分辨率或减少并发。'],
   'timeout':['请求超时','确认后端状态；已提交任务请按原 ID 恢复，避免重复生成。'],
-  'invalid-output':['候选输出不符合约定','检查尺寸、8-bit PNG 和 sRGB 配置。已下载文件保留；未下载的候选可按原任务 ID 恢复。'],
+  'invalid-output':['候选输出不符合约定','检查尺寸、PNG 位深与 sRGB 配置。已下载文件保留；未下载的候选可按原任务 ID 恢复。'],
   'apply-failed':['Photoshop 应用失败','候选仍可另存或新建文档；确认来源文档状态，必要时重新捕获。'],
   'source-profile':['来源没有颜色配置文件','在副本中指定正确配置文件，再重新捕获。不要用指定配置文件代替颜色转换。'],
   'unknown':['操作未完成，原因尚未确认','展开技术详情核对报错；保留任务 ID 和候选，确认状态后再操作。']

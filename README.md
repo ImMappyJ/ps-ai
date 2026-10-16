@@ -12,11 +12,15 @@ PS-AI 将 ComfyUI 接到 Photoshop 中，用于局部修图、COSPLAY 服装和�
 
 ## 看看效果
 
-下面的示例在腿部选区内添加白色过膝袜。截图来自早期版本，面板样式与当前版本略有不同。
+下面的示例使用 `3F3F3F.webp` 的副本，在腿部选区内添加白色过膝袜。图片来自 0.4.0 开发版的实际生成与 Photoshop 合成，棋盘格表示透明背景。
 
 | 使用前 | 使用后 |
 | --- | --- |
-| ![添加白色过膝袜前](assets/1.png) | ![添加白色过膝袜后](assets/2.png) |
+| ![添加白色过膝袜前](assets/guide/before.png) | ![添加白色过膝袜后](assets/guide/after.png) |
+
+![Photoshop 中的实际候选预览](assets/guide/workspace.jpg)
+
+选区、参数、九种模式、16 位输出、候选与历史的操作步骤见 [图文使用说明](USER_GUIDE.md)。
 
 ## 能做什么
 

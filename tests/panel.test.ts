@@ -2,6 +2,13 @@ import test from 'node:test';import assert from 'node:assert/strict';import {pan
 import {defaultSettings} from '../src/profile';
 import {decodePng} from '../src/image';
 
+test('连接失败可展开详情；修正地址并成功检查后清除旧错误',async()=>{
+  const h=await panelHarness();try{await h.wait();h.el('backend-url').value='http://offline.invalid:9999';h.click('connect');await h.wait();assert.equal(h.el('diagnostic-box').style.display,'block');
+    h.click('toggle-error-details');await h.wait();assert.equal(h.el('diagnostic-details').style.display,'block');assert.equal(h.el('diagnostic-box').style.display,'block');
+    h.el('backend-url').value='http://localhost:8188';h.click('connect');await h.wait();assert.equal(h.el('connection').textContent,'已连接');assert.equal(h.el('diagnostic-box').style.display,'none');
+  }finally{await h.close();}
+});
+
 test('语言切换刷新 UXP 已选中的应用位置和参考用途标题，保留参数值',async()=>{
   const h=await panelHarness({uxpSelect:true});try{
     h.el('usage').value='材质';h.el('destination').value='document';

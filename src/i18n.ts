@@ -3,6 +3,7 @@ import type {Language} from './profile';
 // Chinese source messages are stable keys. Model prompts and saved parameter values
 // are deliberately independent of the display language.
 export const english:Record<string,string>={
+  '检查尺寸、PNG 位深与 sRGB 配置。已下载文件保留；未下载的候选可按原任务 ID 恢复。':'Check dimensions, PNG depth and sRGB settings. Downloaded files are retained; recover missing downloads by their task ID.',
   '输出位深':'Output depth','8-bit（兼容）':'8-bit (compatible)','16-bit SDR（需保存节点）':'16-bit SDR (save node required)',
   '16 位结果可直接新建 16 位文档；回填 8 位文档会降为 8 位。':'16-bit results open in a 16-bit document. Applying to an 8-bit document reduces them to 8-bit.',
   '输出位深须为 8 或 16':'Output depth must be 8 or 16',

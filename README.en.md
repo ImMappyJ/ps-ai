@@ -12,11 +12,15 @@ The 0.3.0 panel is still named `PS-AI FOR ME`. Development version 0.4.0 uses `P
 
 ## Example
 
-The example below adds white over-the-knee socks within a selection around the legs. The screenshots show an earlier version of the panel.
+This example uses a copy of `3F3F3F.webp` to add white over-the-knee socks within a selection around the legs. The images come from actual generation and Photoshop compositing in development version 0.4.0. The checkerboard shows transparency.
 
 | Before | After |
 | --- | --- |
-| ![Before adding white over-the-knee socks](assets/1.png) | ![After adding white over-the-knee socks](assets/2.png) |
+| ![Before adding white over-the-knee socks](assets/guide/before.png) | ![After adding white over-the-knee socks](assets/guide/after.png) |
+
+![Actual candidate preview in Photoshop](assets/guide/workspace.jpg)
+
+See the [illustrated user guide](USER_GUIDE.en.md) for selections, parameters, all nine modes, 16-bit output, candidates and history.
 
 ## What it does
 
@@ -95,7 +99,7 @@ Export settings as JSON and import them on the other machine, then check its add
 
 - Test on saved copies. Do not use the only unsaved original. Keep the source unchanged during generation; capture again after edits, closing it or reloading the plugin.
 - The model may alter text, faces, hands and clothing inside the selection. The guide is a visual reference; the final mask enforces pixel protection.
-- CMYK, Lab, Indexed, Bitmap, Multichannel and 32-bit HDR are unsupported. Work in an RGB copy. A 16-bit source keeps its format, but generated content has no native 16-bit detail.
+- CMYK, Lab, Indexed, Bitmap, Multichannel and 32-bit HDR are unsupported. Work in an RGB copy. Output defaults to 8-bit; optional 16-bit SDR requires the save node and a 16-bit destination. A 16-bit file does not imply a full 16 bits of effective model precision.
 - Translucent multilayer composites may lack a safe clipping base. If prompted, merge visible layers in a copy and generate again, or export PNG and composite manually.
 - Assign the right ICC profile to a copy of untagged images. The model also changes lighting and colors; check seams.
 - Photoshop has also exited unexpectedly without this plugin loaded. These stability issues are still being investigated and may affect both CCX and Portable installations.

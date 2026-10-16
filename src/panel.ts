@@ -219,7 +219,7 @@ on('save-settings',()=>configure(()=>saveSettings(draftSettings())));
 on('import-settings',()=>configure(async()=>{const file=await uxp.storage.localFileSystem.getFileForOpening({types:['json']});if(file)await saveSettings(JSON.parse(await file.read()));}));
 on('export-settings',()=>configure(async()=>{if(!settingsReady)throw new Error(t("请先保存有效配置"));const file=await uxp.storage.localFileSystem.getFileForSaving('ps-ai-settings.json',{types:['json']});if(file)await file.write(JSON.stringify(settings,null,2));}));
 for(const w of ['local','cosplay','t2i'] as Workspace[])on(`tab-${w}`,async()=>{if(!busy)setWorkspace(w);});
-on('connect',()=>configure(async()=>{const next=draftSettings(),probe=new ComfyClient(next.baseUrl,fetch,30000,next.models);const result=await probe.check(next.outputDepth);checkEnvironment(String(uxp.host?.version??''),result.nodeInfo,next.models,next.outputDepth);await saveSettings(next);connection('已连接');status(t('ComfyUI 与模型已连接'));}));
+on('connect',()=>configure(async()=>{const next=draftSettings(),probe=new ComfyClient(next.baseUrl,fetch,30000,next.models);const result=await probe.check(next.outputDepth);checkEnvironment(String(uxp.host?.version??''),result.nodeInfo,next.models,next.outputDepth);await saveSettings(next);connection('已连接');status(t('ComfyUI 与模型已连接'));el('diagnostic-box').style.display='none';}));
 on('open-setup',async()=>{showSetup();fold('settings',true);});
 on('close-setup',async()=>{el('setup-body').style.display='none';});
 on('setup-connect',()=>configure(async()=>{

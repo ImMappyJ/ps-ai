@@ -28,3 +28,17 @@ test('16-bit context matching keeps sample residue and scales calibration thresh
   const rgba=new Uint16Array(12*12*4),src=new Uint16Array(rgba.length);for(let p=0;p<144;p++){rgba.set([20561,25813,30953,65535],p*4);src.set([20561-2570,25813-2570,30953-2570,65535],p*4);}
   const out=prepareEditCandidate({width:12,height:12,rgba},{width:12,height:12,rgba:src},{preserveAlpha:true,align:false,matchColor:true,mask:new Uint8Array(144)});assert.deepEqual([...out.rgba.slice(0,4)],[17991,23243,28383,65535]);assert.ok(out.rgba instanceof Uint16Array);
 });
+test('independent16 scanlines cover every filter and Adam7 empty passes without reducing samples',()=>{
+  const width=5,height=3;
+  for(const channels of [3,4])for(const interlace of [0,1])for(let filter=0;filter<5;filter++){
+    const expected=new Uint16Array(width*height*4);for(let p=0;p<width*height;p++)expected.set([12345+p*7,23456+p*11,34567+p*13,channels===4?45678+p*17:65535],p*4);
+    const rows:Buffer[]=[];const passes=interlace?[[0,0,8,8],[4,0,8,8],[0,4,4,8],[2,0,4,4],[0,2,2,4],[1,0,2,2],[0,1,1,2]]:[[0,0,1,1]];
+    for(const [x0,y0,dx,dy] of passes){const xs=Array.from({length:Math.max(0,Math.ceil((width-x0)/dx))},(_,i)=>x0+i*dx);if(!xs.length)continue;let prior=Buffer.alloc(xs.length*channels*2);
+      for(let y=y0;y<height;y+=dy){const raw=Buffer.alloc(prior.length);xs.forEach((x,j)=>{for(let c=0;c<channels;c++)raw.writeUInt16BE(expected[(y*width+x)*4+c],(j*channels+c)*2);});const encoded=Buffer.alloc(raw.length+1);encoded[0]=filter;
+        for(let i=0;i<raw.length;i++){const a=i>=channels*2?raw[i-channels*2]:0,b=prior[i],c=i>=channels*2?prior[i-channels*2]:0,p=a+b-c,da=Math.abs(p-a),db=Math.abs(p-b),dc=Math.abs(p-c);const prediction=filter===0?0:filter===1?a:filter===2?b:filter===3?Math.floor((a+b)/2):da<=db&&da<=dc?a:db<=dc?b:c;encoded[i+1]=(raw[i]-prediction)&255;}rows.push(encoded);prior=raw;
+      }
+    }
+    const header=Buffer.alloc(13);header.writeUInt32BE(width);header.writeUInt32BE(height,4);header.set([16,channels===4?6:2,0,0,interlace],8);const png=Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',header),chunk('sRGB',new Uint8Array([1])),chunk('IDAT',deflateSync(Buffer.concat(rows))),chunk('IEND',new Uint8Array())]);
+    assert.deepEqual(decodePng(png),{width,height,rgba:expected},`channels=${channels} interlace=${interlace} filter=${filter}`);
+  }
+});
