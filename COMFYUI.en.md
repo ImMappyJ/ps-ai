@@ -43,6 +43,10 @@ ComfyUI/
 | `text_encoders` | [qwen3vl_8b_int8_convrot.safetensors](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/df94239739eef7205973a145ffa6f441f7b64e84/text_encoders/qwen3vl_8b_int8_convrot.safetensors) | 9.35 GB |
 | `vae` | [qwen_image_2.1_vae_bf16.safetensors](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/df94239739eef7205973a145ffa6f441f7b64e84/vae/qwen_image_2.1_vae_bf16.safetensors) | 0.68 GB |
 
+After starting ComfyUI, open **Model Library** in its sidebar and search for the main part of a filename. This screenshot uses the Chinese backend UI, where Model Library is labeled “模型库”. The preset VAE appears under `vae`, confirming that the backend can see it. The library may hide extensions; select the full filename returned by the plugin's scan.
+
+![Preset VAE found under vae in the ComfyUI model library](assets/comfyui-model-library.jpg)
+
 This is a tested combination, not a recommendation for every use. The diffusion model is a third-party quantization. Read its model card and the upstream [Qwen license](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE): current terms permit non-commercial research / evaluation; commercial use requires separate permission. Weights are not distributed with the plugin.
 
 Exact sizes, pinned sources and SHA256 values are in [compatibility.json](config/compatibility.json). Reuse identical existing files. The environment checker verifies preset sizes and hashes; alternate models are reported as needing your own validation.
@@ -62,7 +66,7 @@ A local backend normally listens on `127.0.0.1`. A remote backend needs a reacha
 
 ### Configure the panel
 
-I captured this 0.3.0 Portable panel in Photoshop 27.0. CCX has the same settings. The backend was stopped when I took the screenshot, so the header says Disconnected. Having model names in the form does not prove a connection.
+I captured this 0.3.0 Portable panel in Photoshop 27.0 after scanning models and checking the connection. CCX has the same settings. Look for **Connected** in the header; having model names in the form does not prove a connection.
 
 ![ComfyUI address, three model selectors and Connect in Photoshop](assets/setup-en.png)
 
