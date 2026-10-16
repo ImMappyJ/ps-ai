@@ -1,4 +1,4 @@
-import {Bounds,Raster,checkSize,expandPixels,maskRaster,effectiveMask,resize} from './image';
+import {Bounds,Raster,checkSize,expandPixels,maskRaster,effectiveMask,resize,convertDepth,rasterDepth,rasterMax} from './image';
 import {retainSourceAlpha} from './composite';
 import {requireSourceProfile} from './color';
 export interface Snapshot {documentId:number;width:number;height:number;profile:string;mode:string;depth:unknown;historyId:number;sessionId:string;bounds:Bounds;mask:Uint8Array;sourceHash:string;clipBaseLayerId?:number}
@@ -8,12 +8,12 @@ export class PhotoshopAdapter {
   private applications=new Map<string,{documentId:number;historyId:number;layerId:number}>();
   constructor(public ps:any,public sessionId:string,private checkpoint:(stage:string)=>Promise<void>=async()=>{}){}
   private activeDocument():any {return this.ps.app.documents.length?this.ps.app.activeDocument:undefined;}
-  private async rgbData(data:any):Promise<Raster> {
+  private async rgbData(data:any,depth:8|16=8):Promise<Raster> {
     if(!data||![8,16].includes(data.componentSize)||(data.components!==3&&data.components!==4))throw new Error('没有返回 RGB / RGBA 8/16-bit 数据');
     const values=await data.getData({chunky:true,fullRange:true}),max=data.componentSize===16?65535:255;
-    const bytes=data.componentSize===8?new Uint8Array(values):Uint8Array.from(values as ArrayLike<number>,v=>Math.round(Math.min(1,Math.max(0,v/max))*255));
-    const rgba=new Uint8Array(data.width*data.height*4);
-    for(let i=0;i<data.width*data.height;i++){rgba.set(bytes.subarray(i*data.components,i*data.components+3),i*4);rgba[i*4+3]=data.components===4?bytes[i*4+3]:255;}
+    const target=depth===16?65535:255,bytes=depth===16?Uint16Array.from(values as ArrayLike<number>,v=>Math.round(Math.min(1,Math.max(0,v/max))*target)):Uint8Array.from(values as ArrayLike<number>,v=>Math.round(Math.min(1,Math.max(0,v/max))*target));
+    const rgba=depth===16?new Uint16Array(data.width*data.height*4):new Uint8Array(data.width*data.height*4);
+    for(let i=0;i<data.width*data.height;i++){rgba.set(bytes.subarray(i*data.components,i*data.components+3),i*4);rgba[i*4+3]=data.components===4?bytes[i*4+3]:target;}
     return {width:data.width,height:data.height,rgba};
   }
   async importReference(file:any):Promise<Raster> {
@@ -66,7 +66,7 @@ export class PhotoshopAdapter {
     } finally {data.dispose();await this.checkpoint('capture.selection.disposed');}
   }
   private needsClipping(image:Raster,mask:Uint8Array):boolean {
-    return mask.some((v,i)=>v>0&&image.rgba[i*4+3]>0&&image.rgba[i*4+3]<255);
+    return mask.some((v,i)=>v>0&&image.rgba[i*4+3]>0&&image.rgba[i*4+3]<rasterMax(image));
   }
   private clippingBase(doc:any,excludeLayerId?:number):any {
     // A top clipping stack may share one base. A separate hidden layer still breaks
@@ -80,11 +80,11 @@ export class PhotoshopAdapter {
     const result=await this.ps.imaging.getPixels({documentID:doc.id,layerID:base.id,sourceBounds:bounds,colorSpace:'RGB',colorProfile:'sRGB IEC61966-2.1',componentSize:doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,applyAlpha:false});
     const data=result.imageData;if(!data)return;
     try {
-      const pixels=expandPixels(await this.rgbData(data),result.sourceBounds,bounds,result.level??0);
+      const pixels=expandPixels(await this.rgbData(data,rasterDepth(image)),result.sourceBounds,bounds,result.level??0);
       if(mask.every((v,i)=>!v||pixels.rgba[i*4+3]===image.rgba[i*4+3]))return base.id;
     } finally {data.dispose();}
   }
-  async capture(margin=.15,protection?:Protection,expectedDocumentId=this.activeDocument()?.id):Promise<Capture> {
+  async capture(margin=.15,protection?:Protection,expectedDocumentId=this.activeDocument()?.id,outputDepth:8|16=8):Promise<Capture> {
     if(!Number.isFinite(margin)||margin<0||margin>1)throw new Error('上下文边距无效');
     await this.checkpoint('capture.start');
     return this.ps.core.executeAsModal(async()=>{
@@ -108,7 +108,7 @@ export class PhotoshopAdapter {
       let image:Raster;
       try {
         await this.checkpoint('capture.pixels.getData');
-        image=expandPixels(await this.rgbData(data),result.sourceBounds,bounds,result.level??0);
+        image=expandPixels(await this.rgbData(data,outputDepth),result.sourceBounds,bounds,result.level??0);
       } finally {data.dispose();await this.checkpoint('capture.pixels.disposed');}
       let hash=2166136261;for(const v of image.rgba)hash=Math.imul(hash^v,16777619);
       const clipBaseLayerId=await this.captureClippingBase(doc,bounds,image,mask);
@@ -156,7 +156,7 @@ export class PhotoshopAdapter {
       if(clip&&(!snapshot.clipBaseLayerId||this.clippingBase(doc,owned&&owned.historyId===doc.activeHistoryState.id?owned.layerId:undefined)?.id!==snapshot.clipBaseLayerId))throw new Error('半透明来源没有安全的剪贴底层；请在副本中合并可见层后重新生成，候选仍可另存 PNG');
       // Photoshop's clipping stack supplies the base alpha exactly once. Writing
       // the same semi-transparent alpha into a NORMAL overlay would make it opaque.
-      if(clip)for(let i=3;i<restored.rgba.length;i+=4)if(restored.rgba[i]>0)restored.rgba[i]=255;
+      if(clip)for(let i=3;i<restored.rgba.length;i+=4)if(restored.rgba[i]>0)restored.rgba[i]=rasterMax(restored);
       this.ps.app.activeDocument=doc;
       const suspension=await context.hostControl.suspendHistory({documentID:doc.id,name:'ps-ai 应用候选'});
       let pixels:any,mask:any;
@@ -166,7 +166,7 @@ export class PhotoshopAdapter {
         const layer=await doc.createLayer(this.ps.constants.LayerKind.NORMAL,{name,opacity:100,blendMode:this.ps.constants.BlendMode.NORMAL});
         if(doc.layers[0]?.id!==layer.id)await layer.move(doc.layers[0],this.ps.constants.ElementPlacement.PLACEBEFORE);
         const sixteen=doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN;
-        pixels=await this.ps.imaging.createImageDataFromBuffer(sixteen?Uint16Array.from(restored.rgba,v=>v*257):restored.rgba,{width,height,components:4,colorSpace:'RGB',colorProfile:'sRGB IEC61966-2.1',...(sixteen?{fullRange:true}:{})});
+        pixels=await this.ps.imaging.createImageDataFromBuffer(convertDepth(restored,sixteen?16:8).rgba,{width,height,components:4,colorSpace:'RGB',colorProfile:'sRGB IEC61966-2.1',...(sixteen?{fullRange:true}:{})});
         await this.checkpoint('apply.putPixels');
         await this.ps.imaging.putPixels({documentID:doc.id,layerID:layer.id,imageData:pixels,replace:true,targetBounds:{left:snapshot.bounds.left,top:snapshot.bounds.top}});
         // A hide-all mask establishes black everywhere, including outside the written patch.
@@ -200,12 +200,12 @@ export class PhotoshopAdapter {
   async newDocument(image:Raster,name:string):Promise<number> {
     checkSize(image.width,image.height);
     return this.ps.core.executeAsModal(async(context:any)=>{
-      const doc=await this.ps.app.createDocument({width:image.width,height:image.height,resolution:72,mode:this.ps.constants.NewDocumentMode.RGB,fill:this.ps.constants.DocumentFill.TRANSPARENT,depth:8,name,profile:'sRGB IEC61966-2.1'});
+      const depth=rasterDepth(image),doc=await this.ps.app.createDocument({width:image.width,height:image.height,resolution:72,mode:this.ps.constants.NewDocumentMode.RGB,fill:this.ps.constants.DocumentFill.TRANSPARENT,depth,name,profile:'sRGB IEC61966-2.1'});
       await context.hostControl.registerAutoCloseDocument(doc.id);
       let data:any;
       try {
         const layer=await doc.createLayer(this.ps.constants.LayerKind.NORMAL,{name:'ps-ai 生成'});
-        data=await this.ps.imaging.createImageDataFromBuffer(image.rgba,{width:image.width,height:image.height,components:4,colorSpace:'RGB',colorProfile:'sRGB IEC61966-2.1'});
+        data=await this.ps.imaging.createImageDataFromBuffer(image.rgba,{width:image.width,height:image.height,components:4,colorSpace:'RGB',colorProfile:'sRGB IEC61966-2.1',...(depth===16?{fullRange:true}:{})});
         await this.ps.imaging.putPixels({documentID:doc.id,layerID:layer.id,imageData:data,replace:true});
         await context.hostControl.unregisterAutoCloseDocument(doc.id);return doc.id;
       }finally{data?.dispose();}

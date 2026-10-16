@@ -6,9 +6,10 @@ import {ColorContractError} from './color';
 export function checkedPixelPng(bytes:Uint8Array):{bytes:Uint8Array;paletteEntries?:number} {
   const invalid=()=>new ColorContractError('invalid-output','PNG 像素数据、格式或解压长度错误，原始候选已保留');
   const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
-  const width=view.getUint32(16),height=view.getUint32(20),type=bytes[25];
+  const width=view.getUint32(16),height=view.getUint32(20),type=bytes[25],depth=bytes[24];
   const channels:Record<number,number>={0:1,2:3,3:1,4:2,6:4};
   if(!channels[type]||bytes[26]!==0||bytes[27]!==0||bytes[28]>1)throw invalid();
+  if(depth===16&&![2,6].includes(type))throw invalid();
   const kept=[bytes.subarray(0,8)],data:Uint8Array[]=[];
   let dataSeen=false,dataEnded=false,paletteEntries:number|undefined,transparent=false;
   for(let at=8;at<bytes.length;){
@@ -20,6 +21,7 @@ export function checkedPixelPng(bytes:Uint8Array):{bytes:Uint8Array;paletteEntri
       paletteEntries=length/3;
     }
     if(kind==='tRNS'){
+      if(depth===16)throw invalid(); // This output contract uses an explicit RGBA alpha channel.
       if(dataSeen||transparent||!((type===0&&length===2)||(type===2&&length===6)||(type===3&&paletteEntries!==undefined&&length>0&&length<=paletteEntries)))throw invalid();
       transparent=true;
     }
@@ -31,7 +33,7 @@ export function checkedPixelPng(bytes:Uint8Array):{bytes:Uint8Array;paletteEntri
     at=end;
   }
   const passes=(bytes[28]===0?[[0,0,1,1]]:[[0,0,8,8],[4,0,8,8],[0,4,4,8],[2,0,4,4],[0,2,2,4],[1,0,2,2],[0,1,1,2]])
-    .map(([x,y,dx,dy])=>({rowBytes:Math.max(0,Math.ceil((width-x)/dx))*channels[type],rows:Math.max(0,Math.ceil((height-y)/dy))}))
+    .map(([x,y,dx,dy])=>({rowBytes:Math.max(0,Math.ceil((width-x)/dx))*channels[type]*(depth/8),rows:Math.max(0,Math.ceil((height-y)/dy))}))
     .filter(pass=>pass.rowBytes&&pass.rows);
   const expected=passes.reduce((n,p)=>n+(p.rowBytes+1)*p.rows,0);
   const compressed=new Uint8Array(data.reduce((n,d)=>n+d.length,0));let at=0;

@@ -1,4 +1,4 @@
-// Raster bytes throughout the plugin are straight (unassociated) sRGB RGBA8.
+// Raster channels are straight (unassociated) sRGB RGBA8 or RGBA16.
 // UPNG does not perform ICC/gamma conversion. Reject metadata we cannot honor.
 export class ColorContractError extends Error {
   constructor(public code:'invalid-output'|'source-profile',message:string){super(message);this.name='ColorContractError';}
@@ -12,7 +12,7 @@ const crcTable=Uint32Array.from({length:256},(_,i)=>{for(let k=0;k<8;k++)i=(i>>>
 function crc(bytes:Uint8Array,start:number,end:number):number {let n=0xffffffff;for(let i=start;i<end;i++)n=(n>>>8)^crcTable[(n^bytes[i])&255];return (n^0xffffffff)>>>0;}
 export function validatePngColor(bytes:Uint8Array,allowUntagged=false):void {
   const invalid=()=>new ColorContractError('invalid-output','PNG 结构或校验错误，原始候选已保留，请检查后端输出');
-  const unsupported=()=>new ColorContractError('invalid-output','PNG 色彩标记不兼容；仅接受 sRGB 8-bit，请在后端转换为 sRGB 后输出');
+  const unsupported=()=>new ColorContractError('invalid-output','PNG 色彩标记不兼容；仅接受 sRGB 8/16-bit，请在后端转换为 sRGB 后输出');
   if(bytes.length>128_000_000)throw invalid();
   const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),seen=new Set<string>();
   let at=8,dataSeen=false,ended=false,tagged=false;

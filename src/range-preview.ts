@@ -1,7 +1,8 @@
-import {Raster,checkSize} from './image';
+import {Raster,checkSize,convertDepth} from './image';
 // The whole thumbnail is model context; amber is effective edit, blue protection.
 // This display never changes the masks used for application.
 export function rangePreview(image:Raster,edit:Uint8Array,protection:Uint8Array):Raster {
+  image=convertDepth(image,8);
   checkSize(image.width,image.height);
   if(edit.length!==image.width*image.height||protection.length!==edit.length)throw new Error('蒙版尺寸错误');
   const rgba=new Uint8Array(image.rgba.length);

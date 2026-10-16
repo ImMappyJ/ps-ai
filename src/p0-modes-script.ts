@@ -30,7 +30,7 @@ export async function main():Promise<void> {
       try{await adapter.apply(captured.snapshot,patch,'rollback candidate',captured.image);}catch(e){if(String(e).includes('intentional replacement rollback'))rollbackCaught=true;else throw e;}finally{injectFailure=false;}
       const rolledBack=await read(doc);if(!rollbackCaught||doc.layers.length!==beforeLayers+1||!Array.from(doc.layers as any[]).some((l:any)=>l.id===second)||rolledBack.rgba.some((v,i)=>v!==secondPixels.rgba[i]))throw new Error('失败替换没有恢复上一插件图层和像素');
       await ps.core.executeAsModal(async()=>{const r=await ps.action.batchPlay([{_obj:'select',_target:[{_ref:'historyState',_enum:'ordinal',_value:'previous'}]}],{});if(r[0]?._obj==='error')throw new Error(r[0].message);},{commandName:'PS-AI FOR ME 模式验证撤销'});
-      const restored=await read(doc),undoDifference=restored.rgba.reduce((n,v,i)=>n+(v!==firstPixels.rgba[i]?1:0),0);
+      const restored=await read(doc),undoDifference=Array.from(restored.rgba).reduce((n,v,i)=>n+(v!==firstPixels.rgba[i]?1:0),0);
       if(alphaDifference||outsideDifference||undoDifference||doc.mode!==sourceMode||doc.bitsPerChannel!==sourceDepth||doc.colorProfileName!==sourceProfile)throw new Error(`模式 ${mode}${depth} 不一致：alpha=${alphaDifference}, outside=${outsideDifference}, undo=${undoDifference}`);
       cases.push({mode,depth,profile:sourceProfile,compositeAlphaDifference:alphaDifference,outsideDifference,undoDifference,clippingBase:captured.snapshot.clipBaseLayerId,candidateReplacement:true,failedReplacementRestored:true,sourceFormatPreserved:true,capturedSize:[captured.image.width,captured.image.height]});
     }

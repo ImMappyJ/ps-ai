@@ -16,6 +16,14 @@ function host() {
   };return {ps,doc,calls,adapter:new PhotoshopAdapter(ps,'session-a')};
 }
 function snap():Snapshot {return {documentId:11,width:100,height:80,profile:'sRGB IEC61966-2.1',mode:'rgb',depth:8,historyId:91,sessionId:'session-a',bounds:{left:40,top:30,right:42,bottom:32},mask:new Uint8Array([255,128,0,255]),sourceHash:'fixture'};}
+test('native16 capture and application retain non-257 colors/alpha;8 target converts explicitly',async()=>{
+  const h=host();h.doc.bitsPerChannel=16;
+  h.ps.imaging.getPixels=async()=>({imageData:{width:1,height:1,components:4,componentSize:16,getData:async()=>new Uint16Array([12345,23456,34567,45678]),dispose(){}},sourceBounds:{left:40,top:30,right:41,bottom:31}});
+  const c=await h.adapter.capture(0,undefined,11,16);const at=(30*66+32)*4;assert.ok(c.image.rgba instanceof Uint16Array);assert.deepEqual([...c.image.rgba.slice(at,at+4)],[12345,23456,34567,45678]);
+  const patch16={width:2,height:2,rgba:new Uint16Array([12345,23456,34567,45678,12345,23456,34567,65535,12345,23456,34567,65535,12345,23456,34567,65535])};
+  await h.adapter.apply({...snap(),depth:16},patch16,'precise');assert.deepEqual([...h.calls.find(c=>c[0]==='buffer')[1].slice(0,4)],[12345,23456,34567,45678]);
+  const h8=host();await h8.adapter.apply(snap(),patch16,'8 target');assert.deepEqual([...h8.calls.find(c=>c[0]==='buffer')[1].slice(0,4)],[48,91,135,178]);
+});
 const patch={width:2,height:2,rgba:new Uint8Array([255,0,0,128,255,0,0,255,255,0,0,255,255,0,0,255])};
 
 test('未标记来源和参考图在像素读取前停止，不猜测工作色域且关闭自己的参考文档',async()=>{
