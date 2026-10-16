@@ -1,0 +1,256 @@
+{
+  "version": "0.4.0 development",
+  "sample": "3F3F3F.webp",
+  "date": "2026-10-17",
+  "recipes": [
+    {
+      "mode": "generate",
+      "prompt": "全身二次元角色立绘，一位成年女性，粉色长卷发，白色褶皱上衣，粉色与深蓝色长外套，黑色金边短裙，红色手套，黑色系带高跟鞋；一只手抬至脸旁，另一只手自然伸开，精细柔和的动漫插画，单人居中，完整显示双脚，干净的浅紫色背景，无文字。",
+      "parameters": {
+        "workspace": "t2i",
+        "mode": "generate",
+        "steps": 25,
+        "resolution": 992,
+        "seed": 42,
+        "outputDepth": 16,
+        "guide": true,
+        "margin": 0.15,
+        "usage": "服装",
+        "destination": "document",
+        "outputKind": "t2i",
+        "preserveAlpha": false,
+        "alignSubject": false,
+        "matchColor": false
+      },
+      "models": {
+        "unet": "qwen-image-2.1-Q4_K_M.gguf",
+        "clip": "qwen3vl_8b_int8_convrot.safetensors",
+        "vae": "qwen_image_2.1_vae_bf16.safetensors"
+      }
+    },
+    {
+      "mode": "atmosphere",
+      "prompt": "柔和的浅紫色薄雾与少量漂浮的柔光尘点，雾气集中在画面底部，向上逐渐淡出，顶部留空；透明背景，无人物、无文字、无实心底色。",
+      "parameters": {
+        "workspace": "cosplay",
+        "mode": "atmosphere",
+        "steps": 25,
+        "resolution": 992,
+        "seed": 42,
+        "outputDepth": 16,
+        "guide": true,
+        "margin": 0.15,
+        "usage": "服装",
+        "destination": "document",
+        "outputKind": "asset",
+        "preserveAlpha": false,
+        "alignSubject": false,
+        "matchColor": false
+      },
+      "models": {
+        "unet": "qwen-image-2.1-Q4_K_M.gguf",
+        "clip": "qwen3vl_8b_int8_convrot.safetensors",
+        "vae": "qwen_image_2.1_vae_bf16.safetensors"
+      }
+    },
+    {
+      "mode": "effect",
+      "prompt": "单独一缕紫色绸带形魔法烟雾，开放的 S 形曲线从左下方流向右上方，两端逐渐变细并消散，不闭合、不形成圆环；孤立透明背景，自然半透明边缘，无人物、无文字。",
+      "parameters": {
+        "workspace": "cosplay",
+        "mode": "effect",
+        "steps": 25,
+        "resolution": 992,
+        "seed": 42,
+        "outputDepth": 16,
+        "guide": true,
+        "margin": 0.15,
+        "usage": "服装",
+        "destination": "document",
+        "outputKind": "asset",
+        "preserveAlpha": false,
+        "alignSubject": false,
+        "matchColor": false
+      },
+      "models": {
+        "unet": "qwen-image-2.1-Q4_K_M.gguf",
+        "clip": "qwen3vl_8b_int8_convrot.safetensors",
+        "vae": "qwen_image_2.1_vae_bf16.safetensors"
+      }
+    },
+    {
+      "mode": "scene",
+      "prompt": "只将透明背景替换为晴日下午的紫藤花园小径：远处紫藤花架、柔和的绿色植物和透视自然的浅色石板路，人物双脚稳稳站在路面上并有接触阴影；保持原人物、服装、姿势与构图不变。",
+      "parameters": {
+        "workspace": "cosplay",
+        "mode": "scene",
+        "steps": 25,
+        "resolution": 992,
+        "seed": 42,
+        "outputDepth": 16,
+        "guide": true,
+        "margin": 0.15,
+        "usage": "服装",
+        "destination": "selection",
+        "outputKind": "edit",
+        "modelSize": {
+          "width": 800,
+          "height": 1248
+        },
+        "preserveAlpha": false,
+        "alignSubject": false,
+        "matchColor": false
+      },
+      "models": {
+        "unet": "qwen-image-2.1-Q4_K_M.gguf",
+        "clip": "qwen3vl_8b_int8_convrot.safetensors",
+        "vae": "qwen_image_2.1_vae_bf16.safetensors"
+      }
+    },
+    {
+      "mode": "reference",
+      "prompt": "参考图片中的白色过膝袜，为原图选区内的双腿添加同类白色袜子；袜口在膝盖上方，保留原人物的腿部姿势、鞋子、衣服和透明背景。",
+      "parameters": {
+        "workspace": "cosplay",
+        "mode": "reference",
+        "steps": 25,
+        "resolution": 992,
+        "seed": 42,
+        "outputDepth": 16,
+        "guide": false,
+        "margin": 0.15,
+        "usage": "服装",
+        "destination": "selection",
+        "outputKind": "edit",
+        "modelSize": {
+          "width": 800,
+          "height": 1216
+        },
+        "preserveAlpha": true,
+        "alignSubject": false,
+        "matchColor": false
+      },
+      "models": {
+        "unet": "qwen-image-2.1-Q4_K_M.gguf",
+        "clip": "qwen3vl_8b_int8_convrot.safetensors",
+        "vae": "qwen_image_2.1_vae_bf16.safetensors"
+      }
+    },
+    {
+      "mode": "costume",
+      "prompt": "只将选中的画面右侧粉色外套衣摆改为深紫色丝绒，保留原有褶皱、菱形镂空、金色饰边和衣摆轮廓；保持人物姿势、其他衣服及透明背景不变。",
+      "parameters": {
+        "workspace": "cosplay",
+        "mode": "costume",
+        "steps": 25,
+        "resolution": 992,
+        "seed": 42,
+        "outputDepth": 16,
+        "guide": true,
+        "margin": 0.15,
+        "usage": "服装",
+        "destination": "selection",
+        "outputKind": "edit",
+        "modelSize": {
+          "width": 832,
+          "height": 1152
+        },
+        "preserveAlpha": true,
+        "alignSubject": false,
+        "matchColor": false
+      },
+      "models": {
+        "unet": "qwen-image-2.1-Q4_K_M.gguf",
+        "clip": "qwen3vl_8b_int8_convrot.safetensors",
+        "vae": "qwen_image_2.1_vae_bf16.safetensors"
+      }
+    },
+    {
+      "mode": "background",
+      "prompt": "只将透明背景替换为浅薰衣草紫色的简洁摄影棚，柔和均匀的墙面与地面，脚下有轻微接触阴影；完整保留原人物、发丝、衣服、姿势和构图。",
+      "parameters": {
+        "workspace": "local",
+        "mode": "background",
+        "steps": 25,
+        "resolution": 992,
+        "seed": 42,
+        "outputDepth": 16,
+        "guide": true,
+        "margin": 0.15,
+        "usage": "服装",
+        "destination": "selection",
+        "outputKind": "edit",
+        "modelSize": {
+          "width": 800,
+          "height": 1248
+        },
+        "preserveAlpha": false,
+        "alignSubject": false,
+        "matchColor": false
+      },
+      "models": {
+        "unet": "qwen-image-2.1-Q4_K_M.gguf",
+        "clip": "qwen3vl_8b_int8_convrot.safetensors",
+        "vae": "qwen_image_2.1_vae_bf16.safetensors"
+      }
+    },
+    {
+      "mode": "remove",
+      "prompt": "移除胸前的黑色毛绒玩偶挂件，包括头和四肢，在原位置补齐连续的白色褶皱衣料；保留金属链条、人物姿势和其他衣物。",
+      "parameters": {
+        "workspace": "local",
+        "mode": "remove",
+        "steps": 25,
+        "resolution": 992,
+        "seed": 42,
+        "outputDepth": 16,
+        "guide": true,
+        "margin": 0.15,
+        "usage": "服装",
+        "destination": "selection",
+        "outputKind": "edit",
+        "modelSize": {
+          "width": 896,
+          "height": 1088
+        },
+        "preserveAlpha": false,
+        "alignSubject": false,
+        "matchColor": false
+      },
+      "models": {
+        "unet": "qwen-image-2.1-Q4_K_M.gguf",
+        "clip": "qwen3vl_8b_int8_convrot.safetensors",
+        "vae": "qwen_image_2.1_vae_bf16.safetensors"
+      }
+    },
+    {
+      "mode": "edit",
+      "prompt": "给双腿穿上白色过膝袜，袜口位于膝盖上方；保留腿部姿势、鞋子、原有衣服和透明背景。",
+      "parameters": {
+        "workspace": "local",
+        "mode": "edit",
+        "steps": 25,
+        "resolution": 992,
+        "seed": 42,
+        "outputDepth": 16,
+        "guide": true,
+        "margin": 0.15,
+        "usage": "服装",
+        "destination": "selection",
+        "outputKind": "edit",
+        "modelSize": {
+          "width": 800,
+          "height": 1216
+        },
+        "preserveAlpha": true,
+        "alignSubject": true,
+        "matchColor": false
+      },
+      "models": {
+        "unet": "qwen-image-2.1-Q4_K_M.gguf",
+        "clip": "qwen3vl_8b_int8_convrot.safetensors",
+        "vae": "qwen_image_2.1_vae_bf16.safetensors"
+      }
+    }
+  ]
+}

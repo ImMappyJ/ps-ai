@@ -2,6 +2,16 @@ import test from 'node:test';import assert from 'node:assert/strict';import {pan
 import {defaultSettings} from '../src/profile';
 import {decodePng} from '../src/image';
 
+test('修正参数重新生成后清除上次诊断，新的失败仍显示详情',async()=>{
+  const h=await panelHarness();try{
+    await h.wait();h.click('tab-t2i');h.el('count').value='0';h.click('generate');await h.wait();
+    assert.equal(h.el('diagnostic-box').style.display,'block');
+    h.el('count').value='1';h.click('generate');await h.wait();
+    assert.equal(h.records()[0].state,'ready');assert.equal(h.el('diagnostic-box').style.display,'none');
+    h.el('count').value='0';h.click('generate');await h.wait();assert.equal(h.el('diagnostic-box').style.display,'block');
+  }finally{await h.close();}
+});
+
 test('复用16位历史后切换语言保留本次输出位深，不用旧偏好覆盖',async()=>{
   const h=await panelHarness({settings:{...defaultSettings(),outputDepth:8},uxpSelect:true});try{
     await h.wait();h.click('tab-t2i');h.click('generate');await h.wait();

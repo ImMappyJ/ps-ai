@@ -33,7 +33,14 @@ Use saved copies. Generated structure and colors need review. Investigate host c
 `;
 export async function createEnvironmentPackage(root,target){
   const names=['LICENSE','scripts/check-environment.ps1','scripts/prepare-environment.ps1','scripts/install-ccx.ps1','config/settings.example.json','config/compatibility.json','README.md','README.en.md','COMFYUI.md','COMFYUI.en.md','BRAND.md','BRAND.en.md','assets/1.png','assets/2.png','assets/setup-zh.png','assets/setup-en.png','assets/comfyui-model-library.jpg','src/workflow.ts','src/profile.ts','comfyui/ps_ai_sdr16/__init__.py'];
-  names.push('USER_GUIDE.md','USER_GUIDE.en.md',...['before.png','after.png','workspace.jpg','settings-zh.jpg','settings-en.jpg','selection-zh.jpg','output-depth-zh.jpg','progress-zh.jpg','candidates-zh.jpg','advanced-en.jpg'].map(name=>'assets/guide/'+name));
+  const guide=['before.png','after.png','recipes.json','reference-white-socks-icc.png','07-effect-asset-workspace.png',
+    ...['01-edit','02-remove','03-background','04-costume','05-reference','06-scene','08-atmosphere','09-generate'].map(name=>name+'-panel.png'),
+    ...['01-edit','03-background','06-scene','09-generate'].map(name=>name+'-workspace.png'),
+    ...['01-edit','02-remove','03-background','04-costume','05-reference','06-scene'].map(name=>name+'-compare.png'),
+    ...['07-effect','08-atmosphere'].map(name=>name+'-result.png'),
+    ...['01-edit','02-remove','03-background','04-costume'].map(name=>name+'-selection.png'),
+    ...['effect','atmosphere','generate'].map(name=>name+'-preview.png')];
+  names.push('USER_GUIDE.md','USER_GUIDE.en.md',...guide.map(name=>'assets/guide/'+name));
   const brand=['mark.svg','wordmark.svg','mark-on-dark.svg','mark-on-light.svg','mark-mono-dark.svg','mark-mono-light.svg','lockup-on-dark.svg','lockup-on-light.svg','lockup-mono-dark.svg','lockup-mono-light.svg','avatar.png','favicon.ico','wordmark-on-dark.png','overview.svg',...[16,23,24,32,46,48,64,96,128,256,512].map(n=>`icons/mark-${n}.png`),...[48,96,512].map(n=>`icons/app-${n}.png`)];
   names.push(...brand.map(name=>'assets/brand/'+name),...[23,46].flatMap(size=>['light','dark'].map(color=>`assets/brand/icons/sidebar-${color}-${size}.png`)));
   const entries={};for(const name of names)entries[name]=new Uint8Array(await fs.readFile(path.join(root,name)));

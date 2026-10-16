@@ -18,9 +18,9 @@ This example uses a copy of `3F3F3F.webp` to add white over-the-knee socks withi
 | --- | --- |
 | ![Before adding white over-the-knee socks](assets/guide/before.png) | ![After adding white over-the-knee socks](assets/guide/after.png) |
 
-![Actual candidate preview in Photoshop](assets/guide/workspace.jpg)
+![Actual Photoshop candidate preview; open the original PNG for detail](assets/guide/01-edit-workspace.png)
 
-See the [illustrated user guide](USER_GUIDE.en.md) for selections, parameters, all nine modes, 16-bit output, candidates and history.
+The [illustrated user guide](USER_GUIDE.en.md) walks through all nine modes with selection maps, tested prompts and clear PNG captures, using the same sample for full-background changes, reference assistance, asset compositing and text-to-image.
 
 ## What it does
 

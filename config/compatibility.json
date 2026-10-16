@@ -143,6 +143,33 @@
       "knownValueNativeMaxError": "1/65535",
       "gui": "Two serial16 candidates, same-capture replacement, exact PNG16 export, actual sampling-step progress and task-specific cancellation",
       "limitations": "Output16 was native-tested in sRGB16, not a new all-profile16 matrix. Background/scene tests used a selected crop, not full-image quality grading. No calibrated-display or long-term crash-free acceptance."
+    },
+    "walkthroughAcceptance": {
+      "date": "2026-10-17",
+      "host": "Windows Photoshop 27.0.0",
+      "gpu": "enabled",
+      "sample": "3F3F3F.webp",
+      "profile": "sRGB IEC61966-2.1",
+      "sourceDepth": 16,
+      "selectionEdits": [
+        "edit",
+        "remove",
+        "background",
+        "costume",
+        "reference",
+        "scene"
+      ],
+      "standalone16": [
+        "effect",
+        "atmosphere",
+        "generate"
+      ],
+      "fullCanvasBackgrounds": true,
+      "sourceLayerChannelDifference": 0,
+      "outsideMaskVisiblePixelAndAlphaDifference": 0,
+      "preservedAlphaDifference": 0,
+      "compositing": "Effect and atmosphere copied into sample derivatives as separate layers, 900x900 at (50,555), Normal at approximately 85% and 35%.",
+      "limitations": "One illustration and fixed model preset. Clothing transfer, not identity consistency or complex prop reconstruction. Invisible RGB under zero alpha excluded from composite appearance comparison. Asset alpha can contain faint residue; first effect prompt formed a rejected ring. English prompt translations not separately tested. No long-term stability or calibrated-display claim."
     }
   }
 }

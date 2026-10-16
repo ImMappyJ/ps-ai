@@ -18,9 +18,9 @@ PS-AI 将 ComfyUI 接到 Photoshop 中，用于局部修图、COSPLAY 服装和�
 | --- | --- |
 | ![添加白色过膝袜前](assets/guide/before.png) | ![添加白色过膝袜后](assets/guide/after.png) |
 
-![Photoshop 中的实际候选预览](assets/guide/workspace.jpg)
+![Photoshop 中的实际候选预览，点击查看原始 PNG](assets/guide/01-edit-workspace.png)
 
-选区、参数、九种模式、16 位输出、候选与历史的操作步骤见 [图文使用说明](USER_GUIDE.md)。
+九种模式的逐步操作、选区范围、实测提示词及清晰 PNG 截图见 [图文使用说明](USER_GUIDE.md)。所有例子使用同一张样图，包含整张背景替换、参考辅助、独立素材合成和文字生图。
 
 ## 能做什么
 

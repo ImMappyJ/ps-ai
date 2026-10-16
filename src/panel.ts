@@ -154,6 +154,7 @@ async function generate() {
   if(!settingsReady)throw new Error(t("设置尚未加载或配置损坏，请保存或导入有效配置"));
   const expectedDocumentId=activeDocumentId();
   stopBatch=false;
+  el('diagnostic-box').style.display='none';
   startTask();
   lock(true);
   try {

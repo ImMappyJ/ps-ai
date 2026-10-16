@@ -213,3 +213,4 @@ This creates `extra_model_paths.yaml`, `start-comfyui.ps1` and importable `ps-ai
 | No percentage before sampling | The node has not reported sampling steps yet. The panel shows a phase, then the task's real step progress. |
 | Wrong candidate dimensions | Check source scaling and first-reference dimensions. Do not bypass checks by changing output size. |
 | White fringe / color shift | Check whether preserving the source silhouette is appropriate, then ICC, raw model output, alignment and color matching. Composite manually if needed. |
+| Reference PNG is reported as untagged | PS 27 may treat PNG16 with only an sRGB chunk and no embedded ICC as untagged. Confirm its actual color space, assign the correct profile on a copy and save with ICC embedded before importing. See the [reference example](USER_GUIDE.en.md#reference). |
