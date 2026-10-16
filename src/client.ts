@@ -35,9 +35,10 @@ export class ComfyClient {
     return this.request(path,body===undefined?undefined:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},async res=>{try{return await res.json();}catch(error){throw new DiagnosticError('incompatible-api','environment',`ComfyUI JSON: ${error instanceof Error?error.message:String(error)}`);}});
   }
   async connect():Promise<unknown> {const stats=await this.json('/system_stats');if(!stats||typeof stats!=='object'||Array.isArray(stats))throw new DiagnosticError('incompatible-api','connection','ComfyUI system_stats 格式不匹配');return stats;}
-  async inspect():Promise<{stats:unknown;nodeInfo:Record<string,any>;models:Record<keyof ModelFiles,string[]>}> {
+  async inspect(outputDepth:8|16=8):Promise<{stats:unknown;nodeInfo:Record<string,any>;models:Record<keyof ModelFiles,string[]>}> {
     const stats=await this.connect();
     const classes=['UnetLoaderGGUF','CLIPLoader','VAELoader','TextEncodeQwenImage21','QwenImage21Cache','KSampler','VAEDecode','SaveImage','LoadImage','JoinImageWithAlpha'];
+    if(outputDepth===16)classes.push('PS_AISavePNG16');
     const infos=await Promise.all(classes.map(c=>this.json(`/object_info/${c}`)));
     const nodeInfo=Object.assign({},...infos);
     for(const c of classes)if(!nodeInfo[c])throw new DiagnosticError('missing-node','environment',`缺少节点：${c}`);
@@ -51,8 +52,8 @@ export class ComfyClient {
     if(!names?.includes('image_1')||!names?.includes('image_3'))throw new DiagnosticError('incompatible-api','environment','多参考图节点字段不匹配');
     return {stats,nodeInfo,models};
   }
-  async check():Promise<{stats:unknown;nodeInfo:Record<string,any>}> {
-    const result=await this.inspect();
+  async check(outputDepth:8|16=8):Promise<{stats:unknown;nodeInfo:Record<string,any>}> {
+    const result=await this.inspect(outputDepth);
     for(const key of ['unet','clip','vae'] as const)if(!result.models[key].includes(this.models[key]))throw new DiagnosticError('missing-model','environment',`缺少模型 ${key}：${this.models[key]}；请在模型配置中扫描并选择文件`);
     return result;
   }

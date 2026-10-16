@@ -6,7 +6,7 @@
 
 PS-AI connects ComfyUI to Photoshop for local edits, COSPLAY outfits and props, and text-to-image generation. Select an area, describe the change and preview candidates in the panel, then apply a result as a new layer with an editable mask.
 
-**The published release is 0.3.0 (experimental).** This source tree is the unpublished **0.4.0 development version**, adding guided setup, color checks and edit-range previews. Use the documentation matching your installed release. Results may need manual cleanup, so work on saved copies. Routine skin smoothing, blemish removal and skin-tone retouching are not included.
+**The published release is 0.3.0 (experimental).** This source tree is the unpublished **0.4.0 development version**, adding guided setup, color checks, edit-range previews and optional 16-bit SDR output. Use the documentation matching your installed release. Results may need manual cleanup, so work on saved copies. Routine skin smoothing, blemish removal and skin-tone retouching are not included.
 
 The 0.3.0 panel is still named `PS-AI FOR ME`. Development version 0.4.0 uses `PS-AI` and the Morph Frame identity. Plugin IDs and the `PS-AI-FOR-ME` installation directory stay the same.
 

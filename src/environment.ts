@@ -1,7 +1,8 @@
 import {buildGraph} from './workflow';import {DiagnosticError} from './diagnostics';import type {ModelFiles} from './profile';
-export function checkEnvironment(hostVersion:string,nodes:Record<string,any>,models?:ModelFiles):void {
+export function checkEnvironment(hostVersion:string,nodes:Record<string,any>,models?:ModelFiles,outputDepth:8|16=8):void {
   if(!/^\d+\./.test(hostVersion)||Number(hostVersion.split('.')[0])<27)throw new DiagnosticError('incompatible-api','environment','需要 Photoshop 27.0 或更高版本；其他版本未验证');
-  const options={requestId:'setup-check',prompt:'compatibility check',seed:42,steps:25,resolution:768,models};
+  if(outputDepth===16&&!nodes.PS_AISavePNG16?.input)throw new DiagnosticError('missing-node','environment','缺少节点 PS_AISavePNG16：把 comfyui/ps_ai_sdr16 复制到 ComfyUI/custom_nodes 后重启后端，或选择 8-bit 输出');
+  const options={requestId:'setup-check',prompt:'compatibility check',seed:42,steps:25,resolution:768,models,outputDepth};
   const graphs=[buildGraph(options),buildGraph({...options,source:'fixture.png',guide:'guide.png',reference:'reference.png'})];
   const fail=(field:string)=>{throw new DiagnosticError('incompatible-api','environment',`节点模板字段不匹配：${field}`);};
   for(const graph of graphs){

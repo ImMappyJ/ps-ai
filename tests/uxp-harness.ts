@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';import os from 'node:os';import path from 'node:path';import vm from 'node:vm';import {parseHTML} from 'linkedom';import {build} from 'esbuild';
 import {encodePng,decodePng,Raster} from '../src/image';import type {JobRecord} from '../src/jobs';
-export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boolean;delayCheck?:boolean;settings?:unknown;models?:{unet:string;clip:string;vae:string};noDocuments?:boolean;delaySettings?:boolean;nativePreviewUnavailable?:boolean;source?:Raster;output?:Raster}={}) {
+export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boolean;delayCheck?:boolean;settings?:unknown;models?:{unet:string;clip:string;vae:string};noDocuments?:boolean;delaySettings?:boolean;nativePreviewUnavailable?:boolean;source?:Raster;output?:Raster;save16Node?:boolean}={}) {
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'ps-ai-panel-'));
   const html=await fs.readFile('plugin/index.html','utf8');const {document,window}=parseHTML(html);
   for(const select of Array.from(document.querySelectorAll('select'))) {
@@ -28,6 +28,7 @@ export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boo
   const png=encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)});
   const modelInfo:any={UnetLoaderGGUF:{input:{required:{unet_name:[['qwen-image-2.1-Q4_K_M.gguf']]}}},CLIPLoader:{input:{required:{clip_name:[['qwen3vl_8b_int8_convrot.safetensors']]}}},VAELoader:{input:{required:{vae_name:[['qwen_image_2.1_vae_bf16.safetensors']]}}},TextEncodeQwenImage21:{input:{required:{images:['COMFY_AUTOGROW_V3',{template:{names:['image_1','image_2','image_3']}}]}}}};
   Object.assign(modelInfo,JSON.parse(await fs.readFile('tests/fixtures/comfy-nodes.json','utf8')));
+  if(options.save16Node)modelInfo.PS_AISavePNG16={input:{required:{images:['IMAGE',{}],filename_prefix:['STRING',{}]}},output:[]};
   if(options.models)for(const [cls,field,key] of [['UnetLoaderGGUF','unet_name','unet'],['CLIPLoader','clip_name','clip'],['VAELoader','vae_name','vae']] as const)modelInfo[cls].input.required[field][0].push(options.models[key]);
   const fetcher=async(url:string,init:any)=>{
     if(url.startsWith('http://offline.invalid:9999'))throw new TypeError('fetch failed');

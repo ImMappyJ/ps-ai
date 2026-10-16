@@ -4,7 +4,21 @@
 <h1 align="center">ComfyUI setup and model compatibility</h1>
 <p align="center"><a href="COMFYUI.md">简体中文</a> · <strong>English</strong> · <a href="README.en.md">README</a></p>
 
-The plugin includes neither the backend nor weights. Reuse an existing ComfyUI if it meets the contract below. This guide covers the `qwen21-local-v2-rgba` template. Older screenshots show 0.3.0; the 0.4.0 development setup is described below.
+The plugin includes neither the backend nor weights. Reuse an existing ComfyUI if it meets the contract below. 8-bit uses `qwen21-local-v2-rgba`; 16-bit uses `qwen21-local-v3-rgba16`. Older screenshots show 0.3.0; the 0.4.0 development setup is described below.
+
+## 16-bit output (0.4.0 development version)
+
+8-bit remains the default. To retain higher precision from generation:
+
+1. Find `comfyui/ps_ai_sdr16` in the source tree or matching environment tools ZIP.
+2. Copy that folder into `ComfyUI/custom_nodes/ps_ai_sdr16`. Its `__init__.py` must sit directly inside it. No core files, existing nodes or extra Python packages need replacement.
+3. Wait for current jobs to finish and restart ComfyUI normally. Node search should include **PS-AI Save PNG16 (sRGB SDR)**.
+4. Select **16-bit SDR** under Output depth in the plugin. A missing node stops generation before submission; select 8-bit to use the original path.
+5. Apply to a 16-bit source document, or choose Open in new document to create a 16-bit sRGB document automatically. Save PNG preserves the candidate depth. Applying to an 8-bit document reduces it to 8-bit.
+
+The node writes decoded VAE floats directly to tagged 16-bit RGB/RGBA PNG. Resizing, alpha processing and export retain 16-bit colors. Thumbnails and model inputs remain 8-bit; selection/protection masks remain 8-bit grayscale. A 16-bit container does not promise 16 bits of effective model detail. BF16/FP16 inference, sRGB gamut and model color shifts still apply; HDR is unsupported.
+
+The optional JSON field `"outputDepth": 16` travels with settings. Old settings default to 8-bit; historical jobs retain their own output template.
 
 ## 1. Prepare a working backend
 
@@ -114,15 +128,15 @@ Source and reference images require a known profile and RGB / Grayscale 8/16-bit
 | Boundary | Contract |
 | --- | --- |
 | Capture, reference, model input | Photoshop converts copied pixels to sRGB. Model exchange uses 8-bit RGBA PNG with straight alpha. |
-| Backend output | sRGB 8-bit PNG. Only the verified current template can interpret untagged output as sRGB. Conflicting gamma, ICC and HDR tags are rejected; the raw output is retained. |
+| Backend output | The 8-bit template accepts sRGB8 PNG and its verified untagged convention. The 16-bit template requires tagged sRGB RGB/RGBA16 PNG. Conflicting gamma, ICC and HDR tags are rejected; the raw output is retained. |
 | Preview and PNG export | Both use explicitly tagged sRGB PNG. Monitor and host color management can still affect appearance. |
-| Layer application | Photoshop converts candidate sRGB into the source profile. Original layers, document profile and depth stay unchanged. Applying an 8-bit result to a 16-bit document does not create native high-depth AI output. |
+| Layer application | Photoshop converts candidate sRGB into the source profile. Original layers, document profile and depth stay unchanged. 16-bit output retains its color precision in a 16-bit destination. Expanding an 8-bit result does not create extra precision. |
 
 Downloads are also checked for PNG checksums, pixel format, decompressed length and scanlines. Text metadata is excluded from decoding. Invalid pixels cannot be applied as a candidate; the original download remains in the task record.
 
 Native round trips and independent conversions passed on PS 27.0 for sRGB, Adobe RGB, Display P3 and ProPhoto at 8/16-bit. Colors outside sRGB and fine high-depth gradients lose gamut / precision in model exchange. The edited area is not guaranteed to match neighboring color exactly. Optional context matching corrects small overall shifts; it cannot restore gamut.
 
-The captured range is shown during generation: amber means effective edit, blue manual protection and gray context. A real feathered Photoshop mask controls application; the visual guide is not a strict latent inpaint mask. Candidates identify their source and whether application adds a result or replaces this capture’s plugin layer. Closed, changed or expired source sessions block application while keeping candidates exportable. Independent host idle crashes remain unresolved; work on saved copies.
+The captured range is shown during generation: amber means effective edit, blue manual protection and gray context. A real feathered Photoshop mask controls application; the visual guide is not a strict latent inpaint mask. Candidates identify their source and whether application adds a result or replaces this capture’s plugin layer. Closed, changed or expired source sessions block application while keeping candidates exportable. Investigate host crashes using logs and separate GPU/network controls. One successful run is not a long-term stability guarantee; work on saved copies.
 
 ## 4. Adapting your own models
 
@@ -135,7 +149,7 @@ This version supports **model mappings within the existing workflow**. Weights m
 | VAE | `VAELoader.vae_name` | `.safetensors`, matching latent format |
 | Encoding / references | `TextEncodeQwenImage21` | `prompt`, `negative_prompt`, `resolution`; `images.image_1` through `images.image_3`; accepts `vae` for image inputs |
 | Model wrapper | `QwenImage21Cache` | `model`, `device=auto`, `dtype=default` |
-| Output | `KSampler → VAEDecode → SaveImage` | `euler` / `simple`, `cfg=1`, `denoise=1`; output node ID `8` |
+| Output | `KSampler → VAEDecode → SaveImage / PS_AISavePNG16` | `euler` / `simple`, `cfg=1`, `denoise=1`; output node ID `8` |
 
 Also required: `LoadImage` and `JoinImageWithAlpha`. A scan proves file visibility, not internal architecture. Even after a successful node check, test both text-to-image and a local edit. Validate quantization, memory requirements, quality and licensing for every alternate combination.
 

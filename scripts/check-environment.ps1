@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$ModelRoot,
     [string]$ComfyRoot,
     [string]$SettingsPath,
@@ -23,6 +23,8 @@ $preset = Read-Json (Join-Path $repoRoot 'config/compatibility.json')
 try {
     if ($SettingsPath) { $settings = Read-Json $SettingsPath } else { $settings = Read-Json (Join-Path $repoRoot 'config/settings.example.json') }
     if ($settings.schemaVersion -ne 1 -or $settings.baseUrl -isnot [string]) { throw 'Unsupported settings version or missing service address.' }
+    if ($null -ne $settings.outputDepth -and $settings.outputDepth -isnot [int] -and $settings.outputDepth -isnot [long]) { throw 'Output depth must be integer 8 or 16.' }
+    if ($null -ne $settings.outputDepth -and $settings.outputDepth -notin @(8,16)) { throw 'Output depth must be 8 or 16.' }
     $address=$settings.baseUrl.Trim()
     $serviceUri=$null
     if ($address -notmatch '^https?://(?:\[[0-9a-fA-F:]+\]|[a-zA-Z0-9.-]+)(?::[0-9]{1,5})?/?$' -or -not [Uri]::TryCreate($address,[UriKind]::Absolute,[ref]$serviceUri) -or $serviceUri.Port -lt 1 -or $serviceUri.Port -gt 65535) { throw 'Use an HTTP(S) origin without credentials, path, query or fragment, e.g. http://localhost:8188.' }
@@ -59,7 +61,9 @@ if ($settings) {
         try {
             $stats = Invoke-RestMethod -Uri ($settings.baseUrl + '/system_stats') -TimeoutSec 15
             if ($stats.system.comfyui_version -eq $preset.backend.version) { Add-Check 'backend-version' 'pass' $stats.system.comfyui_version } else { Add-Check 'backend-version' 'warn' "Reported $($stats.system.comfyui_version); tested $($preset.backend.version)." }
-            foreach ($node in $preset.nodes) {
+            $requiredNodes=@($preset.nodes)
+            if ($settings.outputDepth -eq 16) { $requiredNodes+=@('PS_AISavePNG16') }
+            foreach ($node in $requiredNodes) {
                 $info = Invoke-RestMethod -Uri ($settings.baseUrl + '/object_info/' + $node) -TimeoutSec 15
                 if (-not $info.$node) { Add-Check "node:$node" 'fail' 'Missing required node.'; continue }
                 Add-Check "node:$node" 'pass' 'Present.'

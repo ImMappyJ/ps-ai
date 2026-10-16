@@ -1,6 +1,6 @@
 export interface ModelFiles {unet:string;clip:string;vae:string}
 export type Language='zh-CN'|'en-US';
-export interface BackendSettings {schemaVersion:1;baseUrl:string;models:ModelFiles;language?:Language}
+export interface BackendSettings {schemaVersion:1;baseUrl:string;models:ModelFiles;language?:Language;outputDepth?:8|16}
 export const DEFAULT_MODELS:ModelFiles={unet:'qwen-image-2.1-Q4_K_M.gguf',clip:'qwen3vl_8b_int8_convrot.safetensors',vae:'qwen_image_2.1_vae_bf16.safetensors'};
 export function defaultSettings():BackendSettings {return {schemaVersion:1,baseUrl:'http://localhost:8188',models:{...DEFAULT_MODELS}};}
 // UXP does not provide the browser URL constructor on every supported host.
@@ -33,5 +33,6 @@ export function validateSettings(value:unknown):BackendSettings {
   if(input.schemaVersion!==1)throw new Error('不支持的设置版本，请重新保存配置');
   const baseUrl=normalizeBaseUrl(input.baseUrl);
   if(input.language!==undefined&&!['zh-CN','en-US'].includes(String(input.language)))throw new Error('不支持的界面语言');
-  return {schemaVersion:1,baseUrl,models:validateModels(input.models),...(input.language?{language:input.language as Language}:{})};
+  if(input.outputDepth!==undefined&&input.outputDepth!==8&&input.outputDepth!==16)throw new Error('输出位深须为 8 或 16');
+  return {schemaVersion:1,baseUrl,models:validateModels(input.models),...(input.language?{language:input.language as Language}:{}),...(input.outputDepth!==undefined?{outputDepth:input.outputDepth as 8|16}:{})};
 }

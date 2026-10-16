@@ -6,7 +6,7 @@
     "tested": "27.0",
     "minimumManifest": "27.0",
     "mode": "RGB / Grayscale 8/16-bit (native sRGB, Adobe RGB and Gray Gamma 2.2 matrix passed)",
-    "modelPixels": "sRGB 8-bit",
+    "modelPixels": "Inputs: sRGB8; outputs: sRGB8 or tagged sRGB RGB/RGBA16 SDR with optional PS_AISavePNG16",
     "unsupported": [
       "CMYK",
       "Lab",
@@ -35,7 +35,7 @@
         "8": 1,
         "16": 0
       },
-      "limitations": "sRGB8 AI exchange clips wide gamut and quantizes precision. No calibrated-display acceptance; independent host idle crashes remain unresolved."
+      "limitations": "Original matrix covers sRGB8 exchange. Model inputs clip wide gamut and quantize precision; optional16 output acceptance recorded separately. No calibrated-display acceptance or long-term stability claim."
     },
     "untaggedSource": "Blocked; assign the correct source profile to a copy explicitly"
   },
@@ -120,5 +120,15 @@
       "arbitrary workflow import"
     ],
     "pngOutput": "8-bit sRGB. Untagged allowed only for qwen21-local-v2-rgba; incompatible ICC/gamma/HDR metadata rejected."
+  },
+  "output16": {
+    "template": "qwen21-local-v3-rgba16",
+    "node": "PS_AISavePNG16",
+    "source": "comfyui/ps_ai_sdr16/__init__.py",
+    "dependencies": "ComfyUI existing NumPy; Python standard library",
+    "format": "sRGB tagged RGB/RGBA PNG16 SDR",
+    "modelInputs": "8-bit",
+    "selectionMasks": "8-bit",
+    "status": "development; automated codec tests and actual backend inference passed; native acceptance in progress"
   }
 }

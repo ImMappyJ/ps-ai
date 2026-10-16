@@ -3,6 +3,14 @@ import type {Language} from './profile';
 // Chinese source messages are stable keys. Model prompts and saved parameter values
 // are deliberately independent of the display language.
 export const english:Record<string,string>={
+  '输出位深':'Output depth','8-bit（兼容）':'8-bit (compatible)','16-bit SDR（需保存节点）':'16-bit SDR (save node required)',
+  '16 位结果可直接新建 16 位文档；回填 8 位文档会降为 8 位。':'16-bit results open in a 16-bit document. Applying to an 8-bit document reduces them to 8-bit.',
+  '输出位深须为 8 或 16':'Output depth must be 8 or 16',
+  '仅支持 RGB / RGBA 8/16-bit PNG':'Only RGB / RGBA 8/16-bit PNG is supported',
+  'PNG 位深与工作流不符，需要 {0}-bit，原始候选已保留':'PNG depth does not match the workflow; expected {0}-bit. The original candidate is retained.',
+  'PNG 色彩标记不兼容；仅接受 sRGB 8/16-bit，请在后端转换为 sRGB 后输出':'Unsupported PNG color metadata. Convert the backend output to sRGB 8/16-bit.',
+  '缺少节点 PS_AISavePNG16：把 comfyui/ps_ai_sdr16 复制到 ComfyUI/custom_nodes 后重启后端，或选择 8-bit 输出':'Missing PS_AISavePNG16: copy comfyui/ps_ai_sdr16 into ComfyUI/custom_nodes, restart the backend, or select 8-bit output.',
+  'RGB / 灰度 8/16-bit · 模型输入为 sRGB 8-bit；输出可选 8/16-bit SDR，来源位深与 ICC 保留。检查候选结构与边缘；发光、调色与遮挡由 PS 原生工具调整。':'RGB / Grayscale 8/16-bit. Model inputs are sRGB8; output is 8/16-bit SDR. Source depth and ICC are preserved. Review edges, then finish lighting, color and occlusion in Photoshop.',
   '环境检查':'Environment check','读取来源':'Read source','模型生成':'Model generation','下载候选':'Download candidate','Photoshop 回填':'Photoshop application','失败阶段：{0}':'Failed stage: {0}',
   '替换本轮候选图层':'Replace this run’s candidate layer','来源文档 {0} · {1} · {2}':'Source document {0} · {1} · {2}',
   '来源已关闭、改变或会话已结束；候选仍可导出':'Source closed, changed or session ended; the candidate can still be exported',

@@ -6,5 +6,6 @@
     "clip": "qwen3vl_8b_int8_convrot.safetensors",
     "vae": "qwen_image_2.1_vae_bf16.safetensors"
   },
-  "language": "zh-CN"
+  "language": "zh-CN",
+  "outputDepth": 8
 }
