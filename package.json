@@ -1,6 +1,6 @@
 {
   "name": "ps-ai",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "description": "PS-AI FOR ME — Photoshop local Qwen-Image 2.1 editing panel",

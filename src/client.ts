@@ -21,7 +21,11 @@ export class ComfyClient {
         let res:Response;
         try{res=await this.transport(this.base+path,{...init,signal:controller?.signal});}
         catch(error){throw new DiagnosticError(error instanceof TypeError||(error as {name?:string})?.name==='TypeError'?'unreachable':'unknown','connection',error instanceof Error?error.message:String(error));}
-        if(!res.ok)throw new HttpError(res.status,`ComfyUI ${res.status}: ${(await res.text()).slice(0,1500)}`);
+        if(!res.ok){
+          const message=`ComfyUI ${res.status}: ${(await res.text()).slice(0,1500)}`;
+          if(res.status===404&&!init?.method)throw new DiagnosticError(path.startsWith('/view?')?'invalid-output':'incompatible-api',path.startsWith('/view?')?'output':'environment',message);
+          throw new HttpError(res.status,message);
+        }
         return consume(res);
       };
       return await Promise.race([read(),timeout]);

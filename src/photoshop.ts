@@ -23,7 +23,7 @@ export class PhotoshopAdapter {
       if(owned)await context.hostControl.registerAutoCloseDocument(doc.id);
       try {
         checkSize(doc.width,doc.height);
-        requireSourceProfile(doc,this.ps.constants.ColorProfileType?.NONE);
+        this.checkDocumentFormat(doc);
         const bounds={left:0,top:0,right:doc.width,bottom:doc.height};
         const result=await this.ps.imaging.getPixels({documentID:doc.id,sourceBounds:bounds,colorSpace:'RGB',colorProfile:'sRGB IEC61966-2.1',componentSize:doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,applyAlpha:false});
         data=result.imageData;return expandPixels(await this.rgbData(data),result.sourceBounds,bounds,result.level??0);
@@ -36,12 +36,15 @@ export class PhotoshopAdapter {
   }
   private document():any {
     const doc=this.activeDocument();if(!doc)throw new Error('请先打开 Photoshop 文档');
+    this.checkDocumentFormat(doc);
+    if(doc.quickMaskMode)throw new Error('请先退出快速蒙版模式');
+    return doc;
+  }
+  private checkDocumentFormat(doc:any):void {
     const modes=[this.ps.constants.DocumentMode.RGB,this.ps.constants.DocumentMode.GRAYSCALE].filter(v=>v!==undefined);
     const depths=[this.ps.constants.BitsPerChannelType.EIGHT,this.ps.constants.BitsPerChannelType.SIXTEEN].filter(v=>v!==undefined);
     if(!modes.includes(doc.mode)||!depths.includes(doc.bitsPerChannel))throw new Error('支持 RGB / 灰度 8/16-bit；其他模式请先在副本中转换为 RGB，原文档不会自动转换');
-    if(doc.quickMaskMode)throw new Error('请先退出快速蒙版模式');
     requireSourceProfile(doc,this.ps.constants.ColorProfileType?.NONE);
-    return doc;
   }
   private bounds(doc:any):Bounds {
     const b=doc.selection.bounds;if(!b)throw new Error('请先建立编辑选区');
@@ -136,6 +139,10 @@ export class PhotoshopAdapter {
   private async batch(commands:unknown[]):Promise<void> {
     const results=await this.ps.action.batchPlay(commands,{});
     for(const r of results)if(r?._obj==='error')throw new Error(r.message||'Photoshop 命令失败');
+  }
+  applicationMode(snapshot:Snapshot):'new'|'replace'|'unavailable' {
+    try{const doc=this.validate(snapshot),own=this.applications.get(this.key(snapshot));return own&&own.historyId===doc.activeHistoryState.id?'replace':'new';}
+    catch{return 'unavailable';}
   }
   async apply(snapshot:Snapshot,image:Raster,name:string,sourceAlpha?:Raster):Promise<number> {
     const width=snapshot.bounds.right-snapshot.bounds.left,height=snapshot.bounds.bottom-snapshot.bounds.top;

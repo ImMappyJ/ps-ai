@@ -38,6 +38,14 @@ test('没有打开文档时捕获给出明确错误，参考导入可独立读�
   const modal=h.ps.core.executeAsModal;h.ps.core.executeAsModal=(fn:any)=>modal((ctx:any)=>fn({...ctx,hostControl:{...ctx.hostControl,registerAutoCloseDocument:async()=>{},unregisterAutoCloseDocument:async()=>{}}}));
   await h.adapter.importReference({name:'reference.png'});assert.equal(closed,true);
 });
+test('未验证的参考图模式也明确拒绝，不对 HDR 或 CMYK 静默降位',async()=>{
+  for(const [mode,depth] of [['rgb',32],['cmyk',8],['lab',16]]){
+    const h=host();let closed=false;const ref={...h.doc,id:22,mode,bitsPerChannel:depth,closeWithoutSaving:async()=>{closed=true;}};
+    h.ps.app.open=async()=>{h.ps.app.documents.push(ref);h.ps.app.activeDocument=ref;return ref;};
+    const modal=h.ps.core.executeAsModal;h.ps.core.executeAsModal=(fn:any)=>modal((ctx:any)=>fn({...ctx,hostControl:{...ctx.hostControl,registerAutoCloseDocument:async()=>{},unregisterAutoCloseDocument:async()=>{}}}));
+    await assert.rejects(h.adapter.importReference({name:'unsupported.jpg'}),/RGB|灰度/);assert.equal(closed,true);assert.equal(h.calls.some(c=>c[0]==='getPixels'),false);
+  }
+});
 test('捕获真实选区灰度和透明裁边，保护区在原坐标减去',async()=>{
   const h=host();const p={documentId:11,width:100,height:80,bounds:{left:40,top:30,right:42,bottom:32},mask:new Uint8Array([0,255,0,0]),sessionId:'session-a'};
   const c=await h.adapter.capture(0,p);
@@ -101,10 +109,12 @@ test('16 位回填的颜色和灰度蒙版都按宿主位深传入，不使用�
 });
 
 test('切换同次捕获的候选只替换插件上次图层；外部修改仍阻止回填',async()=>{
-  const h=host(),s=snap();assert.equal(await h.adapter.apply(s,patch,'AI1'),55);
+  const h=host(),s=snap();assert.equal(h.adapter.applicationMode(s),'new');assert.equal(await h.adapter.apply(s,patch,'AI1'),55);
+  assert.equal(h.adapter.applicationMode(s),'replace');
   assert.equal(await h.adapter.apply({...s,mask:new Uint8Array(s.mask)},patch,'AI2'),56);
   assert.deepEqual(h.calls.filter(c=>c[0]==='delete'),[['delete',55]]);assert.deepEqual(h.doc.layers.map((l:any)=>l.id),[56,2]);
   h.doc.activeHistoryState.id++;
+  assert.equal(h.adapter.applicationMode(s),'unavailable');
   await assert.rejects(h.adapter.apply(s,patch,'AI3'),/状态已改变/);assert.equal(h.calls.filter(c=>c==='new-layer').length,2);
 });
 

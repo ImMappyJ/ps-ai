@@ -4,7 +4,7 @@
 <h1 align="center">ComfyUI setup and model compatibility</h1>
 <p align="center"><a href="COMFYUI.md">简体中文</a> · <strong>English</strong> · <a href="README.en.md">README</a></p>
 
-The plugin includes neither the backend nor weights. Reuse an existing ComfyUI if it meets the contract below. This guide covers the `qwen21-local-v2-rgba` template in plugin 0.3.0.
+The plugin includes neither the backend nor weights. Reuse an existing ComfyUI if it meets the contract below. This guide covers the `qwen21-local-v2-rgba` template. Older screenshots show 0.3.0; the 0.4.0 development setup is described below.
 
 ## 1. Prepare a working backend
 
@@ -75,7 +75,7 @@ The screenshot shows the 0.3.0 Portable panel in Photoshop 27.0 after a successf
 3. Click **Save settings**, then **Connect** at the top. Wait for **Connected**, then try a test generation. If connection fails, read the message and the troubleshooting table below.
 4. To move settings to another machine, **Export JSON** here and **Import JSON** there, then check its address and model names. Changing language saves only the language, without submitting an unsaved address.
 
-**Connect** also saves the form before checking it. Equivalent settings:
+In the 0.4.0 development version, **Connect** saves settings only after checks pass. Failed connections keep the previous settings. **Save settings** and **Import JSON** can save an unchecked draft. Equivalent settings:
 
 ```json
 {
@@ -93,6 +93,34 @@ The screenshot shows the 0.3.0 Portable panel in Photoshop 27.0 after a successf
 `language` accepts `zh-CN` or `en-US`; older settings may omit it and default to Chinese. Model names must match the scan, including subdirectories and separators, for example `my-qwen/model.gguf`. Absolute paths and `..` are rejected. Settings are locked during generation. History records its backend origin; legacy records without one belong to `http://localhost:8188`.
 
 To support custom hosts, the UXP manifest declares network `domains: "all"`. Runtime requests go to the configured ComfyUI; there is no telemetry. A remote server receives and may retain uploaded images, references and prompts. Do not expose an unauthenticated backend to untrusted networks.
+
+
+### Setup in the 0.4.0 development version
+
+First launch shows three steps. A valid saved configuration opens the workspace directly; **Setup** can reopen the checks.
+
+1. Open **Backend and models**, enter the address and click **Test and save address**. The address is saved only after the connection succeeds.
+2. Scan and select the three model files, then **Check environment**. This reads the host version, backend API, node fields and model inventory. It installs no dependencies and changes no models.
+3. **Generate example** explicitly submits a task. It creates a separate test document, edits its central color patch and applies a masked new layer. Inspect the layer and mask, then undo with Ctrl+Z.
+
+The preset names a tested Qwen 2.1 combination. A custom mapping passing file and API checks still needs real inference to confirm model compatibility. Saving an address does not add support for authenticated cloud platforms.
+
+Failures include their category, effect and next action. Expand **Technical details (copyable)** for the original error. Recover or cancel an existing task by its original ID before resubmitting. A failure is classified as insufficient memory only when the backend explicitly reports it.
+
+### Color and safe editing
+
+Source and reference images require a known profile and RGB / Grayscale 8/16-bit mode. Untagged sources stop before reading pixels: assign the correct profile to a copy first. Prepare RGB copies of CMYK, Lab and HDR images.
+
+| Boundary | Contract |
+| --- | --- |
+| Capture, reference, model input | Photoshop converts copied pixels to sRGB. Model exchange uses 8-bit RGBA PNG with straight alpha. |
+| Backend output | sRGB 8-bit PNG. Only the verified current template can interpret untagged output as sRGB. Conflicting gamma, ICC and HDR tags are rejected; the raw output is retained. |
+| Preview and PNG export | Both use explicitly tagged sRGB PNG. Monitor and host color management can still affect appearance. |
+| Layer application | Photoshop converts candidate sRGB into the source profile. Original layers, document profile and depth stay unchanged. Applying an 8-bit result to a 16-bit document does not create native high-depth AI output. |
+
+Native round trips and independent conversions passed on PS 27.0 for sRGB, Adobe RGB, Display P3 and ProPhoto at 8/16-bit. Colors outside sRGB and fine high-depth gradients lose gamut / precision in model exchange. The edited area is not guaranteed to match neighboring color exactly. Optional context matching corrects small overall shifts; it cannot restore gamut.
+
+The captured range is shown during generation: amber means effective edit, blue manual protection and gray context. A real feathered Photoshop mask controls application; the visual guide is not a strict latent inpaint mask. Candidates identify their source and whether application adds a result or replaces this capture’s plugin layer. Closed, changed or expired source sessions block application while keeping candidates exportable. Independent host idle crashes remain unresolved; work on saved copies.
 
 ## 4. Adapting your own models
 

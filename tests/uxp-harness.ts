@@ -40,12 +40,12 @@ export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boo
   };
   const makeDoc=(id:number)=>({id,width:2,height:2,mode:'rgb',bitsPerChannel:8,colorProfileName:'sRGB IEC61966-2.1',activeHistoryState:{id:1},layers:[{id:2,kind:'normal',blendMode:'normal',visible:true,opacity:100,fillOpacity:100,isClippingMask:false}],selection:{bounds:{left:0,top:0,right:2,bottom:2}}});
   const data=(components:number)=>({width:2,height:2,components,componentSize:8,dispose(){},getData:async()=>new Uint8Array(components*4).fill(255)});
-  const ps:any={app:{version:'27.0.0',get activeDocument(){if(options.noDocuments)throw new Error('No active document');return makeDoc(documentId);},get documents(){return options.noDocuments?[]:[makeDoc(documentId)];}},constants:{DocumentMode:{RGB:'rgb'},BitsPerChannelType:{EIGHT:8},LayerKind:{NORMAL:'normal'},BlendMode:{NORMAL:'normal'}},core:{executeAsModal:async(fn:any)=>fn({})},imaging:{
+  const ps:any={app:{get activeDocument(){if(options.noDocuments)throw new Error('No active document');return makeDoc(documentId);},get documents(){return options.noDocuments?[]:[makeDoc(documentId)];}},constants:{DocumentMode:{RGB:'rgb'},BitsPerChannelType:{EIGHT:8},LayerKind:{NORMAL:'normal'},BlendMode:{NORMAL:'normal'}},core:{executeAsModal:async(fn:any)=>fn({})},imaging:{
     createImageDataFromBuffer:async()=>{if(options.nativePreviewUnavailable)throw new Error('Native preview codec unavailable');return {dispose(){}};},encodeImageData:async()=>{if(options.nativePreviewUnavailable)throw new Error('Native preview codec unavailable');return '';},
     getSelection:async(o:any)=>{captured.push(o.documentID);return {imageData:data(1),sourceBounds:{left:0,top:0,right:2,bottom:2}};},
     getPixels:async()=>({imageData:options.source?{...data(4),getData:async()=>options.source!.rgba}:data(4),sourceBounds:{left:0,top:0,right:2,bottom:2},level:0})
   }};
-  const uxp={entrypoints:{setup(){}},storage:{formats:{binary:'binary'},localFileSystem:{getDataFolder:async()=>folder,getFileForSaving:async(name:string)=>folder.createFile(name,{})}}};
+  const uxp={host:{version:'27.0.0'},entrypoints:{setup(){}},storage:{formats:{binary:'binary'},localFileSystem:{getDataFolder:async()=>folder,getFileForSaving:async(name:string)=>folder.createFile(name,{})}}};
   const bundled=await build({entryPoints:['src/panel.ts'],bundle:true,write:false,format:'iife',platform:'browser',target:'es2020',external:['photoshop','uxp'],define:{'process.env.NODE_ENV':'"production"'}});
   const errors:any[]=[];
   vm.runInNewContext(bundled.outputFiles[0].text,{document,window,require:(name:string)=>name==='photoshop'?ps:uxp,fetch:fetcher,Response,AbortController,WebSocket:TestSocket,setTimeout,clearTimeout,console:{log(){},error:(e:any)=>errors.push(e)}});

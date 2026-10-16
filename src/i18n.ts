@@ -3,6 +3,12 @@ import type {Language} from './profile';
 // Chinese source messages are stable keys. Model prompts and saved parameter values
 // are deliberately independent of the display language.
 export const english:Record<string,string>={
+  '环境检查':'Environment check','读取来源':'Read source','模型生成':'Model generation','下载候选':'Download candidate','Photoshop 回填':'Photoshop application','失败阶段：{0}':'Failed stage: {0}',
+  '替换本轮候选图层':'Replace this run’s candidate layer','来源文档 {0} · {1} · {2}':'Source document {0} · {1} · {2}',
+  '来源已关闭、改变或会话已结束；候选仍可导出':'Source closed, changed or session ended; the candidate can still be exported',
+  '替换同次捕获的插件图层，其他图层保留':'Replace the plugin layer from this capture; keep other layers',
+  '新增独立结果，保留来源图层':'Add an independent result; keep source layers',
+  '独立生成结果，可另存或新建文档':'Standalone result; save it or open in a new document',
   '配置向导':'Setup','配置向导 · {0} / 3':'Setup · {0} / 3',
   '1. 测试并保存地址':'1. Test and save address','2. 检查环境':'2. Check environment','3. 运行生成示例':'3. Generate example','返回工作区':'Back to workspace','技术详情（可复制）':'Technical details (copyable)',
   '展开“模型与连接”，填写地址后测试。':'Open Backend and models, enter the address, then test it.',
@@ -23,11 +29,11 @@ export const english:Record<string,string>={
   '接口或模板不兼容':'API or template is incompatible','核对配置指南中的 ComfyUI、节点版本与固定模板；不要盲目更新。':'Compare ComfyUI, node versions and the fixed template with the setup guide before making changes.',
   '后端报告内存不足':'Backend reported insufficient memory','先在 ComfyUI 确认本任务已结束，再降低分辨率或减少并发。':'Confirm the task has ended in ComfyUI, then lower the resolution or reduce concurrent work.',
   '请求超时':'Request timed out','确认后端状态；已提交任务请按原 ID 恢复，避免重复生成。':'Check the backend status. Recover submitted tasks by their original ID to avoid duplicate generation.',
-  '候选输出不符合约定':'Candidate output is invalid','原始候选保留在历史中；检查尺寸、8-bit PNG 和 sRGB 输出配置。':'The raw candidate is retained in history. Check its dimensions and the 8-bit PNG / sRGB output settings.',
+  '候选输出不符合约定':'Candidate output is invalid','检查尺寸、8-bit PNG 和 sRGB 配置。已下载文件保留；未下载的候选可按原任务 ID 恢复。':'Check dimensions and 8-bit PNG / sRGB settings. Downloaded files are retained; recover missing downloads by their task ID.',
   'Photoshop 应用失败':'Photoshop could not apply the result','候选仍可另存或新建文档；确认来源文档状态，必要时重新捕获。':'Save the candidate or open it in a new document. Check the source document and recapture if needed.',
   '来源没有颜色配置文件':'Source has no color profile','在副本中指定正确配置文件，再重新捕获。不要用指定配置文件代替颜色转换。':'Assign the correct profile to a copy, then recapture. Assign Profile does not convert colors.',
   '操作未完成，原因尚未确认':'Operation did not finish; cause unknown','展开技术详情核对报错；保留任务 ID 和候选，确认状态后再操作。':'Read the technical details. Keep the task ID and candidates, and confirm the task status before continuing.',
-  '应用未完成，候选保留；来源保护仍生效。':'Application did not finish. Candidates are retained and source protection remains active.',
+  '应用未完成，候选保留；请检查来源文档和历史记录。':'Application did not finish. Candidates are retained; check the source document and history.',
   '捕获未完成，尚未上传此范围。':'Capture did not finish. This area has not been uploaded.',
   '此步骤未通过；不要把它视为已完成。':'This step did not pass.',
   '先按原 ID 恢复或取消；不要重复提交。':'Recover or cancel the original task ID before submitting again.',

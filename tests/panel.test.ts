@@ -2,9 +2,18 @@ import test from 'node:test';import assert from 'node:assert/strict';import {pan
 import {defaultSettings} from '../src/profile';
 import {decodePng} from '../src/image';
 
+test('候选显示冻结来源；来源关闭后禁用回填但仍保留导出',async()=>{
+  const h=await panelHarness();try{
+    h.el('resolution').value='32';h.click('generate');await h.wait();assert.match(h.el('candidate-target').textContent,/11.*sRGB/);assert.equal(h.el('apply').disabled,false);
+    h.setDocument(22);h.change('candidate-select');await new Promise(r=>setTimeout(r,30));
+    assert.equal(h.el('apply').disabled,true);assert.equal(h.el('export').disabled,false);assert.match(h.el('candidate-target').textContent,/来源.*改变|关闭|会话/);
+  }finally{await h.close();}
+});
+
 test('首次向导逐步检查，连接成功才保存地址，不自动生成',async()=>{
   const h=await panelHarness();try{
     assert.equal(h.el('setup-body').style.display,'block');assert.match(h.el('setup-step').textContent,/1/);assert.equal(h.posts.length,0);
+    assert.equal(h.el('setup-check').disabled,true);assert.equal(h.el('setup-example').disabled,true);
     h.el('backend-url').value='http://localhost:8199';h.click('setup-connect');await h.wait();
     assert.equal(JSON.parse(String(h.files['settings.json'])).baseUrl,'http://localhost:8199');assert.match(h.el('setup-step').textContent,/2/);assert.equal(h.posts.length,0);
     h.click('setup-check');await h.wait();assert.match(h.el('setup-step').textContent,/3/);assert.match(h.el('setup-report').textContent,/27\.0|qwen21/);assert.equal(h.posts.length,0);
@@ -122,7 +131,7 @@ test('保存的可迁移模型配置用于连接检查、提交图与历史',asy
   const h=await panelHarness({settings,models:settings.models});try{h.click('tab-t2i');h.click('generate');await new Promise(r=>setTimeout(r,80));await h.wait();assert.equal(h.posts.length,1);assert.equal(h.posts[0].prompt['1'].inputs.unet_name,settings.models.unet);assert.deepEqual(h.records()[0].models,settings.models);}finally{await h.close();}
 });
 test('损坏配置阻止生成，显式保存有效配置后可继续',async()=>{
-  const h=await panelHarness({settings:{schemaVersion:99}});try{h.click('tab-t2i');h.click('generate');await new Promise(r=>setTimeout(r,50));assert.equal(h.posts.length,0);assert.match(h.el('status').textContent,/配置|设置/);h.click('save-settings');await new Promise(r=>setTimeout(r,50));assert.equal(JSON.parse(String(h.files['settings.json'])).schemaVersion,1);h.click('generate');await new Promise(r=>setTimeout(r,80));await h.wait();assert.equal(h.posts.length,1);}finally{await h.close();}
+  const h=await panelHarness({settings:{schemaVersion:99}});try{assert.equal(h.el('setup-body').style.display,'block');h.click('tab-t2i');h.click('generate');await new Promise(r=>setTimeout(r,50));assert.equal(h.posts.length,0);assert.match(h.el('status').textContent,/配置|设置/);h.click('save-settings');await new Promise(r=>setTimeout(r,50));assert.equal(JSON.parse(String(h.files['settings.json'])).schemaVersion,1);h.click('generate');await new Promise(r=>setTimeout(r,80));await h.wait();assert.equal(h.posts.length,1);}finally{await h.close();}
 });
 test('UXP option.value 需要显式属性，默认分辨率可生成候选',async()=>{
   const h=await panelHarness({uxpSelect:true});try{h.click('tab-t2i');h.click('generate');await new Promise(r=>setTimeout(r,50));await h.wait();assert.equal(h.posts.length,1);assert.equal(h.posts[0].prompt['4'].inputs.resolution,992);assert.equal(h.records()[0].state,'ready');}finally{await h.close();}

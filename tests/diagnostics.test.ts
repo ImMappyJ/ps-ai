@@ -1,5 +1,14 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {ComfyClient,uuid} from '../src/client';
+import {diagnostic} from '../src/diagnostics';import {setLanguage} from '../src/i18n';
+
+test('diagnostics identify the failed stage and keep pending-task retry instructions',()=>{
+  setLanguage('en-US');try{
+    const d=diagnostic(new Error('unexpected device response'),'apply',true);
+    assert.equal(d.code,'apply-failed');assert.match(d.stageLabel,/Photoshop/);assert.match(d.retry,/original task ID/);assert.doesNotMatch(d.action,/[一-龥]/);
+    assert.equal(diagnostic(new Error('maybe memory?'),'inference').code,'unknown');
+  }finally{setLanguage('zh-CN');}
+});
 
 test('connection refusal, malformed API and timeout have distinct actionable codes',async()=>{
   const broken=new ComfyClient('http://localhost:8188',async()=>{throw new TypeError('fetch failed');});
@@ -8,6 +17,8 @@ test('connection refusal, malformed API and timeout have distinct actionable cod
   await assert.rejects(malformed.inspect(),(e:any)=>e.code==='incompatible-api');
   const timeout=new ComfyClient('http://localhost:8188',async()=>new Promise(()=>{}),10);
   await assert.rejects(timeout.inspect(),(e:any)=>e.code==='timeout');
+  const missingApi=new ComfyClient('http://localhost:8188',async()=>new Response('Not found',{status:404}));
+  await assert.rejects(missingApi.inspect(),(e:any)=>e.code==='incompatible-api');
 });
 test('missing nodes and model/schema mismatch retain the exact failed item',async()=>{
   const nodes=new ComfyClient('http://localhost:8188',async()=>Response.json({}));

@@ -19,7 +19,7 @@ const guidance:Record<DiagnosticCode,[string,string]>={
   'incompatible-api':['接口或模板不兼容','核对配置指南中的 ComfyUI、节点版本与固定模板；不要盲目更新。'],
   'resource-exhausted':['后端报告内存不足','先在 ComfyUI 确认本任务已结束，再降低分辨率或减少并发。'],
   'timeout':['请求超时','确认后端状态；已提交任务请按原 ID 恢复，避免重复生成。'],
-  'invalid-output':['候选输出不符合约定','原始候选保留在历史中；检查尺寸、8-bit PNG 和 sRGB 输出配置。'],
+  'invalid-output':['候选输出不符合约定','检查尺寸、8-bit PNG 和 sRGB 配置。已下载文件保留；未下载的候选可按原任务 ID 恢复。'],
   'apply-failed':['Photoshop 应用失败','候选仍可另存或新建文档；确认来源文档状态，必要时重新捕获。'],
   'source-profile':['来源没有颜色配置文件','在副本中指定正确配置文件，再重新捕获。不要用指定配置文件代替颜色转换。'],
   'unknown':['操作未完成，原因尚未确认','展开技术详情核对报错；保留任务 ID 和候选，确认状态后再操作。']
@@ -28,8 +28,9 @@ export function diagnostic(error:unknown,stage:Stage,hasPending=false){
   const code=error instanceof DiagnosticError||error instanceof ColorContractError?error.code:stage==='apply'?'apply-failed':'unknown';
   const actualStage=error instanceof DiagnosticError?error.stage:stage;
   const [title,action]=guidance[code];
-  return {code,stage:actualStage,title:t(title),action:t(action),
-    effect:t(actualStage==='apply'?'应用未完成，候选保留；来源保护仍生效。':actualStage==='capture'?'捕获未完成，尚未上传此范围。':'此步骤未通过；不要把它视为已完成。'),
+  const stages:Record<Stage,string>={connection:'连接',environment:'环境检查',capture:'读取来源',inference:'模型生成',output:'下载候选',apply:'Photoshop 回填'};
+  return {code,stage:actualStage,stageLabel:t(stages[actualStage]),title:t(title),action:t(action),
+    effect:t(actualStage==='apply'?'应用未完成，候选保留；请检查来源文档和历史记录。':actualStage==='capture'?'捕获未完成，尚未上传此范围。':'此步骤未通过；不要把它视为已完成。'),
     retry:t(hasPending?'先按原 ID 恢复或取消；不要重复提交。':'修正后可重试；生成前仍会重新检查。'),
     detail:(error instanceof Error?`${error.name}: ${error.message}`:String(error)).slice(0,5000)};
 }

@@ -21,7 +21,7 @@ let taskActive=false,taskSucceeded=false,batchPosition='';
 let connectionState='未连接';
 let operationStage:Stage='connection',setupStep=1,checkedSetup='';
 function draftSettings():BackendSettings{return validateSettings({schemaVersion:1,baseUrl:el('backend-url').value,language:el('language').value,models:{unet:el('model-unet').value,clip:el('model-clip').value,vae:el('model-vae').value}});}
-function setupSignature(value:BackendSettings){return JSON.stringify([value.baseUrl,value.models.unet,value.models.clip,value.models.vae,ps.app.version,TEMPLATE_VERSION]);}
+function setupSignature(value:BackendSettings){return JSON.stringify([value.baseUrl,value.models.unet,value.models.clip,value.models.vae,String(uxp.host?.version??''),TEMPLATE_VERSION]);}
 function renderSetup(){
   el('setup-step').textContent=t('配置向导 · {0} / 3',setupStep);
   el('setup-help').textContent=t(setupStep===1?'展开“模型与连接”，填写地址后测试。':setupStep===2?'扫描实际模型文件，选择后检查环境。':'环境检查通过。点击运行示例会使用模型，在独立测试文档中生成并应用。');
@@ -38,9 +38,14 @@ function startTask(){taskActive=true;taskSucceeded=false;batchPosition='';taskPh
 function endTask(){taskActive=false;taskPhase(taskSucceeded?t("候选已保存"):el('status').textContent,taskSucceeded?100:0);}
 function option(select:any,value:string,text:string){const node=document.createElement('option');node.value=value;node.textContent=t(text);select.appendChild(node);}
 function inputUi(){const standalone=el('destination').value==='document'&&(workspace==='t2i'||['effect','atmosphere'].includes(el('mode').value));el('selection-tools').style.display=standalone?'none':'block';el('prompt').setAttribute('placeholder',workspace==='t2i'?t("描述要生成的画面、主体与风格"):workspace==='cosplay'?t("描述特效、服装道具、角色参考或氛围效果"):t("描述选区中要修改的内容，及需要保留的细节"));}
-function candidateUi(){const c=candidates[Number(el('candidate-select').value)];el('apply').disabled=busy||!c?.snapshot;for(const id of ['zoom','export','new-document'])el(id).disabled=busy||!c;el('candidate-select').disabled=busy||!c;el('opacity').disabled=busy||!applied;el('candidate-empty').style.display=candidates.length?'none':'block';el('detail-frame').style.display=c?'block':'none';}
+function candidateUi(){
+  const c=candidates[Number(el('candidate-select').value)],mode=c?.snapshot?adapter.applicationMode(c.snapshot):'unavailable';
+  el('apply').disabled=busy||!c?.snapshot||mode==='unavailable';el('apply').textContent=t(mode==='replace'?'替换本轮候选图层':'应用为新图层');
+  const s=c?.snapshot;el('candidate-target').textContent=s?t('来源文档 {0} · {1} · {2}',s.documentId,s.profile,mode==='unavailable'?t('来源已关闭、改变或会话已结束；候选仍可导出'):mode==='replace'?t('替换同次捕获的插件图层，其他图层保留'):t('新增独立结果，保留来源图层')):c?t('独立生成结果，可另存或新建文档'):'';
+  for(const id of ['zoom','export','new-document'])el(id).disabled=busy||!c;el('candidate-select').disabled=busy||!c;el('opacity').disabled=busy||!applied;el('candidate-empty').style.display=candidates.length?'none':'block';el('detail-frame').style.display=c?'block':'none';
+}
 function setWorkspace(value:Workspace){workspace=value;const select=el('mode');select.innerHTML='';for(const [id,label] of modes[value])option(select,id,label);select.value=modes[value][0][0];for(const w of ['local','cosplay','t2i'])el(`tab-${w}`).className=w===value?'active':'';if(value==='t2i')el('destination').value='document';else el('destination').value='selection';inputUi();}
-function lock(value:boolean){busy=value;for(const id of ['generate','capture','protect','clear-protection','reference','clear-reference','tab-local','tab-cosplay','tab-t2i','mode','prompt','usage','guide','preserve-alpha','align-subject','match-color','destination','count','steps','resolution','seed','lock-seed','margin','p0','recover','load-history','repeat-history','apply','new-document','connect','scan-models','save-settings','import-settings','export-settings','model-unet','model-clip','model-vae','backend-url','language','open-setup','close-setup','setup-connect','setup-check','setup-example'])el(id).disabled=value;el('cancel').disabled=!value&&!(current&&PENDING_STATES.includes(current.state));candidateUi();}
+function lock(value:boolean){busy=value;for(const id of ['generate','capture','protect','clear-protection','reference','clear-reference','tab-local','tab-cosplay','tab-t2i','mode','prompt','usage','guide','preserve-alpha','align-subject','match-color','destination','count','steps','resolution','seed','lock-seed','margin','p0','recover','load-history','repeat-history','apply','new-document','connect','scan-models','save-settings','import-settings','export-settings','model-unet','model-clip','model-vae','backend-url','language','open-setup','close-setup','setup-connect','setup-check','setup-example'])el(id).disabled=value;el('cancel').disabled=!value&&!(current&&PENDING_STATES.includes(current.state));candidateUi();renderSetup();}
 function showSettings(available?:Record<'unet'|'clip'|'vae',string[]>) {for(const key of ['unet','clip','vae'] as const){const select=el(`model-${key}`);select.innerHTML='';for(const name of new Set([settings.models[key],...(available?.[key]??[])]))option(select,name,name);select.value=settings.models[key];}}
 async function saveSettings(value:unknown){const next=validateSettings(value);await store.json('settings.json',next);settings=next;client=new ComfyClient(settings.baseUrl,fetch,30000,settings.models);coordinator=new JobCoordinator(client,store);settingsReady=true;renderLanguage();showSettings();el('backend-url').value=settings.baseUrl;connection('待检查');status(t("模型配置已保存，请连接检查；文件名可迁移，模型权重需在后端准备"));}
 async function configure(action:()=>Promise<void>){if(busy)return;lock(true);try{await action();}finally{lock(false);}}
@@ -54,7 +59,7 @@ function renderLanguage(){
   el('zoom').textContent=zoomed?t('适应预览'):t('100% 查看');inputUi();renderSetup();
 }
 function selected():Candidate {const c=candidates[Number(el('candidate-select').value)];if(!c)throw new Error(t("请先生成或读取一个候选"));return c;}
-async function guarded(action:()=>Promise<void>){try{await action();}catch(error){status(error instanceof Error?error.message:String(error));const d=diagnostic(error,operationStage,!!current&&PENDING_STATES.includes(current.state));el('diagnostic-box').style.display='block';el('diagnostic-summary').textContent=[d.title,d.effect,d.action,d.retry].join('\n');el('diagnostic-details').value=JSON.stringify(d,null,2);el('diagnostic-details').style.display='none';console.error(error);await store.trace('operation.error');}}
+async function guarded(action:()=>Promise<void>){try{await action();}catch(error){status(error instanceof Error?error.message:String(error));const d=diagnostic(error,operationStage,!!current&&PENDING_STATES.includes(current.state));el('diagnostic-box').style.display='block';el('diagnostic-summary').textContent=[t('失败阶段：{0}',d.stageLabel),d.title,d.effect,d.action,d.retry].join('\n');el('diagnostic-details').value=JSON.stringify(d,null,2);el('diagnostic-details').style.display='none';console.error(error);await store.trace('operation.error');}}
 async function preview(image:Raster,size=240):Promise<string> {
   const thumb=resize(image,Math.max(1,Math.round(image.width*Math.min(1,size/Math.max(image.width,image.height)))),Math.max(1,Math.round(image.height*Math.min(1,size/Math.max(image.width,image.height)))));
   for(let y=0;y<thumb.height;y++)for(let x=0;x<thumb.width;x++){const i=(y*thumb.width+x)*4,a=thumb.rgba[i+3]/255;const bg=((Math.floor(x/12)+Math.floor(y/12))%2)?105:160;for(let c=0;c<3;c++)thumb.rgba[i+c]=Math.round(thumb.rgba[i+c]*a+bg*(1-a));thumb.rgba[i+3]=255;}
@@ -152,7 +157,7 @@ async function generate() {
   buildGraph({requestId:uuid(),prompt:request.prompt,seed:baseSeed+count-1,steps,resolution,models:settings.models});
   if(request.kind==='edit'&&destination!=='selection')throw new Error(t("编辑补丁需要捕获来源选区"));
   if(destination==='selection'&&expectedDocumentId===undefined)throw new Error(t("请先打开 Photoshop 文档并建立选区"));
-    operationStage='environment';taskPhase(t("检查节点与本机模型…"));status(t("检查节点与本机模型…"));const environment=await client.check();checkEnvironment(ps.app.version,environment.nodeInfo,settings.models);
+    operationStage='environment';taskPhase(t("检查节点与本机模型…"));status(t("检查节点与本机模型…"));const environment=await client.check();checkEnvironment(String(uxp.host?.version??''),environment.nodeInfo,settings.models);
     // Always recapture at submission; a thumbnail saved earlier is not a fresh document state.
     operationStage='capture';if(destination==='selection')await captureArea(expectedDocumentId);else capture=undefined;
     const captured=capture,ref=reference;
@@ -202,7 +207,7 @@ on('save-settings',()=>configure(()=>saveSettings({schemaVersion:1,baseUrl:el('b
 on('import-settings',()=>configure(async()=>{const file=await uxp.storage.localFileSystem.getFileForOpening({types:['json']});if(file)await saveSettings(JSON.parse(await file.read()));}));
 on('export-settings',()=>configure(async()=>{if(!settingsReady)throw new Error(t("请先保存有效配置"));const file=await uxp.storage.localFileSystem.getFileForSaving('ps-ai-settings.json',{types:['json']});if(file)await file.write(JSON.stringify(settings,null,2));}));
 for(const w of ['local','cosplay','t2i'] as Workspace[])on(`tab-${w}`,async()=>{if(!busy)setWorkspace(w);});
-on('connect',()=>configure(async()=>{const next=draftSettings(),probe=new ComfyClient(next.baseUrl,fetch,30000,next.models);const result=await probe.check();checkEnvironment(ps.app.version,result.nodeInfo,next.models);await saveSettings(next);connection('已连接');status(t('ComfyUI 与模型已连接'));}));
+on('connect',()=>configure(async()=>{const next=draftSettings(),probe=new ComfyClient(next.baseUrl,fetch,30000,next.models);const result=await probe.check();checkEnvironment(String(uxp.host?.version??''),result.nodeInfo,next.models);await saveSettings(next);connection('已连接');status(t('ComfyUI 与模型已连接'));}));
 on('open-setup',async()=>{showSetup();fold('settings',true);});
 on('close-setup',async()=>{el('setup-body').style.display='none';});
 on('setup-connect',()=>configure(async()=>{
@@ -211,8 +216,8 @@ on('setup-connect',()=>configure(async()=>{
 }));
 on('setup-check',()=>configure(async()=>{
   const next=draftSettings(),result=await new ComfyClient(next.baseUrl,fetch,30000,next.models).check();
-  checkEnvironment(ps.app.version,result.nodeInfo,next.models);await saveSettings(next);checkedSetup=setupSignature(next);
-  const report={date:new Date().toISOString(),host:ps.app.version,backend:(result.stats as any)?.system?.comfyui_version??'unknown',template:TEMPLATE_VERSION,models:next.models,checked:'API / nodes / model filenames; model architecture requires example generation'};
+  checkEnvironment(String(uxp.host?.version??''),result.nodeInfo,next.models);await saveSettings(next);checkedSetup=setupSignature(next);
+  const report={date:new Date().toISOString(),host:String(uxp.host?.version??''),backend:(result.stats as any)?.system?.comfyui_version??'unknown',template:TEMPLATE_VERSION,models:next.models,checked:'API / nodes / model filenames; model architecture requires example generation'};
   await store.json('setup-check.json',report);el('setup-report').textContent=`Photoshop ${report.host} · ComfyUI ${report.backend} · ${report.template}`;
   showSetup(3);connection('已连接');el('diagnostic-box').style.display='none';
 }));
@@ -264,4 +269,4 @@ on('p0',async()=>{if(busy)return;lock(true);const trace:string[]=[];try{const re
 on('report',async()=>{const r=await store.readJson('p0-host-report.json',null);if(!r)throw new Error(t("请先运行 P0 图像往返验证"));const f=await uxp.storage.localFileSystem.getFileForSaving('ps-ai-p0-host-report.json',{types:['json']});if(f)await f.write(JSON.stringify(r,null,2));});
 on('export-log',async()=>{const r=await store.readJson('runtime-trace.json',null);if(!r)throw new Error(t("尚无操作阶段日志"));const f=await uxp.storage.localFileSystem.getFileForSaving('ps-ai-runtime-trace.json',{types:['json']});if(f)await f.write(JSON.stringify(r,null,2));});
 uxp.entrypoints.setup({panels:{psai:{show(){}}}});
-void guarded(async()=>{lock(true);el('cancel').disabled=true;try{const savedSettings=await store.readJson<unknown>('settings.json',null);settings=validateSettings(savedSettings??defaultSettings());client=new ComfyClient(settings.baseUrl,fetch,30000,settings.models);coordinator=new JobCoordinator(client,store);settingsReady=true;renderLanguage();el('backend-url').value=settings.baseUrl;showSettings();await refreshHistory();const records=await store.history();const pending=records.find(r=>PENDING_STATES.includes(r.state));if(pending){current=pending;status(t("找到未确认任务 {0}，请选择恢复或取消",pending.id.slice(0,8)));}try{const result=await client.check();checkEnvironment(ps.app.version,result.nodeInfo,settings.models);connection('已连接');if(!savedSettings)showSetup();}catch(error){connection('未连接');showSetup();throw error;}}finally{lock(false);}});
+void guarded(async()=>{lock(true);el('cancel').disabled=true;try{const savedSettings=await store.readJson<unknown>('settings.json',null);settings=validateSettings(savedSettings??defaultSettings());client=new ComfyClient(settings.baseUrl,fetch,30000,settings.models);coordinator=new JobCoordinator(client,store);settingsReady=true;renderLanguage();el('backend-url').value=settings.baseUrl;showSettings();await refreshHistory();const records=await store.history();const pending=records.find(r=>PENDING_STATES.includes(r.state));if(pending){current=pending;status(t("找到未确认任务 {0}，请选择恢复或取消",pending.id.slice(0,8)));}try{const result=await client.check();checkEnvironment(String(uxp.host?.version??''),result.nodeInfo,settings.models);connection('已连接');if(!savedSettings)showSetup();}catch(error){connection('未连接');showSetup();throw error;}}catch(error){showSetup();fold('settings',true);throw error;}finally{lock(false);}});

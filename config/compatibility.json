@@ -14,7 +14,30 @@
       "Bitmap",
       "Multichannel",
       "RGB 32-bit HDR"
-    ]
+    ],
+    "colorAcceptance": {
+      "date": "2026-10-16",
+      "host": "27.0.0",
+      "profiles": [
+        "sRGB IEC61966-2.1",
+        "Adobe RGB (1998)",
+        "Display P3",
+        "ProPhoto RGB"
+      ],
+      "depths": [
+        8,
+        16
+      ],
+      "method": "Native identity round trip and independent Photoshop Convert to Profile, native-depth source/mask/alpha/undo comparison",
+      "sourceLayerAndMaskZeroDifference": 0,
+      "compositeAlphaDifference": 0,
+      "independentNativeMax": {
+        "8": 1,
+        "16": 0
+      },
+      "limitations": "sRGB8 AI exchange clips wide gamut and quantizes precision. No calibrated-display acceptance; independent host idle crashes remain unresolved."
+    },
+    "untaggedSource": "Blocked; assign the correct source profile to a copy explicitly"
   },
   "toolchain": {
     "nodeTested": "24.21.0",
@@ -95,6 +118,7 @@
       "SDXL",
       "Flux",
       "arbitrary workflow import"
-    ]
+    ],
+    "pngOutput": "8-bit sRGB. Untagged allowed only for qwen21-local-v2-rgba; incompatible ICC/gamma/HDR metadata rejected."
   }
 }
