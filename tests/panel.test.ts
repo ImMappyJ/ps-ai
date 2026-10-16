@@ -2,6 +2,17 @@ import test from 'node:test';import assert from 'node:assert/strict';import {pan
 import {defaultSettings} from '../src/profile';
 import {decodePng} from '../src/image';
 
+test('语言切换刷新 UXP 已选中的应用位置和参考用途标题，保留参数值',async()=>{
+  const h=await panelHarness({uxpSelect:true});try{
+    h.el('usage').value='材质';h.el('destination').value='document';
+    h.el('language').value='en-US';h.change('language');await h.wait();
+    assert.equal(h.el('usage').value,'材质');assert.equal(h.el('destination').value,'document');
+    assert.match(h.el('usage').displayedCaption,/material/i);assert.match(h.el('destination').displayedCaption,/new document/i);
+    h.el('language').value='zh-CN';h.change('language');await h.wait();
+    assert.equal(h.el('usage').displayedCaption,'材质');assert.match(h.el('destination').displayedCaption,/新文档/);
+  }finally{await h.close();}
+});
+
 test('候选显示冻结来源；来源关闭后禁用回填但仍保留导出',async()=>{
   const h=await panelHarness();try{
     h.el('resolution').value='32';h.click('generate');await h.wait();assert.match(h.el('candidate-target').textContent,/11.*sRGB/);assert.equal(h.el('apply').disabled,false);

@@ -42,6 +42,8 @@ export const english:Record<string,string>={
   '范围参数已改变，请重新预览选区':'Range settings changed. Preview the selection again.',
   '来源没有颜色配置文件；请在副本中指定正确配置文件后重试，原文档不会自动修改':'The source has no color profile. Assign the correct profile to a copy and try again. The original is not changed.',
   'PNG 结构或校验错误，原始候选已保留，请检查后端输出':'Invalid PNG structure or checksum. The original candidate is retained; check the backend output.',
+  'PNG 像素数据、格式或解压长度错误，原始候选已保留':'Invalid PNG pixels, format or decompressed length. The original candidate is retained.',
+  'PNG 调色板索引无效':'Invalid PNG palette index',
   'PNG 色彩标记不兼容；仅接受 sRGB 8-bit，请在后端转换为 sRGB 后输出':'Unsupported PNG color metadata. Convert the backend output to sRGB 8-bit.',
   'PNG 未标记 sRGB；只有已验证的 Qwen 2.1 模板允许按 sRGB 解释无标记输出':'PNG has no sRGB tag. Only the verified Qwen 2.1 template can interpret untagged output as sRGB.',
   '界面语言 / Language':'Language',

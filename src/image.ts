@@ -1,5 +1,6 @@
 import UPNG from 'upng-js';
 import {validatePngColor,ColorContractError} from './color';
+import {checkedPixelPng} from './png-decode';
 
 export interface Bounds { left:number; top:number; right:number; bottom:number }
 export interface Raster { width:number; height:number; rgba:Uint8Array }
@@ -34,8 +35,9 @@ export function decodePng(bytes:Uint8Array,options:{allowUntagged?:boolean}={}):
   const view=new DataView(buffer(bytes));checkSize(view.getUint32(16),view.getUint32(20));
   if(bytes[24]!==8) throw new Error('仅支持 8-bit PNG，请先转为 RGB 8-bit PNG');
   validatePngColor(bytes,options.allowUntagged);
-  const image=UPNG.decode(buffer(bytes));
+  const checked=checkedPixelPng(bytes),image=UPNG.decode(buffer(checked.bytes));
   if(image.frames.length>1) throw new Error('不支持动画 PNG');
+  if(checked.paletteEntries!==undefined&&new Uint8Array(image.data).subarray(0,image.width*image.height).some(value=>value>=checked.paletteEntries!))throw new Error('PNG 调色板索引无效');
   return {width:image.width,height:image.height,rgba:new Uint8Array(UPNG.toRGBA8(image)[0])};
   }catch(error){if(error instanceof ColorContractError)throw error;throw new ColorContractError('invalid-output',error instanceof Error?error.message:String(error));}
 }

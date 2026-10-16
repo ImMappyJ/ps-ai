@@ -5,8 +5,11 @@ export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boo
   const html=await fs.readFile('plugin/index.html','utf8');const {document,window}=parseHTML(html);
   for(const select of Array.from(document.querySelectorAll('select'))) {
     const hasInitialSelection=!!select.querySelector('option[selected]');
-    let chosen:string|undefined;
-    Object.defineProperty(select,'value',{get(){if(chosen!==undefined)return chosen;if(options.uxpSelect&&!hasInitialSelection)return undefined;const node=select.querySelector('option[selected]')??select.querySelector('option');return node?(options.uxpSelect?node.getAttribute('value')??undefined:node.getAttribute('value')??node.textContent):undefined;},set(v){chosen=String(v);},configurable:true});
+    let chosen:string|undefined,caption=(select.querySelector('option[selected]')??select.querySelector('option'))?.textContent;
+    // Native UXP caches the collapsed caption; editing option.textContent alone
+    // does not refresh it. Rebuilding/reselecting options must update the caption.
+    Object.defineProperty(select,'displayedCaption',{get(){return caption;},configurable:true});
+    Object.defineProperty(select,'value',{get(){if(chosen!==undefined)return chosen;if(options.uxpSelect&&!hasInitialSelection)return undefined;const node=select.querySelector('option[selected]')??select.querySelector('option');return node?(options.uxpSelect?node.getAttribute('value')??undefined:node.getAttribute('value')??node.textContent):undefined;},set(v){chosen=String(v);caption=Array.from(select.querySelectorAll('option')).find(node=>node.getAttribute('value')===chosen)?.textContent;},configurable:true});
   }
   const el=(id:string)=>document.getElementById(id) as any;
   el('prompt').value='blue lightning';el('guide').checked=true;el('lock-seed').checked=true;for(const id of ['preserve-alpha','align-subject'])if(el(id))el(id).checked=true;

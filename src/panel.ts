@@ -53,6 +53,15 @@ function assertBackend(record:JobRecord){const origin=normalizeBaseUrl(record.ba
 function renderLanguage(){
   setLanguage(settings.language??'zh-CN');el('language').value=settings.language??'zh-CN';
   for(const node of Array.from(document.querySelectorAll('[data-i18n]')))if(node.id!=='connection')node.textContent=t(node.getAttribute('data-i18n')!);connection(connectionState);
+  // UXP keeps the collapsed caption when existing option text is edited.
+  for(const id of ['usage','destination']){
+    const select=el(id),value=select.value;
+    const items=Array.from(select.querySelectorAll('option')) as HTMLOptionElement[];
+    const labels=items.map(node=>[node.getAttribute('value')!,node.getAttribute('data-i18n')!]);
+    select.innerHTML='';
+    for(const [key,label] of labels){const node=document.createElement('option');node.setAttribute('value',key);node.setAttribute('data-i18n',label);node.textContent=t(label);select.appendChild(node);}
+    select.value=value;
+  }
   const mode=el('mode').value;el('mode').innerHTML='';for(const [id,label] of modes[workspace])option(el('mode'),id,label);el('mode').value=mode;
   for(const name of Object.keys(foldLabels))fold(name,el(`${name}-body`).style.display!=='none');
   const index=el('candidate-select').value;el('candidate-select').innerHTML='';candidates.forEach((c,i)=>option(el('candidate-select'),String(i),t('候选 {0} · {1}×{2}',i+1,c.image.width,c.image.height)));if(candidates.length)el('candidate-select').value=index;

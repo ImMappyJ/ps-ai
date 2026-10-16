@@ -118,6 +118,8 @@ Source and reference images require a known profile and RGB / Grayscale 8/16-bit
 | Preview and PNG export | Both use explicitly tagged sRGB PNG. Monitor and host color management can still affect appearance. |
 | Layer application | Photoshop converts candidate sRGB into the source profile. Original layers, document profile and depth stay unchanged. Applying an 8-bit result to a 16-bit document does not create native high-depth AI output. |
 
+Downloads are also checked for PNG checksums, pixel format, decompressed length and scanlines. Text metadata is excluded from decoding. Invalid pixels cannot be applied as a candidate; the original download remains in the task record.
+
 Native round trips and independent conversions passed on PS 27.0 for sRGB, Adobe RGB, Display P3 and ProPhoto at 8/16-bit. Colors outside sRGB and fine high-depth gradients lose gamut / precision in model exchange. The edited area is not guaranteed to match neighboring color exactly. Optional context matching corrects small overall shifts; it cannot restore gamut.
 
 The captured range is shown during generation: amber means effective edit, blue manual protection and gray context. A real feathered Photoshop mask controls application; the visual guide is not a strict latent inpaint mask. Candidates identify their source and whether application adds a result or replaces this capture’s plugin layer. Closed, changed or expired source sessions block application while keeping candidates exportable. Independent host idle crashes remain unresolved; work on saved copies.
