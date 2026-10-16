@@ -24,8 +24,10 @@ export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boo
   class TestSocket {onmessage?: (event:{data:string})=>void;onerror?:()=>void;closed=false;constructor(public url:string){sockets.push(this);}close(){this.closed=true;}}
   const png=encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)});
   const modelInfo:any={UnetLoaderGGUF:{input:{required:{unet_name:[['qwen-image-2.1-Q4_K_M.gguf']]}}},CLIPLoader:{input:{required:{clip_name:[['qwen3vl_8b_int8_convrot.safetensors']]}}},VAELoader:{input:{required:{vae_name:[['qwen_image_2.1_vae_bf16.safetensors']]}}},TextEncodeQwenImage21:{input:{required:{images:['COMFY_AUTOGROW_V3',{template:{names:['image_1','image_2','image_3']}}]}}}};
+  Object.assign(modelInfo,JSON.parse(await fs.readFile('tests/fixtures/comfy-nodes.json','utf8')));
   if(options.models)for(const [cls,field,key] of [['UnetLoaderGGUF','unet_name','unet'],['CLIPLoader','clip_name','clip'],['VAELoader','vae_name','vae']] as const)modelInfo[cls].input.required[field][0].push(options.models[key]);
   const fetcher=async(url:string,init:any)=>{
+    if(url.startsWith('http://offline.invalid:9999'))throw new TypeError('fetch failed');
     if(url.endsWith('/system_stats')){if(holdCheck)await checkBarrier;return Response.json({system:{comfyui_version:'0.37.4'}});}
     if(url.includes('/object_info/')){const c=url.split('/').pop()!;return Response.json({[c]:modelInfo[c]??{}});}
     if(url.endsWith('/prompt')){const post=JSON.parse(init.body);posts.push(post);return Response.json({prompt_id:post.prompt_id});}
@@ -38,7 +40,7 @@ export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boo
   };
   const makeDoc=(id:number)=>({id,width:2,height:2,mode:'rgb',bitsPerChannel:8,colorProfileName:'sRGB IEC61966-2.1',activeHistoryState:{id:1},layers:[{id:2,kind:'normal',blendMode:'normal',visible:true,opacity:100,fillOpacity:100,isClippingMask:false}],selection:{bounds:{left:0,top:0,right:2,bottom:2}}});
   const data=(components:number)=>({width:2,height:2,components,componentSize:8,dispose(){},getData:async()=>new Uint8Array(components*4).fill(255)});
-  const ps:any={app:{get activeDocument(){if(options.noDocuments)throw new Error('No active document');return makeDoc(documentId);},get documents(){return options.noDocuments?[]:[makeDoc(documentId)];}},constants:{DocumentMode:{RGB:'rgb'},BitsPerChannelType:{EIGHT:8},LayerKind:{NORMAL:'normal'},BlendMode:{NORMAL:'normal'}},core:{executeAsModal:async(fn:any)=>fn({})},imaging:{
+  const ps:any={app:{version:'27.0.0',get activeDocument(){if(options.noDocuments)throw new Error('No active document');return makeDoc(documentId);},get documents(){return options.noDocuments?[]:[makeDoc(documentId)];}},constants:{DocumentMode:{RGB:'rgb'},BitsPerChannelType:{EIGHT:8},LayerKind:{NORMAL:'normal'},BlendMode:{NORMAL:'normal'}},core:{executeAsModal:async(fn:any)=>fn({})},imaging:{
     createImageDataFromBuffer:async()=>{if(options.nativePreviewUnavailable)throw new Error('Native preview codec unavailable');return {dispose(){}};},encodeImageData:async()=>{if(options.nativePreviewUnavailable)throw new Error('Native preview codec unavailable');return '';},
     getSelection:async(o:any)=>{captured.push(o.documentID);return {imageData:data(1),sourceBounds:{left:0,top:0,right:2,bottom:2}};},
     getPixels:async()=>({imageData:options.source?{...data(4),getData:async()=>options.source!.rgba}:data(4),sourceBounds:{left:0,top:0,right:2,bottom:2},level:0})

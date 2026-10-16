@@ -1,5 +1,5 @@
 import UPNG from 'upng-js';
-import {validatePngColor} from './color';
+import {validatePngColor,ColorContractError} from './color';
 
 export interface Bounds { left:number; top:number; right:number; bottom:number }
 export interface Raster { width:number; height:number; rgba:Uint8Array }
@@ -28,6 +28,7 @@ export function encodePng(image:Raster):Uint8Array {
   return new Uint8Array(encode([buffer(image.rgba)],image.width,image.height,0,undefined,true));
 }
 export function decodePng(bytes:Uint8Array,options:{allowUntagged?:boolean}={}):Raster {
+  try {
   const sig=[137,80,78,71,13,10,26,10];
   if(bytes.length<33||sig.some((x,i)=>bytes[i]!==x)) throw new Error('需要有效 PNG 图片');
   const view=new DataView(buffer(bytes));checkSize(view.getUint32(16),view.getUint32(20));
@@ -36,6 +37,7 @@ export function decodePng(bytes:Uint8Array,options:{allowUntagged?:boolean}={}):
   const image=UPNG.decode(buffer(bytes));
   if(image.frames.length>1) throw new Error('不支持动画 PNG');
   return {width:image.width,height:image.height,rgba:new Uint8Array(UPNG.toRGBA8(image)[0])};
+  }catch(error){if(error instanceof ColorContractError)throw error;throw new ColorContractError('invalid-output',error instanceof Error?error.message:String(error));}
 }
 export function decodeModelPng(bytes:Uint8Array,template:string):Raster {
   // Pinned to the tested template, deliberately independent of a future default.

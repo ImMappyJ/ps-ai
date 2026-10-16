@@ -14,6 +14,11 @@ test('encoded PNG declares sRGB and keeps straight low-alpha and hidden RGB',()=
   const png=encodePng(image),tag=chunks(png).find(b=>b.toString('ascii',4,8)==='sRGB');
   assert.ok(tag);assert.equal(tag[8],1);assert.deepEqual(decodePng(png),image);
 });
+test('invalid PNG signature and unsupported depth are classified as output errors',()=>{
+  assert.throws(()=>decodePng(new Uint8Array([1,2,3])),(e:any)=>e.code==='invalid-output');
+  const png=encodePng(image);png[24]=16;
+  assert.throws(()=>decodePng(png),(e:any)=>e.code==='invalid-output');
+});
 test('untagged output needs an explicit verified-template allowance',()=>{
   const png=fixture([]);assert.throws(()=>decodePng(png),/未标记|untagged/i);
   assert.deepEqual(decodePng(png,{allowUntagged:true}),image);

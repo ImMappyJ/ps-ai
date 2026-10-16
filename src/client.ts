@@ -1,6 +1,7 @@
 import type {Graph} from './workflow';import {DEFAULT_MODELS,validateModels,ModelFiles,normalizeBaseUrl} from './profile';
+import {DiagnosticError,backendFailureCode} from './diagnostics';import type {DiagnosticCode} from './diagnostics';
 export interface OutputFile {filename:string;subfolder:string;type:string}
-export type Status={state:'queued'|'running'|'ready'|'failed'|'cancelled'|'unknown';images?:OutputFile[];detail?:string};
+export type Status={state:'queued'|'running'|'ready'|'failed'|'cancelled'|'unknown';images?:OutputFile[];detail?:string;code?:DiagnosticCode};
 export class HttpError extends Error { constructor(public status:number,message:string){super(message);} }
 export function uuid():string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.floor(Math.random()*16);return(c==='x'?r:(r&3)|8).toString(16);});
@@ -15,9 +16,11 @@ export class ComfyClient {
     const controller=typeof AbortController==='function'?new AbortController():undefined;
     let timer:ReturnType<typeof setTimeout>|undefined;
     try {
-      const timeout=new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller?.abort();reject(new Error('请求超时；已提交任务请按 ID 恢复'));},this.timeoutMs);});
+      const timeout=new Promise<never>((_,reject)=>{timer=setTimeout(()=>{reject(new DiagnosticError('timeout','connection','请求超时；已提交任务请按 ID 恢复'));controller?.abort();},this.timeoutMs);});
       const read=async()=>{
-        const res=await this.transport(this.base+path,{...init,signal:controller?.signal});
+        let res:Response;
+        try{res=await this.transport(this.base+path,{...init,signal:controller?.signal});}
+        catch(error){throw new DiagnosticError(error instanceof TypeError||(error as {name?:string})?.name==='TypeError'?'unreachable':'unknown','connection',error instanceof Error?error.message:String(error));}
         if(!res.ok)throw new HttpError(res.status,`ComfyUI ${res.status}: ${(await res.text()).slice(0,1500)}`);
         return consume(res);
       };
@@ -25,27 +28,28 @@ export class ComfyClient {
     } finally {if(timer)clearTimeout(timer);}
   }
   private async json(path:string,body?:unknown):Promise<any> {
-    return this.request(path,body===undefined?undefined:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},res=>res.json());
+    return this.request(path,body===undefined?undefined:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},async res=>{try{return await res.json();}catch(error){throw new DiagnosticError('incompatible-api','environment',`ComfyUI JSON: ${error instanceof Error?error.message:String(error)}`);}});
   }
+  async connect():Promise<unknown> {const stats=await this.json('/system_stats');if(!stats||typeof stats!=='object'||Array.isArray(stats))throw new DiagnosticError('incompatible-api','connection','ComfyUI system_stats 格式不匹配');return stats;}
   async inspect():Promise<{stats:unknown;nodeInfo:Record<string,any>;models:Record<keyof ModelFiles,string[]>}> {
-    const stats=await this.json('/system_stats');
+    const stats=await this.connect();
     const classes=['UnetLoaderGGUF','CLIPLoader','VAELoader','TextEncodeQwenImage21','QwenImage21Cache','KSampler','VAEDecode','SaveImage','LoadImage','JoinImageWithAlpha'];
     const infos=await Promise.all(classes.map(c=>this.json(`/object_info/${c}`)));
     const nodeInfo=Object.assign({},...infos);
-    for(const c of classes)if(!nodeInfo[c])throw new Error(`缺少节点：${c}`);
+    for(const c of classes)if(!nodeInfo[c])throw new DiagnosticError('missing-node','environment',`缺少节点：${c}`);
     const models={} as Record<keyof ModelFiles,string[]>;
     for(const [cls,field,key] of [['UnetLoaderGGUF','unet_name','unet'],['CLIPLoader','clip_name','clip'],['VAELoader','vae_name','vae']] as const) {
       const files=nodeInfo[cls]?.input?.required?.[field]?.[0];
-      if(!Array.isArray(files)||files.some(f=>typeof f!=='string'))throw new Error(`节点模型字段不匹配：${cls}.${field}`);
+      if(!Array.isArray(files)||files.some(f=>typeof f!=='string'))throw new DiagnosticError('incompatible-api','environment',`节点模型字段不匹配：${cls}.${field}`);
       models[key]=files;
     }
     const names=nodeInfo.TextEncodeQwenImage21.input?.required?.images?.[1]?.template?.names;
-    if(!names?.includes('image_1')||!names?.includes('image_3'))throw new Error('多参考图节点字段不匹配');
+    if(!names?.includes('image_1')||!names?.includes('image_3'))throw new DiagnosticError('incompatible-api','environment','多参考图节点字段不匹配');
     return {stats,nodeInfo,models};
   }
   async check():Promise<{stats:unknown;nodeInfo:Record<string,any>}> {
     const result=await this.inspect();
-    for(const key of ['unet','clip','vae'] as const)if(!result.models[key].includes(this.models[key]))throw new Error(`缺少模型 ${key}：${this.models[key]}；请在模型配置中扫描并选择文件`);
+    for(const key of ['unet','clip','vae'] as const)if(!result.models[key].includes(this.models[key]))throw new DiagnosticError('missing-model','environment',`缺少模型 ${key}：${this.models[key]}；请在模型配置中扫描并选择文件`);
     return result;
   }
   async upload(bytes:Uint8Array,name:string):Promise<string> {
@@ -71,10 +75,10 @@ export class ComfyClient {
     if(own) {
       const messages=own.status?.messages??[];
       if(messages.some((m:any)=>m[0]==='execution_interrupted'))return {state:'cancelled'};
-      if(own.status?.status_str==='error')return {state:'failed',detail:JSON.stringify(messages).slice(0,2000)};
+      if(own.status?.status_str==='error')return {state:'failed',code:backendFailureCode(messages),detail:JSON.stringify(messages).slice(0,2000)};
       const images=own.outputs?.['8']?.images;
       if(own.status?.completed&&images?.length)return {state:'ready',images};
-      if(own.status?.completed)return {state:'failed',detail:'任务完成但节点 8 没有输出'};
+      if(own.status?.completed)return {state:'failed',code:'invalid-output',detail:'任务完成但节点 8 没有输出'};
     }
     const queue=await this.json('/queue');
     if(queue.queue_running?.some((item:any[])=>item[1]===id))return {state:'running'};

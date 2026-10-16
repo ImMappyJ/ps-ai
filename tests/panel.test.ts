@@ -2,6 +2,33 @@ import test from 'node:test';import assert from 'node:assert/strict';import {pan
 import {defaultSettings} from '../src/profile';
 import {decodePng} from '../src/image';
 
+test('首次向导逐步检查，连接成功才保存地址，不自动生成',async()=>{
+  const h=await panelHarness();try{
+    assert.equal(h.el('setup-body').style.display,'block');assert.match(h.el('setup-step').textContent,/1/);assert.equal(h.posts.length,0);
+    h.el('backend-url').value='http://localhost:8199';h.click('setup-connect');await h.wait();
+    assert.equal(JSON.parse(String(h.files['settings.json'])).baseUrl,'http://localhost:8199');assert.match(h.el('setup-step').textContent,/2/);assert.equal(h.posts.length,0);
+    h.click('setup-check');await h.wait();assert.match(h.el('setup-step').textContent,/3/);assert.match(h.el('setup-report').textContent,/27\.0|qwen21/);assert.equal(h.posts.length,0);
+  }finally{await h.close();}
+});
+test('已有有效配置进入主界面；重新打开向导也不提交任务',async()=>{
+  const h=await panelHarness({settings:defaultSettings()});try{
+    assert.equal(h.el('setup-body').style.display,'none');h.click('open-setup');await h.wait();assert.equal(h.el('setup-body').style.display,'block');assert.equal(h.posts.length,0);
+  }finally{await h.close();}
+});
+test('连接失败不覆盖有效设置，显示下一步和可复制详情',async()=>{
+  const h=await panelHarness({settings:defaultSettings()});try{
+    h.el('backend-url').value='http://offline.invalid:9999';h.click('setup-connect');await h.wait();
+    assert.equal(JSON.parse(String(h.files['settings.json'])).baseUrl,'http://localhost:8188');assert.equal(h.posts.length,0);
+    assert.match(h.el('diagnostic-summary').textContent,/后端|地址|端口/);assert.equal(h.el('diagnostic-details').style.display,'none');h.click('toggle-error-details');assert.match(h.el('diagnostic-details').value,/unreachable/);
+  }finally{await h.close();}
+});
+test('英文向导和诊断给出操作建议，未知异常不猜测内存不足',async()=>{
+  const h=await panelHarness({settings:{...defaultSettings(),language:'en-US'}});try{
+    h.click('open-setup');await h.wait();assert.match(h.el('setup-step').textContent,/setup/i);assert.doesNotMatch(h.el('setup-help').textContent,/[一-龥]/);
+    h.el('backend-url').value='http://offline.invalid:9999';h.click('setup-connect');await h.wait();assert.doesNotMatch(h.el('diagnostic-summary').textContent,/[一-龥]/);assert.match(h.el('diagnostic-summary').textContent,/port|address/i);
+  }finally{await h.close();}
+});
+
 test('保存地址与语言后重载仍使用新后端，英文界面保留参数',async()=>{
   const h=await panelHarness();try{
     assert.ok(h.el('backend-url'));h.el('backend-url').value='http://localhost:8199/';h.el('language').value='en-US';h.el('seed').value='123';h.click('save-settings');await h.wait();
