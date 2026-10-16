@@ -4,13 +4,13 @@
 <h1 align="center">PS-AI FOR ME</h1>
 <p align="center"><a href="README.md">简体中文</a> · <strong>English</strong></p>
 
-I built PS-AI FOR ME to use ComfyUI directly inside Photoshop for local edits, COSPLAY outfits and props, and image generation. Select an area, describe a change, generate candidates, then bring one back as a new layer with an editable mask.
+PS-AI FOR ME connects ComfyUI to Photoshop for local edits, COSPLAY outfits and props, and text-to-image generation. Select an area, describe the change and preview candidates in the panel, then apply a result as a new layer with an editable mask.
 
-**0.3.0 is experimental.** I am still working on image quality and compatibility. Results need review and the final composite still needs manual work. Routine skin smoothing, blemish removal and portrait retouching are outside the project scope.
+**0.3.0 is experimental.** Results may need manual cleanup, so work on saved copies. Routine skin smoothing, blemish removal and skin-tone retouching are not included.
 
 ## Example
 
-Here I selected the legs in Photoshop and asked the model to add white over-the-knee socks. These are the actual before-and-after screenshots. They show an earlier panel; the current UI has changed. Results vary with the prompt and seed.
+The example below adds white over-the-knee socks within a selection around the legs. The screenshots show an earlier version of the panel.
 
 | Before | After |
 | --- | --- |
@@ -25,7 +25,7 @@ Here I selected the legs in Photoshop and asked the model to add white over-the-
 - **Transparency and color:** preserve the source silhouette, optionally align the subject and match small context color shifts. RGB / Grayscale 8/16-bit round trips have been tested in Photoshop; model input remains sRGB 8-bit.
 - **Settings and language:** save the ComfyUI host, port and model mapping, import / export JSON, switch between Simplified Chinese and English.
 
-The plugin uses a fixed **Qwen-Image 2.1 GGUF workflow**. Selecting another filename does not add SD, SDXL or Flux support. See the [ComfyUI setup guide](COMFYUI.en.md) for the compatibility contract.
+The plugin uses a fixed **Qwen-Image 2.1 GGUF workflow**. SD, SDXL and Flux cannot be substituted directly. See the [ComfyUI setup guide](COMFYUI.en.md) for model requirements and configuration.
 
 ## Requirements
 
@@ -33,7 +33,7 @@ The plugin uses a fixed **Qwen-Image 2.1 GGUF workflow**. Selecting another file
 | --- | --- |
 | OS / host | Windows, Photoshop 2026 / 27.0+; only 27.0 tested. macOS is unverified. |
 | Backend | Compatible ComfyUI and GGUF nodes. Tested revisions: [compatibility manifest](config/compatibility.json). |
-| GPU / memory | Tested with NVIDIA RTX 5080 16 GiB and about 48 GB RAM. This is a test configuration, not a minimum requirement. |
+| GPU / memory | Tested with NVIDIA RTX 5080 16 GiB and about 48 GB RAM. Minimum hardware requirements have not been established. |
 | Storage | About 14.63 GB for preset weights, plus backend, dependencies, cache and images. |
 | Source builds | Node.js 24.21.0 / npm 11.19.0 tested. Release packages need neither Node.js nor developer tools. |
 
@@ -41,7 +41,7 @@ ComfyUI can run here or on another reachable machine. Images and prompts go to t
 
 ## Install a release package
 
-Download matching plugin and environment tools from [Releases](https://github.com/ImMappyJ/ps-ai/releases). If no release is available, build from source. The main branch is not a stable-release guarantee. Choose one installation method.
+Download matching plugin and environment tools from [Releases](https://github.com/ImMappyJ/ps-ai/releases), then choose either installation method below. If no package is available, follow the source-build instructions further down. The main branch includes work in progress.
 
 ### Option 1: CCX
 
@@ -54,7 +54,7 @@ Download matching plugin and environment tools from [Releases](https://github.co
    powershell.exe -NoProfile -File .\scripts\install-ccx.ps1 -PackagePath $package
    ```
 
-Associating CCX files directly with UPIA does not guarantee double-click installation. The script supplies `/install` and the path, then checks the result. Photoshop **File → Open** cannot install a plugin.
+If double-clicking still fails after associating CCX files with UPIA, use the script above to supply the installation arguments and check the result. Photoshop **File → Open** cannot install a plugin.
 
 ### Option 2: Portable folder
 
@@ -63,7 +63,7 @@ Associating CCX files directly with UPIA does not guarantee double-click install
 3. Check the layout: `Plug-ins/PS-AI-FOR-ME/manifest.json`. Avoid an extra nested folder.
 4. Restart and open **Plugins → PS-AI FOR ME (Portable)**.
 
-This does not use the CCX installer. Folder loading and image round trips have been tested on Windows PS 27.0. Other versions and loading with developer mode disabled remain unverified. If the folder is not recognized, use CCX or the developer method below.
+Portable needs no CCX installer. Folder loading and image round trips have been tested on Windows PS 27.0. Other versions and loading with developer mode disabled have not been tested. If Photoshop cannot find the folder, use CCX or the source-build method below.
 
 CCX and Portable keep separate data. Export settings and save PNGs before switching; history is not migrated. Quit Photoshop before replacing only this plugin folder or installing a new CCX. Remove the Portable folder to uninstall it; manage CCX through Creative Cloud. Settings, candidates and history stay in Photoshop's data directory rather than moving with program files.
 
@@ -77,7 +77,7 @@ The [ComfyUI setup guide](COMFYUI.en.md) covers installation, models, versions a
 4. **Save settings**, then **Connect**. The address, models and language survive reloads.
 5. Run **Diagnostics → Image round-trip check**, then try one generation on a saved test image.
 
-Export settings as JSON to move them, then check the new address and model availability. Settings contain backend-relative filenames, not developer disk paths. After switching backends, recover or cancel old tasks at their original address.
+Export settings as JSON and import them on the other machine, then check its address and model availability. Settings store the backend origin and relative model filenames, without absolute paths to local weights. After switching backends, recover or cancel old tasks at their original address.
 
 ## First edit
 
@@ -96,7 +96,7 @@ Export settings as JSON to move them, then check the new address and model avail
 - CMYK, Lab, Indexed, Bitmap, Multichannel and 32-bit HDR are unsupported. Work in an RGB copy. A 16-bit source keeps its format, but generated content has no native 16-bit detail.
 - Translucent multilayer composites may lack a safe clipping base. If prompted, merge visible layers in a copy and generate again, or export PNG and composite manually.
 - Assign the right ICC profile to a copy of untagged images. The model also changes lighting and colors; check seams.
-- Photoshop idle exits have been reproduced without this plugin. Long-term host stability is not fully validated. Another installation method is not a crash fix.
+- Photoshop has also exited unexpectedly without this plugin loaded. These stability issues are still being investigated and may affect both CCX and Portable installations.
 - The plugin and ComfyUI save history, inputs and outputs locally. Remove private images, prompts and paths before sharing reports. Use material you have permission to process.
 - The preset Qwen 2.1 license permits non-commercial research / evaluation; commercial use needs separate permission. Open-source code does not change model licensing. [Model license](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE)
 
@@ -112,15 +112,15 @@ npm run build
 
 Enable developer mode in Photoshop **Preferences → Plugins**, then restart. Add `dist/plugin/manifest.json` in [Adobe UXP Developer Tool](https://developer.adobe.com/photoshop/uxp/2022/guides/devtool/) and choose **Load**. Backend setup is the same as for release packages.
 
-`npm run package` tests, builds and writes CCX, Portable ZIP, environment-tool ZIP and SHA256 files to `release/`. It needs no private handoff documents, does not download models or start the backend, and does not publish a release.
+`npm run package` runs tests and builds, then writes CCX, Portable ZIP, environment-tool ZIP and SHA256 checksums to `release/`. Prepare ComfyUI and weights separately, and publish releases manually.
 
-Use **Actions → Build packages → Run workflow** to build on GitHub. Download the artifact, unpack its outer ZIP and attach the release files and checksums to a GitHub Release you create manually. Keep versions in `package.json`, the lockfile and `plugin/manifest.json` aligned. Actions cannot replace testing in Photoshop.
+You can also build through **Actions → Build packages → Run workflow**. Download the artifact, unpack its outer ZIP and attach the packages and checksums to a GitHub Release. Before publishing, keep versions in `package.json`, the lockfile and `plugin/manifest.json` aligned, and test installation and generation in Photoshop.
 
 ## Feedback and contributions
 
 Open an [Issue](https://github.com/ImMappyJ/ps-ai/issues) with OS, Photoshop / plugin / ComfyUI versions, models, GPU, reproduction steps and sanitized errors. Share only comparisons you may publish. Do not upload full crash dumps or private photos.
 
-Small PRs are welcome. Run `npm ci`, `npm test` and `npm run build`. Update compatibility and both languages when changing workflows. Use a branch per change and discuss designs in Issues / PRs. Handoff notes, debugging records and machine reports stay local. Concurrent changes to the same public guide still need normal Git conflict resolution.
+PRs are welcome; keep each change focused on one problem. Run `npm ci`, `npm test` and `npm run build` before submitting. Update the compatibility manifest and both language versions when changing workflows. Use a separate branch and discuss changes in Issues / PRs. Keep handoff notes, debugging records and machine reports local.
 
 ## License and thanks
 

@@ -66,7 +66,7 @@ A local backend normally listens on `127.0.0.1`. A remote backend needs a reacha
 
 ### Configure the panel
 
-I captured this 0.3.0 Portable panel in Photoshop 27.0 after scanning models and checking the connection. CCX has the same settings. Look for **Connected** in the header; having model names in the form does not prove a connection.
+The screenshot shows the 0.3.0 Portable panel in Photoshop 27.0 after a successful model scan and connection check. CCX has the same settings. The header shows **Connected** when the check succeeds.
 
 ![ComfyUI address, three model selectors and Connect in Photoshop](assets/setup-en.png)
 

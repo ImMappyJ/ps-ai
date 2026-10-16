@@ -51,7 +51,7 @@ ComfyUI/
 
 这是测试组合，不代表推荐所有用途。生成模型是第三方量化版本，使用前阅读它的模型卡以及上游 [Qwen 许可](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE)：当前许可限定非商业研究／评估，商业用途需另行授权。权重不随插件分发。
 
-精确字节数、固定来源版本和 SHA256 位于 [compatibility.json](config/compatibility.json)。已有同一文件不必重新下载。用环境检查脚本可以验证文件大小和哈希；自选模型会标为“需要自行验证”，不会冒充已测试组合。
+精确字节数、固定来源版本和 SHA256 位于 [compatibility.json](config/compatibility.json)。已有同一文件不必重新下载。环境检查脚本会校验预设模型的文件大小和哈希，自选模型则标为“需要自行验证”。
 
 ## 3. 插件地址与配置格式
 
@@ -68,7 +68,7 @@ https://comfy.example.com
 
 ### 按面板完成配置
 
-下面是我在 Photoshop 27.0 中截取的 0.3.0 Portable 面板，已完成模型扫描和连接检查，CCX 的配置项相同。以顶部的“已连接”为准；仅填写模型名还不代表连接成功。
+下图为 Photoshop 27.0 中的 0.3.0 Portable 面板，模型扫描和连接检查均已完成，CCX 的配置项相同。连接成功后，顶部会显示“已连接”。
 
 ![Photoshop 中的 ComfyUI 地址、三个模型选项和连接按钮](assets/setup-zh.png)
 
