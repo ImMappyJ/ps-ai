@@ -2,6 +2,16 @@ import test from 'node:test';import assert from 'node:assert/strict';import {pan
 import {defaultSettings} from '../src/profile';
 import {decodePng} from '../src/image';
 
+test('复用16位历史后切换语言保留本次输出位深，不用旧偏好覆盖',async()=>{
+  const h=await panelHarness({settings:{...defaultSettings(),outputDepth:8},uxpSelect:true});try{
+    await h.wait();h.click('tab-t2i');h.click('generate');await h.wait();
+    const records=h.records();(records[0].params as Record<string,unknown>).outputDepth=16;h.files['history.json']=JSON.stringify(records);
+    h.click('repeat-history');await h.wait();assert.equal(h.el('output-depth').value,'16');
+    for(const language of ['en-US','zh-CN']){h.el('language').value=language;h.change('language');await h.wait();assert.equal(h.el('output-depth').value,'16');}
+    assert.equal(JSON.parse(String(h.files['settings.json'])).outputDepth,8);
+  }finally{await h.close();}
+});
+
 test('连接失败可展开详情；修正地址并成功检查后清除旧错误',async()=>{
   const h=await panelHarness();try{await h.wait();h.el('backend-url').value='http://offline.invalid:9999';h.click('connect');await h.wait();assert.equal(h.el('diagnostic-box').style.display,'block');
     h.click('toggle-error-details');await h.wait();assert.equal(h.el('diagnostic-details').style.display,'block');assert.equal(h.el('diagnostic-box').style.display,'block');
