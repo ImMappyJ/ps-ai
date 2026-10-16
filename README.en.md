@@ -1,20 +1,20 @@
-<img src="assets/icon.png" width="72" alt="PS-AI FOR ME">
+<p align="center">
+  <img src="assets/icon.png" width="72" alt="PS-AI FOR ME">
+</p>
+<h1 align="center">PS-AI FOR ME</h1>
+<p align="center"><a href="README.md">简体中文</a> · <strong>English</strong></p>
 
-# PS-AI FOR ME
+I built PS-AI FOR ME to use ComfyUI directly inside Photoshop for local edits, COSPLAY outfits and props, and image generation. Select an area, describe a change, generate candidates, then bring one back as a new layer with an editable mask.
 
-[简体中文](README.md) · **English**
-
-Connect ComfyUI to Photoshop: select an area, describe a change, generate candidates, then bring one back as a new layer with an editable mask. Built for local edits, COSPLAY outfits and props, image generation, and effect or atmosphere assets.
-
-**0.3.0 is experimental.** Expect to review results and finish the composite yourself. Routine skin smoothing, blemish removal and portrait retouching are outside the project scope.
+**0.3.0 is experimental.** I am still working on image quality and compatibility. Results need review and the final composite still needs manual work. Routine skin smoothing, blemish removal and portrait retouching are outside the project scope.
 
 ## Example
 
-Real Photoshop screenshots supplied by a user. This example changes part of an outfit / leg material to white. The screenshots show an older panel, not a mockup of the current UI. Results vary between generations.
+Here I selected the legs in Photoshop and asked the model to add white over-the-knee socks. These are the actual before-and-after screenshots. They show an earlier panel; the current UI has changed. Results vary with the prompt and seed.
 
 | Before | After |
 | --- | --- |
-| ![Before editing](assets/1.png) | ![After editing](assets/2.png) |
+| ![Before adding white over-the-knee socks](assets/1.png) | ![After adding white over-the-knee socks](assets/2.png) |
 
 ## What it does
 
@@ -65,7 +65,7 @@ Associating CCX files directly with UPIA does not guarantee double-click install
 
 This does not use the CCX installer. Folder loading and image round trips have been tested on Windows PS 27.0. Other versions and loading with developer mode disabled remain unverified. If the folder is not recognized, use CCX or the developer method below.
 
-CCX and Portable keep separate data. Export settings and save PNGs before switching; history is not migrated. Quit Photoshop before replacing only this plugin folder or installing a new CCX. Remove the Portable folder to uninstall it; manage CCX through Creative Cloud. User data does not move with program files.
+CCX and Portable keep separate data. Export settings and save PNGs before switching; history is not migrated. Quit Photoshop before replacing only this plugin folder or installing a new CCX. Remove the Portable folder to uninstall it; manage CCX through Creative Cloud. Settings, candidates and history stay in Photoshop's data directory rather than moving with program files.
 
 ## Connect ComfyUI
 

@@ -1,6 +1,8 @@
-# ComfyUI setup and model compatibility
-
-[简体中文](COMFYUI.md) · **English** · [README](README.en.md)
+<p align="center">
+  <img src="assets/icon.png" width="72" alt="PS-AI FOR ME">
+</p>
+<h1 align="center">ComfyUI setup and model compatibility</h1>
+<p align="center"><a href="COMFYUI.md">简体中文</a> · <strong>English</strong> · <a href="README.en.md">README</a></p>
 
 The plugin includes neither the backend nor weights. Reuse an existing ComfyUI if it meets the contract below. This guide covers the `qwen21-local-v2-rgba` template in plugin 0.3.0.
 
@@ -21,6 +23,19 @@ Newer versions may work, but must meet the node and API requirements below. `Une
 ## 2. Model files
 
 Use ComfyUI's `models` directory or point `extra_model_paths.yaml` at existing weights. The plugin stores loader-relative filenames, never absolute weight paths.
+
+For files placed directly under ComfyUI, use this layout. Do not put all three files in `checkpoints`:
+
+```text
+ComfyUI/
+└─ models/
+   ├─ diffusion_models/
+   │  └─ qwen-image-2.1-Q4_K_M.gguf
+   ├─ text_encoders/
+   │  └─ qwen3vl_8b_int8_convrot.safetensors
+   └─ vae/
+      └─ qwen_image_2.1_vae_bf16.safetensors
+```
 
 | Search category | Preset file | Disk size |
 | --- | --- | ---: |
@@ -45,7 +60,18 @@ https://comfy.example.com
 
 A local backend normally listens on `127.0.0.1`. A remote backend needs a reachable interface and a firewall configured by its administrator. The plugin changes neither. Credentials, query strings and paths such as `/comfy` are unsupported. A reverse proxy must forward HTTP and WebSocket at its root; HTTPS needs a valid certificate. API-key authentication is not integrated.
 
-Scan models, select three compatible files, save and connect. Scanning uses the address currently entered. Connect saves the form before checking it. Changing language saves only the language, without submitting an unsaved address. Example:
+### Configure the panel
+
+I captured this 0.3.0 Portable panel in Photoshop 27.0. CCX has the same settings. The backend was stopped when I took the screenshot, so the header says Disconnected. Having model names in the form does not prove a connection.
+
+![ComfyUI address, three model selectors and Connect in Photoshop](assets/setup-en.png)
+
+1. Expand **Backend and models**. Enter the service origin that opens in your browser under **ComfyUI address**. If you changed the backend port, change it here too.
+2. With the backend running, click **Scan models**. Select the **Diffusion model**, **Vision / text encoder** and **VAE** using the table above. Scanning uses the address currently entered.
+3. Click **Save settings**, then **Connect** at the top. Wait for **Connected**, then try a test generation. If connection fails, read the message and the troubleshooting table below.
+4. To move settings to another machine, **Export JSON** here and **Import JSON** there, then check its address and model names. Changing language saves only the language, without submitting an unsaved address.
+
+**Connect** also saves the form before checking it. Equivalent settings:
 
 ```json
 {
@@ -62,7 +88,7 @@ Scan models, select three compatible files, save and connect. Scanning uses the 
 
 `language` accepts `zh-CN` or `en-US`; older settings may omit it and default to Chinese. Model names must match the scan, including subdirectories and separators, for example `my-qwen/model.gguf`. Absolute paths and `..` are rejected. Settings are locked during generation. History records its backend origin; legacy records without one belong to `http://localhost:8188`.
 
-To support user-selected hosts, the UXP manifest declares network `domains: "all"`. Runtime requests go to the configured ComfyUI; there is no telemetry. A remote server receives and may retain uploaded images, references and prompts. Do not expose an unauthenticated backend to untrusted networks.
+To support custom hosts, the UXP manifest declares network `domains: "all"`. Runtime requests go to the configured ComfyUI; there is no telemetry. A remote server receives and may retain uploaded images, references and prompts. Do not expose an unauthenticated backend to untrusted networks.
 
 ## 4. Adapting your own models
 

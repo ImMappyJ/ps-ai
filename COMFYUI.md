@@ -1,6 +1,8 @@
-# ComfyUI 配置与模型适配
-
-**简体中文** · [English](COMFYUI.en.md) · [返回首页](README.md)
+<p align="center">
+  <img src="assets/icon.png" width="72" alt="PS-AI FOR ME">
+</p>
+<h1 align="center">ComfyUI 配置与模型适配</h1>
+<p align="center"><strong>简体中文</strong> · <a href="COMFYUI.en.md">English</a> · <a href="README.md">返回首页</a></p>
 
 插件不包含推理后端和模型。已有 ComfyUI 能运行下面的工作流，就可以直接接入，不必重装环境。下面的标准针对插件 0.3.0 的 `qwen21-local-v2-rgba` 模板。
 
@@ -23,6 +25,19 @@
 ## 2. 模型放在哪里
 
 预设使用以下三个文件。可以使用 ComfyUI 自己的 `models` 目录，也可以在 `extra_model_paths.yaml` 配置已有目录。插件只保存加载器返回的相对文件名，不读取权重的绝对路径。
+
+如果直接放在 ComfyUI 目录中，结构如下。不要把三个文件都放进 `checkpoints`：
+
+```text
+ComfyUI/
+└─ models/
+   ├─ diffusion_models/
+   │  └─ qwen-image-2.1-Q4_K_M.gguf
+   ├─ text_encoders/
+   │  └─ qwen3vl_8b_int8_convrot.safetensors
+   └─ vae/
+      └─ qwen_image_2.1_vae_bf16.safetensors
+```
 
 | 搜索类别 | 预设文件 | 约占磁盘 |
 | --- | --- | ---: |
@@ -47,7 +62,18 @@ https://comfy.example.com
 
 本机后端通常监听 `127.0.0.1`。另一台机器需要监听可访问的网卡地址，并由后端管理者配置防火墙和可信网络。插件不更改这些设置。不支持地址中的用户名、密码、查询参数或 `/comfy` 这样的子路径；反向代理要在根路径转发 HTTP 和 WebSocket，HTTPS 需要有效证书。插件不提供 API Key 登录。
 
-点“扫描模型”，选择三个兼容文件，保存并连接。扫描使用当前输入的地址；“连接”会保存当前配置后检查。切换界面语言会单独保存语言，不会提交尚未保存的地址。配置示例：
+### 按面板完成配置
+
+下面是我在 Photoshop 27.0 中截取的 0.3.0 Portable 面板，CCX 的配置项相同。截图时后端未启动，顶部显示“未连接”；填写了模型名还不代表连接成功。
+
+![Photoshop 中的 ComfyUI 地址、三个模型选项和连接按钮](assets/setup-zh.png)
+
+1. 展开“模型与连接”，在“ComfyUI 地址”填入浏览器能打开的服务根地址。后端端口改过，这里也要一起改。
+2. 后端启动后，点“扫描模型”。按上表依次选择“生成模型”“视觉／文本编码器”和“VAE”；扫描使用当前输入的地址。
+3. 点“保存配置”，再点顶部“连接”。顶部显示“已连接”后，再运行一次测试生成。连接失败时先看提示和本文末尾的排错表。
+4. 要迁移到另一台机器，点“导出 JSON”，在另一台机器“导入 JSON”，重新核对地址和模型。切换界面语言只保存语言，不会提交尚未保存的地址。
+
+“连接”本身也会先保存表单再检查。对应的配置示例：
 
 ```json
 {
@@ -64,7 +90,7 @@ https://comfy.example.com
 
 `language` 为 `zh-CN` 或 `en-US`，旧配置可省略，默认中文。模型名必须与扫描结果完全一致，包括子目录和分隔符；例如 `my-qwen/model.gguf`。不允许绝对路径和 `..`。生成期间不能切换配置。历史任务记录原后端地址；旧版未记录地址的历史按 `http://localhost:8188` 处理。
 
-为允许用户填写不同主机，UXP 清单声明了网络访问 `domains: "all"`。运行代码只向配置的 ComfyUI 发请求，不带遥测。远程后端会收到上传的图片、参考图和提示词，也会保存它们；不要把服务直接裸露到不可信网络。
+为支持自定义主机，UXP 清单声明了网络访问 `domains: "all"`。运行代码只向配置的 ComfyUI 发请求，不带遥测。远程后端会收到上传的图片、参考图和提示词，也会保存它们；不要把服务直接裸露到不可信网络。
 
 ## 4. 自己的模型怎样适配
 
