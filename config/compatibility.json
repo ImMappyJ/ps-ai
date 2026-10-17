@@ -37,7 +37,23 @@
       },
       "limitations": "Original matrix covers sRGB8 exchange. Model inputs clip wide gamut and quantize precision; optional16 output acceptance recorded separately. No calibrated-display acceptance or long-term stability claim."
     },
-    "untaggedSource": "Blocked; assign the correct source profile to a copy explicitly"
+    "untaggedSource": "Development: RGB static WebP with a bound original file without ICC (format-default sRGB) or PNG with an explicit sRGB chunk can use a tagged working copy after source-entry validation. Preserve a loaded document ICC after edits/conversion. Unknown/custom untagged sources or documents without a bound file remain blocked. Unsaved layers survive on the copy, interpreted using original-file semantics. Published v0.4.0 retains the earlier blanket rejection.",
+    "savedColorResolution": {
+      "status": "Offline parser, mock host and panel tests; PS27 native WebP8 working-copy capture/apply/undo passed. Native PNG/reference/new panel interactions pending.",
+      "sourceFileByteLimit": 64000000,
+      "identity": "Same full path, dimensions and native depth; recheck source state after file selection",
+      "workingCopy": "Unmerged sRGB duplicate, preserved original, capture/apply frozen to the copy",
+      "nativeAcceptance": {
+        "date": "2026-10-18",
+        "host": "27.0.0",
+        "sample": "3F3F3F.webp",
+        "case": "Real source-file entry/header plus current Adobe RGB control; ICC removed only on a disposable duplicate to exercise WebP-default sRGB.",
+        "identityRoundTripMaxDifference": 0,
+        "singleUndo": true,
+        "originalStatePreserved": true,
+        "scope": "Local native capture/apply only; no inference. PNG/reference and installed panel interactions require separate acceptance."
+      }
+    }
   },
   "toolchain": {
     "nodeTested": "24.21.0",

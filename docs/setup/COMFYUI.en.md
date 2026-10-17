@@ -156,7 +156,11 @@ Failures include their category, effect and next action. Expand **Technical deta
 
 ### Color and safe editing
 
-Source and reference images require a known profile and RGB / Grayscale 8/16-bit mode. Untagged sources stop before reading pixels: assign the correct profile to a copy first. Prepare RGB copies of CMYK, Lab and HDR images.
+Main and reference images support RGB / Grayscale 8/16-bit with a resolved color space. An existing document ICC is preserved, including color conversions made when opening or editing in Photoshop.
+
+**Development branch only (absent from published v0.4.0):** if the document has no ICC, select its original file to read saved color declarations. Static WebP without embedded ICC uses the format's sRGB default; an explicit PNG sRGB chunk is also recognized. The file must match the current document path, dimensions and native depth, and the current document state is checked again after reading. Successful resolution creates an unmerged sRGB working copy for capture and apply, leaving the original untouched and retaining unsaved layers. All untagged edits in the copy receive the original-file color interpretation; this cannot guarantee their previous appearance. A disposable untagged WebP8 copy passed capture, identity apply (zero pixel difference), single undo and cleanup in Photoshop 27. Native PNG, reference import and new panel interactions remain pending.
+
+Other formats fall back to Photoshop's loaded document ICC. Unknown color, gamma alone, custom declarations without a loaded ICC, and untagged documents without a verifiable original file still require the correct profile on a copy. Source-file reading is limited to 64 MB; RGB mode alone does not imply sRGB. Prepare RGB copies of CMYK, Lab and HDR documents.
 
 | Boundary | Contract |
 | --- | --- |
@@ -254,4 +258,4 @@ This creates `extra_model_paths.yaml`, `start-comfyui.ps1` and importable `ps-ai
 | No percentage before sampling | The node has not reported sampling steps yet. The panel shows a phase, then the task's real step progress. |
 | Wrong candidate dimensions | Check source scaling and first-reference dimensions. Do not bypass checks by changing output size. |
 | White fringe / color shift | Check whether preserving the source silhouette is appropriate, then ICC, raw model output, alignment and color matching. Composite manually if needed. |
-| Reference PNG is reported as untagged | PS 27 may treat PNG16 with only an sRGB chunk and no embedded ICC as untagged. Confirm its actual color space, assign the correct profile on a copy and save with ICC embedded before importing. See the [reference example](../usage/USER_GUIDE.en.md#reference). |
+| Reference PNG is reported as untagged | v0.4.0 requires the correct ICC embedded on a copy. The development branch can read an explicit sRGB chunk and process a working copy; unknown color still needs manual confirmation. See the [reference example](../usage/USER_GUIDE.en.md#reference). |

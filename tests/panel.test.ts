@@ -2,6 +2,22 @@ import test from 'node:test';import assert from 'node:assert/strict';import {pan
 import {defaultSettings} from '../src/profile';
 import {decodePng} from '../src/image';
 
+test('saved PNG sRGB declaration creates a working copy and permits a second capture',async()=>{
+  const {encodePng}=await import('../src/image');
+  const h=await panelHarness({untaggedSource:{bytes:encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)})}});try{
+    await h.wait();h.click('capture');await h.wait();
+    assert.match(h.el('source-info').textContent,/22.*PNG sRGB.*工作副本/);
+    h.el('language').value='en-US';h.change('language');await h.wait();h.click('capture');await h.wait();assert.match(h.el('source-info').textContent,/sRGB/);assert.equal(h.posts.length,0);
+  }finally{await h.close();}
+});
+
+test('a different source file fails color resolution before any upload or inference',async()=>{
+  const {encodePng}=await import('../src/image');
+  const h=await panelHarness({untaggedSource:{bytes:encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)}),wrongPath:true}});try{
+    await h.wait();h.click('generate');await h.wait();assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);assert.match(h.el('diagnostic-box').textContent,/色彩空间|原文件/);
+  }finally{await h.close();}
+});
+
 test('修正参数重新生成后清除上次诊断，新的失败仍显示详情',async()=>{
   const h=await panelHarness();try{
     await h.wait();h.click('tab-t2i');h.el('count').value='0';h.click('generate');await h.wait();

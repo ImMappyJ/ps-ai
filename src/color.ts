@@ -6,7 +6,10 @@ export class ColorContractError extends Error {
 export function requireSourceProfile(doc:{colorProfileName?:string;colorProfileType?:unknown},noneType?:unknown):void {
   const name=doc.colorProfileName?.trim();
   if(!name||/^(none|untagged|未标记|无配置|无$)/i.test(name)||(noneType!==undefined&&doc.colorProfileType===noneType))
-    throw new ColorContractError('source-profile','来源没有颜色配置文件；请在副本中指定正确配置文件后重试，原文档不会自动修改');
+    throw new ColorContractError('source-profile','无法确定来源色彩空间；请在副本中指定正确配置文件后重试，原文档不会自动修改');
+}
+export function hasSourceProfile(doc:{colorProfileName?:string;colorProfileType?:unknown},noneType?:unknown):boolean {
+  try{requireSourceProfile(doc,noneType);return true;}catch{return false;}
 }
 const crcTable=Uint32Array.from({length:256},(_,i)=>{for(let k=0;k<8;k++)i=(i>>>1)^((i&1)?0xedb88320:0);return i>>>0;});
 function crc(bytes:Uint8Array,start:number,end:number):number {let n=0xffffffff;for(let i=start;i<end;i++)n=(n>>>8)^crcTable[(n^bytes[i])&255];return (n^0xffffffff)>>>0;}

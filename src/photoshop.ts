@@ -1,13 +1,36 @@
 import {Bounds,Raster,checkSize,expandPixels,maskRaster,effectiveMask,resize,convertDepth,rasterDepth,rasterMax} from './image';
 import {retainSourceAlpha} from './composite';
-import {requireSourceProfile} from './color';
-export interface Snapshot {documentId:number;width:number;height:number;profile:string;mode:string;depth:unknown;historyId:number;sessionId:string;bounds:Bounds;mask:Uint8Array;sourceHash:string;clipBaseLayerId?:number}
-export interface Capture {snapshot:Snapshot;image:Raster;selectionMask:Uint8Array;protectionMask:Uint8Array}
+import {requireSourceProfile,hasSourceProfile} from './color';
+import type {SourceColorReader,SourceColorReason,SavedSourceColor} from './source-color';
+export interface Snapshot {documentId:number;width:number;height:number;profile:string;mode:string;depth:unknown;historyId:number;sessionId:string;bounds:Bounds;mask:Uint8Array;sourceHash:string;clipBaseLayerId?:number;colorReason?:SourceColorReason}
+export interface Capture {snapshot:Snapshot;image:Raster;selectionMask:Uint8Array;protectionMask:Uint8Array;workingCopyOf?:number}
 export interface Protection {documentId:number;width:number;height:number;bounds:Bounds;mask:Uint8Array;sessionId:string}
 export class PhotoshopAdapter {
   private applications=new Map<string,{documentId:number;historyId:number;layerId:number}>();
-  constructor(public ps:any,public sessionId:string,private checkpoint:(stage:string)=>Promise<void>=async()=>{}){}
+  constructor(public ps:any,public sessionId:string,private checkpoint:(stage:string)=>Promise<void>=async()=>{},private readSourceColor:SourceColorReader=async()=>undefined){}
   private activeDocument():any {return this.ps.app.documents.length?this.ps.app.activeDocument:undefined;}
+  private profiled(doc:any):boolean {return hasSourceProfile(doc,this.ps.constants.ColorProfileType?.NONE);}
+  private sourceState(doc:any):string {return JSON.stringify([doc.id,doc.width,doc.height,doc.mode,doc.bitsPerChannel,doc.colorProfileName,doc.colorProfileType,doc.activeHistoryState.id,doc.path,doc.saved,doc.quickMaskMode]);}
+  private async savedColor(doc:any,file?:any):Promise<SavedSourceColor|undefined> {
+    // Photoshop has already applied any opening policy/conversion to a tagged
+    // document. A stale disk declaration must never reinterpret those pixels.
+    if(this.profiled(doc))return;
+    const color=await this.readSourceColor(doc,file);
+    const depth=doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8;
+    if(color?.kind!=='srgb'||color.width!==doc.width||color.height!==doc.height||color.depth!==depth||doc.mode!==this.ps.constants.DocumentMode.RGB)requireSourceProfile(doc,this.ps.constants.ColorProfileType?.NONE);
+    return color;
+  }
+  private async colorCopy(doc:any,context:any):Promise<any> {
+    const copy=await doc.duplicate(`${doc.name||'PS-AI'} — sRGB`,false);
+    if(!copy||copy.id===doc.id)throw new Error('工作副本的 sRGB 配置失败');
+    try {
+      await context.hostControl.registerAutoCloseDocument(copy.id);
+      copy.colorProfileName='sRGB IEC61966-2.1';
+      requireSourceProfile(copy,this.ps.constants.ColorProfileType?.NONE);
+      if(copy.colorProfileName!=='sRGB IEC61966-2.1')throw new Error('工作副本的 sRGB 配置失败');
+      return copy;
+    }catch(error){try{await copy.closeWithoutSaving();await context.hostControl.unregisterAutoCloseDocument(copy.id);}finally{this.ps.app.activeDocument=doc;}throw error;}
+  }
   private async rgbData(data:any,depth:8|16=8):Promise<Raster> {
     if(!data||![8,16].includes(data.componentSize)||(data.components!==3&&data.components!==4))throw new Error('没有返回 RGB / RGBA 8/16-bit 数据');
     const values=await data.getData({chunky:true,fullRange:true}),max=data.componentSize===16?65535:255;
@@ -19,16 +42,21 @@ export class PhotoshopAdapter {
   async importReference(file:any):Promise<Raster> {
     return this.ps.core.executeAsModal(async(context:any)=>{
       const previous=this.activeDocument(),existing=new Set(Array.from(this.ps.app.documents as any[]).map((d:any)=>d.id));
-      const doc=await this.ps.app.open(file),owned=!existing.has(doc.id);let data:any;
+      const doc=await this.ps.app.open(file),owned=!existing.has(doc.id);let data:any,copy:any;
       if(owned)await context.hostControl.registerAutoCloseDocument(doc.id);
       try {
         checkSize(doc.width,doc.height);
         this.checkDocumentFormat(doc);
+        const state=this.sourceState(doc),color=await this.savedColor(doc,file);
+        if(state!==this.sourceState(doc))throw new Error('来源文档尺寸、颜色或内容状态已改变，请重新捕获');
+        if(color)copy=await this.colorCopy(doc,context);
+        const source=copy??doc;
         const bounds={left:0,top:0,right:doc.width,bottom:doc.height};
-        const result=await this.ps.imaging.getPixels({documentID:doc.id,sourceBounds:bounds,colorSpace:'RGB',colorProfile:'sRGB IEC61966-2.1',componentSize:doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,applyAlpha:false});
+        const result=await this.ps.imaging.getPixels({documentID:source.id,sourceBounds:bounds,colorSpace:'RGB',colorProfile:'sRGB IEC61966-2.1',componentSize:doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,applyAlpha:false});
         data=result.imageData;return expandPixels(await this.rgbData(data),result.sourceBounds,bounds,result.level??0);
       } finally {
         data?.dispose();
+        if(copy){await copy.closeWithoutSaving();await context.hostControl.unregisterAutoCloseDocument(copy.id);}
         if(owned){await doc.closeWithoutSaving();await context.hostControl.unregisterAutoCloseDocument(doc.id);}
         if(previous&&Array.from(this.ps.app.documents as any[]).some((d:any)=>d.id===previous.id))this.ps.app.activeDocument=previous;
       }
@@ -44,7 +72,6 @@ export class PhotoshopAdapter {
     const modes=[this.ps.constants.DocumentMode.RGB,this.ps.constants.DocumentMode.GRAYSCALE].filter(v=>v!==undefined);
     const depths=[this.ps.constants.BitsPerChannelType.EIGHT,this.ps.constants.BitsPerChannelType.SIXTEEN].filter(v=>v!==undefined);
     if(!modes.includes(doc.mode)||!depths.includes(doc.bitsPerChannel))throw new Error('支持 RGB / 灰度 8/16-bit；其他模式请先在副本中转换为 RGB，原文档不会自动转换');
-    requireSourceProfile(doc,this.ps.constants.ColorProfileType?.NONE);
   }
   private bounds(doc:any):Bounds {
     const b=doc.selection.bounds;if(!b)throw new Error('请先建立编辑选区');
@@ -87,9 +114,13 @@ export class PhotoshopAdapter {
   async capture(margin=.15,protection?:Protection,expectedDocumentId=this.activeDocument()?.id,outputDepth:8|16=8):Promise<Capture> {
     if(!Number.isFinite(margin)||margin<0||margin>1)throw new Error('上下文边距无效');
     await this.checkpoint('capture.start');
-    return this.ps.core.executeAsModal(async()=>{
-      const doc=this.document(),selection=this.bounds(doc);
+    const expected=this.document();
+    if(expected.id!==expectedDocumentId)throw new Error('活动文档已切换，请在来源文档重新生成');
+    const state=this.sourceState(expected),color=await this.savedColor(expected);
+    return this.ps.core.executeAsModal(async(context:any)=>{
+      let doc=this.document();const original=doc,selection=this.bounds(doc);
       if(doc.id!==expectedDocumentId)throw new Error('活动文档已切换，请在来源文档重新生成');
+      if(state!==this.sourceState(doc))throw new Error('来源文档尺寸、颜色或内容状态已改变，请重新捕获');
       const pad=Math.max(32,Math.round(Math.min(selection.right-selection.left,selection.bottom-selection.top)*margin));
       const bounds={left:Math.max(0,selection.left-pad),top:Math.max(0,selection.top-pad),right:Math.min(doc.width,selection.right+pad),bottom:Math.min(doc.height,selection.bottom+pad)};
       checkSize(bounds.right-bounds.left,bounds.bottom-bounds.top);
@@ -101,19 +132,24 @@ export class PhotoshopAdapter {
         for(let i=0;i<protectionMask.length;i++)protectionMask[i]=p.rgba[i*4];mask=effectiveMask(mask,protectionMask);
       }
       if(!mask.some(v=>v>0))throw new Error('编辑范围完全被保护区覆盖');
-      await this.checkpoint('capture.pixels.read');
-      const result=await this.ps.imaging.getPixels({documentID:doc.id,sourceBounds:bounds,colorSpace:'RGB',colorProfile:'sRGB IEC61966-2.1',componentSize:doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,applyAlpha:false});
-      const data=result.imageData;
-      if(!data)throw new Error('选区上下文没有可读取的像素');
-      let image:Raster;
+      let copy:any,keepCopy=false;
       try {
-        await this.checkpoint('capture.pixels.getData');
-        image=expandPixels(await this.rgbData(data,outputDepth),result.sourceBounds,bounds,result.level??0);
-      } finally {data.dispose();await this.checkpoint('capture.pixels.disposed');}
-      let hash=2166136261;for(const v of image.rgba)hash=Math.imul(hash^v,16777619);
-      const clipBaseLayerId=await this.captureClippingBase(doc,bounds,image,mask);
-      const snapshot:Snapshot={documentId:doc.id,width:doc.width,height:doc.height,profile:doc.colorProfileName,mode:doc.mode,depth:doc.bitsPerChannel,historyId:doc.activeHistoryState.id,sessionId:this.sessionId,bounds,mask,sourceHash:(hash>>>0).toString(16),...(clipBaseLayerId===undefined?{}:{clipBaseLayerId})};
-      return {snapshot,image,selectionMask,protectionMask};
+        if(color){copy=await this.colorCopy(doc,context);doc=copy;}
+        await this.checkpoint('capture.pixels.read');
+        const result=await this.ps.imaging.getPixels({documentID:doc.id,sourceBounds:bounds,colorSpace:'RGB',colorProfile:'sRGB IEC61966-2.1',componentSize:doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,applyAlpha:false});
+        const data=result.imageData;
+        if(!data)throw new Error('选区上下文没有可读取的像素');
+        let image:Raster;
+        try {
+          await this.checkpoint('capture.pixels.getData');
+          image=expandPixels(await this.rgbData(data,outputDepth),result.sourceBounds,bounds,result.level??0);
+        } finally {data.dispose();await this.checkpoint('capture.pixels.disposed');}
+        let hash=2166136261;for(const v of image.rgba)hash=Math.imul(hash^v,16777619);
+        const clipBaseLayerId=await this.captureClippingBase(doc,bounds,image,mask);
+        const snapshot:Snapshot={documentId:doc.id,width:doc.width,height:doc.height,profile:doc.colorProfileName,mode:doc.mode,depth:doc.bitsPerChannel,historyId:doc.activeHistoryState.id,sessionId:this.sessionId,bounds,mask,sourceHash:(hash>>>0).toString(16),...(clipBaseLayerId===undefined?{}:{clipBaseLayerId}),...(color?.reason?{colorReason:color.reason}:{})};
+        if(copy){await context.hostControl.unregisterAutoCloseDocument(copy.id);keepCopy=true;}
+        return {snapshot,image,selectionMask,protectionMask,...(copy?{workingCopyOf:original.id}:{})};
+      }finally{if(copy&&!keepCopy){await copy.closeWithoutSaving();await context.hostControl.unregisterAutoCloseDocument(copy.id);this.ps.app.activeDocument=original;}}
     },{commandName:'ps-ai 捕获选区'});
   }
   async protection():Promise<Protection> {

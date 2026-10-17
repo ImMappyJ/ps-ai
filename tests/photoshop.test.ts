@@ -26,6 +26,65 @@ test('native16 capture and application retain non-257 colors/alpha;8 target conv
 });
 const patch={width:2,height:2,rgba:new Uint8Array([255,0,0,128,255,0,0,255,255,0,0,255,255,0,0,255])};
 
+test('verified saved sRGB uses a tagged working copy for capture and apply without changing the original',async()=>{
+  const h=host();h.doc.colorProfileName='';h.doc.saved=false;h.doc.layers.push({...h.doc.layers[0],id:3,opacity:40});
+  const copy:any={...h.doc,id:22,colorProfileName:'',layers:h.doc.layers.map((l:any,i:number)=>({...l,id:9+i})),activeHistoryState:{id:200},closeWithoutSaving:async()=>{h.calls.push('close-copy');h.ps.app.documents=[h.doc];}};
+  copy.createLayer=async()=>{h.calls.push('copy-layer');const layer={id:56,move:async()=>{}};copy.layers.unshift(layer);return layer;};
+  h.doc.duplicate=async(_name:string,merge:boolean)=>{assert.equal(merge,false);h.ps.app.documents.push(copy);h.ps.app.activeDocument=copy;return copy;};
+  const modal=h.ps.core.executeAsModal;h.ps.core.executeAsModal=(fn:any)=>modal((ctx:any)=>fn({...ctx,hostControl:{...ctx.hostControl,registerAutoCloseDocument:async()=>{},unregisterAutoCloseDocument:async()=>{}}}));
+  const adapter=new PhotoshopAdapter(h.ps,'session-a',async()=>{},async()=>({kind:'srgb',format:'webp',width:100,height:80,depth:8,reason:'webp-default'}));
+  const captured=await adapter.capture(0,undefined,11);
+  assert.equal(h.doc.colorProfileName,'');assert.equal(copy.colorProfileName,'sRGB IEC61966-2.1');
+  assert.equal(captured.snapshot.documentId,22);assert.equal(captured.snapshot.colorReason,'webp-default');
+  assert.equal(h.calls.find(c=>c[0]==='getPixels')[1].documentID,22);
+  await adapter.apply(captured.snapshot,captured.image,'AI');
+  assert.equal(h.calls.find(c=>c[0]==='putPixels')[1].documentID,22);assert.equal(h.doc.layers.length,2);assert.equal(h.doc.layers[1].opacity,40);
+});
+
+test('untagged PNG16 working copy preserves high samples, semi-alpha and original protection coordinates',async()=>{
+  const h=host();h.doc.colorProfileName='';h.doc.saved=false;h.doc.bitsPerChannel='bitDepth16';h.ps.constants.BitsPerChannelType.SIXTEEN='bitDepth16';
+  const copy:any={...h.doc,id:22,layers:[{...h.doc.layers[0],id:9}],closeWithoutSaving:async()=>{}};
+  h.doc.duplicate=async()=>{h.ps.app.documents.push(copy);h.ps.app.activeDocument=copy;return copy;};
+  const modal=h.ps.core.executeAsModal;h.ps.core.executeAsModal=(fn:any)=>modal((ctx:any)=>fn({...ctx,hostControl:{...ctx.hostControl,registerAutoCloseDocument:async()=>{},unregisterAutoCloseDocument:async()=>{}}}));
+  h.ps.imaging.getPixels=async()=>({imageData:{width:1,height:1,components:4,componentSize:16,getData:async()=>new Uint16Array([12345,23456,34567,45678]),dispose(){}},sourceBounds:{left:40,top:30,right:41,bottom:31}});
+  const adapter=new PhotoshopAdapter(h.ps,'session-a',async()=>{},async()=>({kind:'srgb',format:'png',width:100,height:80,depth:16,reason:'png-srgb'}));
+  const protection={documentId:11,width:100,height:80,bounds:{left:40,top:30,right:42,bottom:32},mask:new Uint8Array([0,255,0,0]),sessionId:'session-a'};
+  const c=await adapter.capture(0,protection,11,16),pixel=30*66+32;
+  assert.ok(c.image.rgba instanceof Uint16Array);assert.deepEqual([...c.image.rgba.slice(pixel*4,pixel*4+4)],[12345,23456,34567,45678]);
+  assert.equal(c.snapshot.clipBaseLayerId,9);assert.equal(c.snapshot.mask[pixel],255);assert.equal(c.snapshot.mask[pixel+1],0);assert.equal(c.workingCopyOf,11);assert.equal(h.doc.colorProfileName,'');
+});
+
+test('current ICC wins after editing; stale saved color never reinterprets or duplicates a tagged document',async()=>{
+  const h=host();h.doc.colorProfileName='Adobe RGB (1998)';h.doc.saved=false;
+  const adapter=new PhotoshopAdapter(h.ps,'session-a',async()=>{},async()=>{throw new Error('must not read stale source metadata');});
+  const c=await adapter.capture();assert.equal(c.snapshot.documentId,11);assert.equal(c.snapshot.profile,'Adobe RGB (1998)');
+});
+
+test('a document changed during source file selection is rejected before duplication or pixel reads',async()=>{
+  const h=host();h.doc.colorProfileName='';
+  const adapter=new PhotoshopAdapter(h.ps,'session-a',async()=>{},async()=>{h.doc.activeHistoryState.id++;return {kind:'srgb',format:'webp',width:100,height:80,depth:8,reason:'webp-default'};});
+  await assert.rejects(adapter.capture(),/状态已改变/);assert.equal(h.calls.some(c=>c[0]==='getPixels'),false);
+});
+
+test('failed copy capture closes the copy and restores the original; selecting a protection mask needs no color guess',async()=>{
+  const h=host();h.doc.colorProfileName='';
+  const protection=await h.adapter.protection();assert.equal(protection.documentId,11);
+  const copy:any={...h.doc,id:22,closeWithoutSaving:async()=>{h.calls.push('close-copy');h.ps.app.documents=[h.doc];}};
+  h.doc.duplicate=async()=>{h.ps.app.documents.push(copy);h.ps.app.activeDocument=copy;return copy;};
+  const modal=h.ps.core.executeAsModal;h.ps.core.executeAsModal=(fn:any)=>modal((ctx:any)=>fn({...ctx,hostControl:{...ctx.hostControl,registerAutoCloseDocument:async()=>{},unregisterAutoCloseDocument:async()=>{}}}));
+  h.ps.imaging.getPixels=async()=>{throw new Error('pixel read failed');};
+  const adapter=new PhotoshopAdapter(h.ps,'session-a',async()=>{},async()=>({kind:'srgb',format:'png',width:100,height:80,depth:8,reason:'png-srgb'}));
+  await assert.rejects(adapter.capture(),/pixel read failed/);assert.equal(h.calls.includes('close-copy'),true);assert.equal(h.ps.app.activeDocument.id,11);assert.equal(h.doc.colorProfileName,'');
+});
+
+test('untagged saved declarations cannot override mode, depth or dimension mismatch',async()=>{
+  for(const change of [{depth:16},{width:101},{kind:'icc' as const}]){
+    const h=host();h.doc.colorProfileName='';
+    const adapter=new PhotoshopAdapter(h.ps,'session-a',async()=>{},async()=>({kind:'srgb',format:'webp',width:100,height:80,depth:8,...change}));
+    await assert.rejects(adapter.capture(),/色彩空间/);assert.equal(h.calls.some(c=>c[0]==='getPixels'),false);
+  }
+});
+
 test('未标记来源和参考图在像素读取前停止，不猜测工作色域且关闭自己的参考文档',async()=>{
   for(const profile of ['', 'Untagged RGB', '未标记的 RGB']){
     const h=host();h.doc.colorProfileName=profile;

@@ -12,6 +12,8 @@ PS-AI 将 ComfyUI 接到 Photoshop 中，用于局部修图、人像服装和道
 
 开发分支的面板可选择 ComfyUI、Nano Banana、GPT Image 和 BaiLian，支持分别保存模型与加密 Key，并按需启动本机中转；人像工作区新增光影重塑。配置见 [平台选择](docs/setup/PLATFORMS.md)，接口细节见 [百炼](docs/providers/BAILIAN.md)、[Gemini / Nano Banana](docs/providers/GEMINI.md) 与 [OpenAI Images](docs/providers/OPENAI.md) 的平台适配服务。平台路径仍待真实 API Key 和 Photoshop 验收，**不在已发布的 v0.4.0 包中**。本页下方截图及已测能力对应 ComfyUI 路径。
 
+开发版另补充了[原图色彩读取](docs/usage/USER_GUIDE.md#source-color)：没有文档 ICC 时可识别静态 WebP 的默认 sRGB 或 PNG 的显式 sRGB 标记，在工作副本中继续。WebP 8 位工作副本已在 Photoshop 27 完成等值回填与撤销检查；PNG、参考导入和新版面板交互仍待实机验收。现有 v0.4.0 包不包含这项改动。
+
 ## 文档导航
 
 | 用途 | 文档 |

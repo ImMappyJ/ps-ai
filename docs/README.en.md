@@ -12,6 +12,8 @@ Upgrading from 0.3.0 changes the panel name from `PS-AI FOR ME` to `PS-AI` and i
 
 The development panel offers ComfyUI, Nano Banana, GPT Image and BaiLian, separate model profiles and encrypted keys, and an on-demand local relay. Portrait adds relighting. See [platform setup](setup/PLATFORMS.en.md) and adapter details: [Bailian](providers/BAILIAN.en.md), [Gemini / Nano Banana](providers/GEMINI.en.md) and [OpenAI Images](providers/OPENAI.en.md) gateways. Live API-key and Photoshop acceptance are pending; **published v0.4.0 packages do not contain them**. Screenshots and validated behavior below refer to ComfyUI.
 
+The development build also adds [saved source color resolution](usage/USER_GUIDE.en.md#source-color): an untagged static WebP can use its default sRGB, and PNG can use an explicit sRGB chunk, through a tagged working copy. A WebP8 working copy passed identity apply/undo in Photoshop 27; native PNG, reference import and new panel interactions remain pending. Existing v0.4.0 packages do not include it.
+
 ## Documentation
 
 | Purpose | Guide |

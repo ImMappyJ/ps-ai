@@ -4,6 +4,7 @@ import {buildGraph,TEMPLATE_VERSION,templateForDepth} from './workflow';import {
 import {Raster,encodePng,decodePng,decodeModelPng,resize,maskRaster,makeMapping,convertDepth,rasterDepth} from './image';
 import {PhotoshopAdapter,Capture,Protection,Snapshot} from './photoshop';import {Storage} from './storage';import {runHostProbe} from './p0-host';
 import {prepareEditCandidate} from './composite';
+import {createSourceColorReader} from './source-color';
 import {t,setLanguage,errorText} from './i18n';
 import {normalizeBaseUrl,DEFAULT_MODELS} from './profile';
 import {rangePreview} from './range-preview';
@@ -12,7 +13,7 @@ import {GatewayClient} from './gateway-client';
 import {DEFAULT_GATEWAY_MODEL,GATEWAY_TEMPLATE,validateGeneration} from './gateway-protocol';
 import type {GatewayCapabilities,GenerationRequest} from './gateway-protocol';
 declare const require:(name:string)=>any;
-const ps=require('photoshop'),uxp=require('uxp'),store=new Storage(uxp),adapter=new PhotoshopAdapter(ps,uuid(),stage=>store.trace(stage));
+const ps=require('photoshop'),uxp=require('uxp'),store=new Storage(uxp),sourceColorReader=createSourceColorReader(uxp),adapter=new PhotoshopAdapter(ps,uuid(),stage=>store.trace(stage),async(doc,file)=>{if(!file)status(t('请选择当前文档的原文件，以读取保存的色彩信息'));return sourceColorReader(doc,file);});
 let settings:BackendSettings=defaultSettings(),settingsReady=false,client:ComfyClient|GatewayClient=new ComfyClient(),coordinator=new JobCoordinator(client,store);
 const relay=new RelayController(uxp),relayTokens=new Map<PlatformId,string>();
 let draftConnections:BackendSettings['connections'],displayedConnection:ConnectionId='comfyui',keyRequest=0;
@@ -119,7 +120,13 @@ async function preview(image:Raster,size=240):Promise<string> {
   return 'data:image/png;base64,'+encoded;
 }
 function activeDocumentId():number|undefined{return ps.app.documents.length?ps.app.activeDocument?.id:undefined;}
-async function captureArea(expectedDocumentId=activeDocumentId(),showPreview=true){capture=await adapter.capture(Number(el('margin').value)/100,protection,expectedDocumentId,outputDepth());const {snapshot:s,image}=capture;const colorInfo=!s.profile||/^(none|untagged|未标记|无)$/i.test(s.profile)?t(" · 未标记 ICC，颜色依赖 PS 工作空间；请在副本指定正确配置文件"):` · ${s.profile}`;el('source-info').textContent=t("文档 {0} · 区域 {1}×{2} · {3}{4}",s.documentId,image.width,image.height,protection?t('已扣除保护区'):t('未指定保护区'),colorInfo);el('source-preview').src=await preview(image);el('mask-preview').src=await preview(rangePreview(image,s.mask,capture.protectionMask));if(showPreview)el('selection-previews').style.display='flex';}
+async function captureArea(expectedDocumentId=activeDocumentId(),showPreview=true){
+  capture=await adapter.capture(Number(el('margin').value)/100,protection,expectedDocumentId,outputDepth());
+  const {snapshot:s,image}=capture;
+  if(protection&&capture.workingCopyOf===protection.documentId)protection={...protection,documentId:s.documentId};
+  const colorInfo=s.colorReason?t(s.colorReason==='webp-default'?' · WebP 默认 sRGB · 已创建工作副本':' · PNG sRGB 标记 · 已创建工作副本'):` · ${s.profile}`;
+  el('source-info').textContent=t("文档 {0} · 区域 {1}×{2} · {3}{4}",s.documentId,image.width,image.height,protection?t('已扣除保护区'):t('未指定保护区'),colorInfo);el('source-preview').src=await preview(image);el('mask-preview').src=await preview(rangePreview(image,s.mask,capture.protectionMask));if(showPreview)el('selection-previews').style.display='flex';
+}
 async function refreshHistory(){const records=await store.history();const list=el('history'),old=list.value;list.innerHTML='';for(const r of records)option(list,r.id,`${r.createdAt.slice(0,16)} · ${r.state} · ${String(r.userPrompt??'').slice(0,22)}`);if(records.length)list.value=records.some(r=>r.id===old)?old:records[0].id;}
 async function restoreSnapshot(record:JobRecord):Promise<Snapshot|undefined> {
   if(!record.snapshot)return undefined;const saved=record.snapshot as Omit<Snapshot,'mask'>;
@@ -319,7 +326,7 @@ on('toggle-error-details',async()=>{el('diagnostic-details').style.display=el('d
 on('capture',captureArea);
 on('protect',async()=>{protection=await adapter.protection();capture=undefined;el('selection-previews').style.display='none';el('source-info').textContent=t("保护区已保存；请重新圈选编辑区，再捕获或生成");status(t("保护区保留原始像素，不依赖自动人脸识别"));});
 on('clear-protection',async()=>{protection=undefined;capture=undefined;el('selection-previews').style.display='none';el('source-info').textContent=t("保护区已清除，请重新捕获");});
-on('reference',async()=>{const file=await uxp.storage.localFileSystem.getFileForOpening({types:['png','jpg','jpeg']});if(!file)return;reference=await adapter.importReference(file);el('reference-info').textContent=`${file.name} · ${reference.width}×${reference.height} · sRGB 8-bit`;});
+on('reference',async()=>{const file=await uxp.storage.localFileSystem.getFileForOpening({types:['png','jpg','jpeg','webp']});if(!file)return;reference=await adapter.importReference(file);el('reference-info').textContent=`${file.name} · ${reference.width}×${reference.height} · sRGB 8-bit`;});
 on('clear-reference',async()=>{reference=undefined;el('reference-info').textContent=t("未选择参考图");});
 on('generate',generate);on('apply',apply);on('recover',recover);
 on('cancel',async()=>{stopBatch=true;if(!busy&&current){lock(true);try{assertBackend(current);const result=await coordinator.cancel(current);if(result.state==='ready'){await saveReady(current,result.images!);status(t("任务已完成，候选已保留"));}else status(result.state==='cancelled'?t("取消已确认；生成文件保留"):t(client instanceof GatewayClient?'后续候选已停止；当前平台任务继续，完成后保留结果':"取消尚未确认，请继续恢复或取消原任务"));await refreshHistory();}finally{lock(false);}}});
