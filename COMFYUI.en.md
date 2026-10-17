@@ -6,10 +6,6 @@
 
 The plugin includes neither the backend nor weights. Reuse an existing ComfyUI if it meets the contract below. 8-bit uses `qwen21-local-v2-rgba`; 16-bit uses `qwen21-local-v3-rgba16`. Older screenshots show 0.3.0; setup for 0.4.0 is described below.
 
-**Jump to:** [Model files](#model-files) · [Connect the panel](#connection) · [16-bit output](#output-depth) · [Troubleshooting](#troubleshooting)
-
-<a id="output-depth"></a>
-
 ## 16-bit output (0.4.0)
 
 8-bit remains the default. To retain higher precision from generation:
@@ -24,8 +20,6 @@ The node writes decoded VAE floats directly to tagged 16-bit RGB/RGBA PNG. Resiz
 
 The optional JSON field `"outputDepth": 16` travels with settings. Old settings default to 8-bit; historical jobs retain their own output template.
 
-<a id="backend"></a>
-
 ## 1. Prepare a working backend
 
 Already have ComfyUI? Start it, open its page in a browser and check nodes and weights. Do not overwrite existing models or workflows just to connect the plugin.
@@ -39,8 +33,6 @@ For a new installation, follow the official [Windows Portable guide](https://doc
 | Python / PyTorch | Existing backend: `3.13.15` / `2.14.0+cu130`. Not minimum requirements for other hardware. |
 
 Newer versions may work, but must meet the node and API requirements below. `UnetLoaderGGUF` comes from the GGUF extension. A compatible ComfyUI supplies the Qwen 2.1 and other core nodes. Follow the extension's instructions for `custom_nodes`, use the backend's own Python for dependencies and restart through your normal procedure. A matching node name alone does not prove compatibility.
-
-<a id="model-files"></a>
 
 ## 2. Model files
 
@@ -67,16 +59,11 @@ ComfyUI/
 
 After starting ComfyUI, open **Model Library** in its sidebar and search for the main part of a filename. This screenshot uses the Chinese backend UI, where Model Library is labeled “模型库”. The preset VAE appears under `vae`, confirming that the backend can see it. The library may hide extensions; select the full filename returned by the plugin's scan.
 
-<p align="center">
-  <a href="assets/comfyui-model-library.jpg"><img src="assets/comfyui-model-library.jpg" width="360" alt="Preset VAE under the vae category in ComfyUI Model Library"></a>
-  <br><sub>Model Library → vae · Click for the original capture.</sub>
-</p>
+![Preset VAE found under vae in the ComfyUI model library](assets/comfyui-model-library.jpg)
 
 This is a tested combination, not a recommendation for every use. The diffusion model is a third-party quantization. Read its model card and the upstream [Qwen license](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE): current terms permit non-commercial research / evaluation; commercial use requires separate permission. Weights are not distributed with the plugin.
 
 Exact sizes, pinned sources and SHA256 values are in [compatibility.json](config/compatibility.json). Reuse identical existing files. The environment checker verifies preset sizes and hashes; alternate models are reported as needing your own validation.
-
-<a id="connection"></a>
 
 ## 3. Address and settings format
 
@@ -93,30 +80,14 @@ A local backend normally listens on `127.0.0.1`. A remote backend needs a reacha
 
 ### Configure the panel
 
+The screenshot shows the 0.3.0 Portable panel in Photoshop 27.0 after a successful model scan and connection check. CCX has the same settings. The header shows **Connected** when the check succeeds.
+
+![ComfyUI address, three model selectors and Connect in Photoshop](assets/setup-en.png)
+
 1. Expand **Backend and models**. Enter the service origin that opens in your browser under **ComfyUI address**. If you changed the backend port, change it here too.
 2. With the backend running, click **Scan models**. Select the **Diffusion model**, **Vision / text encoder** and **VAE** using the table above. Scanning uses the address currently entered.
 3. Click **Save settings**, then **Connect** at the top. Wait for **Connected**, then try a test generation. If connection fails, read the message and the troubleshooting table below.
 4. To move settings to another machine, **Export JSON** here and **Import JSON** there, then check its address and model names. Changing language saves only the language, without submitting an unsaved address.
-
-<details>
-<summary>Connection screenshots · Chinese and English (0.3.0)</summary>
-
-These captures show the 0.3.0 Portable panel in Photoshop 27.0 after a successful model scan and connection check. CCX has the same settings. The header shows **Connected** when the check succeeds.
-
-<table>
-  <tr>
-    <th width="50%" align="center">Chinese UI</th>
-    <th width="50%" align="center">English UI</th>
-  </tr>
-  <tr>
-    <td align="center" valign="top"><a href="assets/setup-zh.png"><img src="assets/setup-zh.png" width="340" alt="Connected Portable panel in Chinese"></a></td>
-    <td align="center" valign="top"><a href="assets/setup-en.png"><img src="assets/setup-en.png" width="340" alt="Connected Portable panel in English"></a></td>
-  </tr>
-</table>
-
-<p align="center"><sub>Click either capture for its original resolution. The 0.4.0 setup steps are described below.</sub></p>
-
-</details>
 
 In 0.4.0, **Connect** saves settings only after checks pass. Failed connections keep the previous settings. **Save settings** and **Import JSON** can save an unchecked draft. Equivalent settings:
 
@@ -167,8 +138,6 @@ Native round trips and independent conversions passed on PS 27.0 for sRGB, Adobe
 
 The captured range is shown during generation: amber means effective edit, blue manual protection and gray context. A real feathered Photoshop mask controls application; the visual guide is not a strict latent inpaint mask. Candidates identify their source and whether application adds a result or replaces this capture’s plugin layer. Closed, changed or expired source sessions block application while keeping candidates exportable. Investigate host crashes using logs and separate GPU/network controls. One successful run is not a long-term stability guarantee; work on saved copies.
 
-<a id="model-compatibility"></a>
-
 ## 4. Adapting your own models
 
 This version supports **model mappings within the existing workflow**. Weights must use a compatible Qwen-Image 2.1 architecture and load correctly with these options:
@@ -194,8 +163,6 @@ Input / output rules:
 
 SD, SDXL, Flux, other Qwen architectures and arbitrary workflow import are unsupported. They need separate templates, node checks, size / mask contracts and Photoshop round-trip validation. Changing a dropdown filename is insufficient.
 
-<a id="api"></a>
-
 ## 5. Backend API contract
 
 Proxies and custom servers must preserve these semantics:
@@ -212,8 +179,6 @@ Proxies and custom servers must preserve these semantics:
 | `/ws?clientId=…` | WS for HTTP, WSS for HTTPS; `progress` includes `prompt_id`, `value`, `max` |
 
 Having `/prompt` is not enough. A backend that ignores caller IDs or lacks task-specific cancellation needs upgrading / adapting. There is no global `/interrupt` fallback, which could stop someone else's work. Connect checks nodes and models without interrupting tasks to probe cancellation. Full acceptance requires submitting, recovering and cancelling a test task. See [ComfyUI server routes](https://docs.comfy.org/development/comfyui-server/comms_routes).
-
-<a id="environment-tools"></a>
 
 ## 6. Environment tools
 
@@ -235,8 +200,6 @@ powershell.exe -NoProfile -File .\scripts\prepare-environment.ps1 -ComfyRoot $co
 ```
 
 This creates `extra_model_paths.yaml`, `start-comfyui.ps1` and importable `ps-ai-settings.json`. It refuses existing output directories, installs nothing, downloads no weights and leaves the backend untouched. Start the generated script yourself only when the service is stopped. It listens locally; if the port is already serving, reuse and check that service.
-
-<a id="troubleshooting"></a>
 
 ## 7. Troubleshooting
 

@@ -6,10 +6,6 @@
 
 插件不包含推理后端和模型。已有 ComfyUI 能运行下面的工作流，就可以直接接入，不必重装环境。8 位使用 `qwen21-local-v2-rgba`，16 位使用 `qwen21-local-v3-rgba16`。文中的旧面板截图来自 0.3.0；0.4.0 的配置流程见下文。
 
-**快速定位：** [模型放置](#model-files) · [连接面板](#connection) · [16 位输出](#output-depth) · [常见问题](#troubleshooting)
-
-<a id="output-depth"></a>
-
 ## 16 位输出（0.4.0）
 
 默认仍为 8 位。需要保留生成结果的更高精度时：
@@ -23,8 +19,6 @@
 节点直接把 VAE 解码的浮点像素保存为带 sRGB 标记的 16 位 RGB/RGBA PNG。插件的缩放、透明度处理和 PNG 导出继续保留 16 位颜色；面板缩略图及模型输入使用 8 位。选区／保护区仍使用 8 位灰度蒙版。16 位容器不等于模型有 16 位有效细节；BF16/FP16 推理、sRGB 色域和生成偏色的限制仍然存在，不支持 HDR。
 
 配置 JSON 的可选字段 `"outputDepth": 16` 可随地址和模型映射一起导入、导出。旧配置不含此字段时使用 8 位。旧任务按各自原模板恢复。
-
-<a id="backend"></a>
 
 ## 1. 先准备能用的后端
 
@@ -41,8 +35,6 @@
 | Python / PyTorch | 现有后端为 `3.13.15` / `2.14.0+cu130`；不是其他硬件的最低要求 |
 
 `UnetLoaderGGUF` 来自 GGUF 扩展；Qwen 2.1 节点和其余基础节点由兼容的 ComfyUI 提供。按扩展仓库说明安装到自己的 `custom_nodes`，使用该后端的 Python 安装依赖，并由你正常重启后端。不要从同名节点判断接口一定相同。
-
-<a id="model-files"></a>
 
 ## 2. 模型放在哪里
 
@@ -69,16 +61,11 @@ ComfyUI/
 
 启动后，点 ComfyUI 左侧“模型库”，搜索文件名的主要部分。下面以 VAE 为例：文件出现在 `vae` 分类中，说明后端已经识别到它。模型库显示名可能省略扩展名；插件里仍要选择扫描返回的完整文件名。
 
-<p align="center">
-  <a href="assets/comfyui-model-library.jpg"><img src="assets/comfyui-model-library.jpg" width="360" alt="ComfyUI 模型库中 vae 分类下的预设 VAE"></a>
-  <br><sub>模型库 → vae · 点击查看原始截图。</sub>
-</p>
+![在 ComfyUI 模型库搜索预设 VAE，结果位于 vae 分类](assets/comfyui-model-library.jpg)
 
 这是测试组合，不代表推荐所有用途。生成模型是第三方量化版本，使用前阅读它的模型卡以及上游 [Qwen 许可](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE)：当前许可限定非商业研究／评估，商业用途需另行授权。权重不随插件分发。
 
 精确字节数、固定来源版本和 SHA256 位于 [compatibility.json](config/compatibility.json)。已有同一文件不必重新下载。环境检查脚本会校验预设模型的文件大小和哈希，自选模型则标为“需要自行验证”。
-
-<a id="connection"></a>
 
 ## 3. 插件地址与配置格式
 
@@ -95,30 +82,14 @@ https://comfy.example.com
 
 ### 按面板完成配置
 
+下图为 Photoshop 27.0 中的 0.3.0 Portable 面板，模型扫描和连接检查均已完成，CCX 的配置项相同。连接成功后，顶部会显示“已连接”。
+
+![Photoshop 中的 ComfyUI 地址、三个模型选项和连接按钮](assets/setup-zh.png)
+
 1. 展开“模型与连接”，在“ComfyUI 地址”填入浏览器能打开的服务根地址。后端端口改过，这里也要一起改。
 2. 后端启动后，点“扫描模型”。按上表依次选择“生成模型”“视觉／文本编码器”和“VAE”；扫描使用当前输入的地址。
 3. 点“保存配置”，再点顶部“连接”。顶部显示“已连接”后，再运行一次测试生成。连接失败时先看提示和本文末尾的排错表。
 4. 要迁移到另一台机器，点“导出 JSON”，在另一台机器“导入 JSON”，重新核对地址和模型。切换界面语言只保存语言，不会提交尚未保存的地址。
-
-<details>
-<summary>连接设置截图 · 中文／English（0.3.0）</summary>
-
-以下截图来自 Photoshop 27.0 中的 0.3.0 Portable 面板，已完成模型扫描和连接检查；CCX 的配置项相同。连接成功后，顶部显示“已连接”。
-
-<table>
-  <tr>
-    <th width="50%" align="center">中文界面</th>
-    <th width="50%" align="center">英文界面</th>
-  </tr>
-  <tr>
-    <td align="center" valign="top"><a href="assets/setup-zh.png"><img src="assets/setup-zh.png" width="340" alt="中文 Portable 面板：地址、模型与已连接状态"></a></td>
-    <td align="center" valign="top"><a href="assets/setup-en.png"><img src="assets/setup-en.png" width="340" alt="英文 Portable 面板：地址、模型与已连接状态"></a></td>
-  </tr>
-</table>
-
-<p align="center"><sub>点击任一截图查看原始分辨率。0.4.0 的向导流程见下文。</sub></p>
-
-</details>
 
 0.4.0 中的“连接”会在检查通过后保存配置；失败时保留原有设置。“保存配置”和“导入 JSON”可先保存待检查的配置。对应的配置示例：
 
@@ -169,8 +140,6 @@ PS 27.0 中已通过 sRGB、Adobe RGB、Display P3、ProPhoto 的 8/16 位来源
 
 生成时显示实际捕获范围：橙色为有效编辑区，蓝色为手动保护区，灰色为模型上下文。最终回填仍使用真实羽化蒙版，范围辅助图不会变成严格的模型 inpaint 遮罩。候选显示来源文档及新增／替换方式；来源关闭、改动或会话结束后停止回填，候选仍可导出或新建文档。宿主崩溃须结合日志和 GPU／网络设置分别排查；一次通过不代表长期稳定，请保存副本。
 
-<a id="model-compatibility"></a>
-
 ## 4. 自己的模型怎样适配
 
 这版开放的是 **当前工作流内的模型映射**。模型必须属于兼容的 Qwen-Image 2.1 架构，并能被这些加载器以这些选项正确加载：
@@ -196,8 +165,6 @@ PS 27.0 中已通过 sRGB、Adobe RGB、Display P3、ProPhoto 的 8/16 位来源
 
 SD、SDXL、Flux、其他 Qwen 架构和任意工作流导入不在当前支持范围。适配这些模型需要独立模板、节点校验、尺寸／蒙版约定及真机回填验证，不能只修改下拉框文件名。
 
-<a id="api"></a>
-
 ## 5. 后端接口标准
 
 插件使用以下 HTTP API。代理或自建服务必须保留这些接口语义：
@@ -214,8 +181,6 @@ SD、SDXL、Flux、其他 Qwen 架构和任意工作流导入不在当前支持�
 | `/ws?clientId=…` | HTTP 用 WS、HTTPS 用 WSS；`progress` 消息含 `prompt_id`、`value`、`max` |
 
 仅有常见的 `/prompt` 接口还不够。旧后端如果忽略客户端 ID 或没有按 ID 取消接口，应升级／适配后再用；插件不会退回全局 `/interrupt`，以免停止别人的任务。连接检查只读节点和模型，不会为了探测取消能力中断任务；完整接口验收还要实际提交、恢复和取消一次测试任务。参考 [ComfyUI 官方服务接口](https://docs.comfy.org/development/comfyui-server/comms_routes)。
-
-<a id="environment-tools"></a>
 
 ## 6. 环境工具
 
@@ -237,8 +202,6 @@ powershell.exe -NoProfile -File .\scripts\prepare-environment.ps1 -ComfyRoot $co
 ```
 
 输出新的 `extra_model_paths.yaml`、`start-comfyui.ps1` 和 `ps-ai-settings.json`，导入后者即可。脚本不覆盖已有目录、不安装依赖、不下载权重、不修改现有后端。仅在服务未运行时由你启动生成的脚本；默认监听本机。已有服务正在用该端口时，继续复用并检查它。
-
-<a id="troubleshooting"></a>
 
 ## 7. 常见问题
 
