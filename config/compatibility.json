@@ -129,7 +129,7 @@
     "format": "sRGB tagged RGB/RGBA PNG16 SDR",
     "modelInputs": "8-bit",
     "selectionMasks": "8-bit",
-    "status": "unpublished development version; automated codec, backend inference and native sRGB16 acceptance passed",
+    "status": "experimental 0.4.0; automated codec, backend inference and native sRGB16 acceptance passed",
     "nativeAcceptance": {
       "date": "2026-10-16",
       "host": "Windows Photoshop 27.0.0",

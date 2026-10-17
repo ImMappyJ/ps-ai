@@ -6,13 +6,13 @@
 
 PS-AI 将 ComfyUI 接到 Photoshop 中，用于局部修图、COSPLAY 服装和道具处理，以及文字生图。圈选区域、描述修改要求，在面板里生成并预览候选，确认后应用为带蒙版的新图层。
 
-已发布版本为 **0.3.0（实验版）**；当前源码是尚未发布的 **0.4.0 开发版本**，增加配置向导、色彩检查、编辑范围预览和可选 16 位 SDR 输出。安装发行包时请查看对应版本的说明。生成结果可能需要手工修整，建议在已保存的副本上使用。不包含常规人像磨皮、去痘和肤色精修功能。
+当前版本为 **0.4.0（实验版）**，包含配置向导、色彩检查、编辑范围预览和可选 16 位 SDR 输出。安装时使用同版本的插件包和环境工具。生成结果可能需要手工修整，建议在已保存的副本上使用。不包含常规人像磨皮、去痘和肤色精修功能。
 
-0.3.0 中的面板名称仍是 `PS-AI FOR ME`。0.4.0 开发版改用 `PS-AI` 名称和 Morph Frame 标识，插件 ID 与 `PS-AI-FOR-ME` 安装目录保持不变。
+从 0.3.0 升级后，面板名称由 `PS-AI FOR ME` 改为 `PS-AI`，图标使用 Morph Frame 标识。插件 ID 与 `PS-AI-FOR-ME` 安装目录保持不变。
 
 ## 看看效果
 
-下面的示例使用 `3F3F3F.webp` 的副本，在腿部选区内添加白色过膝袜。图片来自 0.4.0 开发版的实际生成与 Photoshop 合成，棋盘格表示透明背景。
+下面的示例使用 `3F3F3F.webp` 的副本，在腿部选区内添加白色过膝袜。图片来自 0.4.0 的实际生成与 Photoshop 合成，棋盘格表示透明背景。
 
 | 使用前 | 使用后 |
 | --- | --- |
@@ -47,12 +47,12 @@ PS-AI 将 ComfyUI 接到 Photoshop 中，用于局部修图、COSPLAY 服装和�
 
 ## 安装发行包
 
-从 [Releases](https://github.com/ImMappyJ/ps-ai/releases) 下载同版本插件包和环境工具，选择下面任一种方式安装。尚无发行包时，可按文末说明从源码构建；主分支包含开发中的改动。
+从 [v0.4.0 Release](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.4.0) 下载同版本插件包和环境工具，选择下面任一种方式安装。需要自己构建时，按文末说明操作；发布标签对应该版本源码，主分支可能包含后续改动。
 
 ### 方式一：CCX
 
-1. 安装 Adobe Creative Cloud 桌面应用，双击 `ps-ai-0.3.0-experimental.ccx`，按 Adobe 安装提示操作。
-2. 重启 Photoshop，从“增效工具 → PS-AI FOR ME”打开面板。
+1. 安装 Adobe Creative Cloud 桌面应用，双击 `ps-ai-0.4.0-experimental.ccx`，按 Adobe 安装提示操作。
+2. 重启 Photoshop，从“增效工具 → PS-AI”打开面板。
 3. 如果双击没有反应，解压同版本 `environment-experimental.zip`，在其目录运行：
 
    ```powershell
@@ -65,9 +65,9 @@ CCX 关联到 UPIA 后若仍无法双击安装，可使用上面的脚本传入�
 ### 方式二：Portable 文件夹版
 
 1. 保存文档并完全退出 Photoshop。
-2. 解压 `ps-ai-0.3.0-portable-experimental.zip`，把整个 `PS-AI-FOR-ME` 文件夹复制到你实际安装的 Photoshop 的 `Plug-ins` 目录。
+2. 解压 `ps-ai-0.4.0-portable-experimental.zip`，把整个 `PS-AI-FOR-ME` 文件夹复制到你实际安装的 Photoshop 的 `Plug-ins` 目录。
 3. 确认目录结构是 `Plug-ins/PS-AI-FOR-ME/manifest.json`，不要多套一层文件夹。
-4. 重启，从“增效工具 → PS-AI FOR ME (Portable)”打开。
+4. 重启，从“增效工具 → PS-AI (Portable)”打开。
 
 Portable 不需要 CCX 安装器，已在 Windows PS 27.0 测试文件夹加载和图像往返。其他版本及关闭开发人员模式时的加载情况尚未测试。若 Photoshop 无法识别该目录，可改用 CCX，或按文末的源码构建方式加载。
 

@@ -6,13 +6,13 @@
 
 PS-AI connects ComfyUI to Photoshop for local edits, COSPLAY outfits and props, and text-to-image generation. Select an area, describe the change and preview candidates in the panel, then apply a result as a new layer with an editable mask.
 
-**The published release is 0.3.0 (experimental).** This source tree is the unpublished **0.4.0 development version**, adding guided setup, color checks, edit-range previews and optional 16-bit SDR output. Use the documentation matching your installed release. Results may need manual cleanup, so work on saved copies. Routine skin smoothing, blemish removal and skin-tone retouching are not included.
+**Current version: 0.4.0 (experimental).** It includes guided setup, color checks, edit-range previews and optional 16-bit SDR output. Use matching plugin and environment packages. Results may need manual cleanup, so work on saved copies. Routine skin smoothing, blemish removal and skin-tone retouching are not included.
 
-The 0.3.0 panel is still named `PS-AI FOR ME`. Development version 0.4.0 uses `PS-AI` and the Morph Frame identity. Plugin IDs and the `PS-AI-FOR-ME` installation directory stay the same.
+Upgrading from 0.3.0 changes the panel name from `PS-AI FOR ME` to `PS-AI` and introduces the Morph Frame identity. Plugin IDs and the `PS-AI-FOR-ME` installation directory stay the same.
 
 ## Example
 
-This example uses a copy of `3F3F3F.webp` to add white over-the-knee socks within a selection around the legs. The images come from actual generation and Photoshop compositing in development version 0.4.0. The checkerboard shows transparency.
+This example uses a copy of `3F3F3F.webp` to add white over-the-knee socks within a selection around the legs. The images come from actual generation and Photoshop compositing in 0.4.0. The checkerboard shows transparency.
 
 | Before | After |
 | --- | --- |
@@ -47,12 +47,12 @@ ComfyUI can run here or on another reachable machine. Images and prompts go to t
 
 ## Install a release package
 
-Download matching plugin and environment tools from [Releases](https://github.com/ImMappyJ/ps-ai/releases), then choose either installation method below. If no package is available, follow the source-build instructions further down. The main branch includes work in progress.
+Download matching plugin and environment tools from the [v0.4.0 release](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.4.0), then choose either method below. Source-build instructions follow further down. Release tags identify the matching source; main may include later changes.
 
 ### Option 1: CCX
 
-1. Install Adobe Creative Cloud desktop. Double-click `ps-ai-0.3.0-experimental.ccx` and follow Adobe's installer.
-2. Restart Photoshop and open **Plugins → PS-AI FOR ME**.
+1. Install Adobe Creative Cloud desktop. Double-click `ps-ai-0.4.0-experimental.ccx` and follow Adobe's installer.
+2. Restart Photoshop and open **Plugins → PS-AI**.
 3. If double-clicking does nothing, extract the matching `environment-experimental.zip`, open PowerShell there and run:
 
    ```powershell
@@ -65,9 +65,9 @@ If double-clicking still fails after associating CCX files with UPIA, use the sc
 ### Option 2: Portable folder
 
 1. Save your work and quit Photoshop completely.
-2. Extract `ps-ai-0.3.0-portable-experimental.zip`. Copy the entire `PS-AI-FOR-ME` folder into your installed Photoshop **Plug-ins** directory.
+2. Extract `ps-ai-0.4.0-portable-experimental.zip`. Copy the entire `PS-AI-FOR-ME` folder into your installed Photoshop **Plug-ins** directory.
 3. Check the layout: `Plug-ins/PS-AI-FOR-ME/manifest.json`. Avoid an extra nested folder.
-4. Restart and open **Plugins → PS-AI FOR ME (Portable)**.
+4. Restart and open **Plugins → PS-AI (Portable)**.
 
 Portable needs no CCX installer. Folder loading and image round trips have been tested on Windows PS 27.0. Other versions and loading with developer mode disabled have not been tested. If Photoshop cannot find the folder, use CCX or the source-build method below.
 

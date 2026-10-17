@@ -4,7 +4,7 @@
 
 This walkthrough tests all nine modes on separate copies of **3F3F3F.webp**. Screenshots show the actual Portable panel in Windows Photoshop 27.0. Results were exported from Photoshop composites. Click an image for its original PNG; panel captures retain their native 541-pixel width, without enlargement or reconstructed UI.
 
-**Version: unpublished 0.4.0 development build.** Public 0.3.0 lacks guided setup, range previews and optional 16-bit output. See [installation](README.en.md#install-a-release-package) and [ComfyUI setup](COMFYUI.en.md).
+**For version 0.4.0 (experimental).** Version 0.3.0 lacks guided setup, range previews and optional 16-bit output. See [installation](README.en.md#install-a-release-package) and [ComfyUI setup](COMFYUI.en.md).
 
 ## Connect and make a copy
 

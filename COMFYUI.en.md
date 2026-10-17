@@ -4,9 +4,9 @@
 <h1 align="center">ComfyUI setup and model compatibility</h1>
 <p align="center"><a href="COMFYUI.md">简体中文</a> · <strong>English</strong> · <a href="README.en.md">README</a></p>
 
-The plugin includes neither the backend nor weights. Reuse an existing ComfyUI if it meets the contract below. 8-bit uses `qwen21-local-v2-rgba`; 16-bit uses `qwen21-local-v3-rgba16`. Older screenshots show 0.3.0; the 0.4.0 development setup is described below.
+The plugin includes neither the backend nor weights. Reuse an existing ComfyUI if it meets the contract below. 8-bit uses `qwen21-local-v2-rgba`; 16-bit uses `qwen21-local-v3-rgba16`. Older screenshots show 0.3.0; setup for 0.4.0 is described below.
 
-## 16-bit output (0.4.0 development version)
+## 16-bit output (0.4.0)
 
 8-bit remains the default. To retain higher precision from generation:
 
@@ -89,7 +89,7 @@ The screenshot shows the 0.3.0 Portable panel in Photoshop 27.0 after a successf
 3. Click **Save settings**, then **Connect** at the top. Wait for **Connected**, then try a test generation. If connection fails, read the message and the troubleshooting table below.
 4. To move settings to another machine, **Export JSON** here and **Import JSON** there, then check its address and model names. Changing language saves only the language, without submitting an unsaved address.
 
-In the 0.4.0 development version, **Connect** saves settings only after checks pass. Failed connections keep the previous settings. **Save settings** and **Import JSON** can save an unchecked draft. Equivalent settings:
+In 0.4.0, **Connect** saves settings only after checks pass. Failed connections keep the previous settings. **Save settings** and **Import JSON** can save an unchecked draft. Equivalent settings:
 
 ```json
 {
@@ -109,7 +109,7 @@ In the 0.4.0 development version, **Connect** saves settings only after checks p
 To support custom hosts, the UXP manifest declares network `domains: "all"`. Runtime requests go to the configured ComfyUI; there is no telemetry. A remote server receives and may retain uploaded images, references and prompts. Do not expose an unauthenticated backend to untrusted networks.
 
 
-### Setup in the 0.4.0 development version
+### Setup in 0.4.0
 
 First launch shows three steps. A valid saved configuration opens the workspace directly; **Setup** can reopen the checks.
 
