@@ -1,5 +1,13 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {defaultSettings,validateSettings,validateModels} from '../src/profile';import {buildGraph} from '../src/workflow';
+import test from 'node:test';import assert from 'node:assert/strict';import {defaultSettings,validateSettings,validateModels,switchConnection,rememberConnection} from '../src/profile';import {buildGraph} from '../src/workflow';
 const models={unet:'qwen/qwen-image-2.1-Q4_K_M.gguf',clip:'qwen/qwen3vl_8b_int8_convrot.safetensors',vae:'qwen/qwen_image_2.1_vae_bf16.safetensors'};
+test('platform profiles preserve custom ComfyUI address/depth and each model without exporting secrets',()=>{
+  const local={...defaultSettings(),baseUrl:'http://192.168.1.10:8288',outputDepth:16 as const};
+  const openai=switchConnection(local,'openai');assert.equal(openai.baseUrl,'http://localhost:8193');assert.equal(openai.backend,'gateway');assert.equal(openai.platform,'openai');assert.equal(openai.outputDepth,8);
+  const saved=rememberConnection({...openai,gatewayModel:'gpt-image-2.5-flare'});const gemini=switchConnection(saved,'gemini');assert.equal(gemini.gatewayModel,'gemini-2.5-flash-image');
+  assert.equal(switchConnection(gemini,'openai').gatewayModel,'gpt-image-2.5-flare');const restored=switchConnection(gemini,'comfyui');assert.equal(restored.baseUrl,local.baseUrl);assert.equal(restored.outputDepth,16);
+  assert.throws(()=>validateSettings({...openai,baseUrl:'https://evil.example'}));assert.throws(()=>validateSettings({...openai,platform:'other'}));
+  assert.doesNotMatch(JSON.stringify(validateSettings({...saved,apiKey:'private-key'})),/private-key/);
+});
 test('迁移设置只包含服务与模型搜索相对名，默认值不共享可变对象',()=>{
   const a=defaultSettings(),b=defaultSettings();a.models.unet='changed.gguf';assert.equal(b.models.unet,'qwen-image-2.1-Q4_K_M.gguf');
   assert.equal(defaultSettings().baseUrl,'http://localhost:8188');
