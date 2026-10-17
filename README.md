@@ -126,12 +126,23 @@ npm run build
 
 在 [Issues](https://github.com/ImMappyJ/ps-ai/issues) 提供系统、PS／插件／ComfyUI 版本、模型、显卡、复现步骤和脱敏错误。效果问题可以附有权公开的局部对比；不要上传完整崩溃转储或私人照片。
 
-欢迎提交 PR，尽量让每次改动集中解决一个问题。提交前运行 `npm ci`、`npm test`、`npm run build`；改动工作流时，同步更新兼容清单和中英文说明。开发使用独立分支，讨论和评审放在 Issue／PR。交接笔记、调试记录和本机报告留在本地。
+欢迎提交 PR，尽量让每次改动集中解决一个问题。克隆仓库后，先读根目录的 `AGENTS.md` 了解代码结构和开发约定。提交前运行 `npm ci`、`npm test`、`npm run build`；改动工作流时，同步更新兼容清单和中英文说明。开发使用独立分支，讨论和评审放在 Issue／PR。交接笔记、调试记录和本机报告留在本地。
 
 ## 许可与鸣谢
 
-项目图形与使用规则见 [品牌资源](BRAND.md)。修改 SVG 后运行 `npm run brand:export`，用 `npm run brand:check` 检查各尺寸导出是否同步。
-
 代码采用 [GNU GPL v3.0](LICENSE)（GPL-3.0-only）。分发修改版或二进制时，应提供对应源码、构建脚本和许可证。权重另行授权，不包含在仓库或插件包中；截图也不授予其中第三方角色或素材的权利。
 
-感谢 [Adobe UXP](https://developer.adobe.com/photoshop/uxp/)、[ComfyUI](https://github.com/Comfy-Org/ComfyUI)、[Qwen](https://huggingface.co/Qwen)、[ComfyUI-GGUF](https://github.com/leejet/ComfyUI-GGUF)、[UPNG.js](https://github.com/photopea/UPNG.js) 和 [pako](https://github.com/nodeca/pako)。构建包包含运行依赖的许可声明。架构与交互参考了 [OpenLayer](https://github.com/MehranMarxian/OpenLayer) 和 [Geekatplay ComfyUI-Photoshop](https://github.com/GeekatplayStudio/ComfyUI-Photoshop)，未复制这两个项目的源码。本项目不是 Adobe 官方产品。
+感谢以下项目提供的工具和参考：
+
+| 项目名 | 项目地址 |
+| --- | --- |
+| Adobe UXP | <https://developer.adobe.com/photoshop/uxp/> |
+| ComfyUI | <https://github.com/Comfy-Org/ComfyUI> |
+| Qwen | <https://huggingface.co/Qwen> |
+| ComfyUI-GGUF | <https://github.com/leejet/ComfyUI-GGUF> |
+| UPNG.js | <https://github.com/photopea/UPNG.js> |
+| pako | <https://github.com/nodeca/pako> |
+| OpenLayer | <https://github.com/MehranMarxian/OpenLayer> |
+| Geekatplay ComfyUI-Photoshop | <https://github.com/GeekatplayStudio/ComfyUI-Photoshop> |
+
+构建包包含运行依赖的许可声明。架构与交互参考了 OpenLayer 和 Geekatplay ComfyUI-Photoshop，未复制这两个项目的源码。本项目不是 Adobe 官方产品。
