@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/brand/avatar.png" width="64" alt="PS-AI"></p>
+<p align="center"><img src="../../assets/brand/avatar.png" width="64" alt="PS-AI"></p>
 <h1 align="center">接入 OpenAI Images</h1>
 <p align="center"><strong>简体中文</strong> · <a href="OPENAI.en.md">English</a></p>
 
@@ -27,11 +27,11 @@ node .\backend\ps-ai-gateway.mjs --port 8192
 
 ## 连接插件
 
-开发测试先 `npm run build`，按 [README](README.md) 使用 UXP Developer Tool 加载构建后的插件。
+开发测试先 `npm run build`，按 [README](../../README.md) 使用 UXP Developer Tool 加载构建后的插件。
 
 1. 展开“模型与连接”，后端类型选择“平台适配服务（实验）”。
 2. 地址填 `http://localhost:8192`，不要填 OpenAI API 地址或 Key。
-3. 扫描模型，选择已开通的模型，再保存配置和连接。也可导入 [配置样例](config/settings.openai.example.json)。
+3. 扫描模型，选择已开通的模型，再保存配置和连接。也可导入 [配置样例](../../config/settings.openai.example.json)。
 4. 先测试一张文字生图，再在已保存的副本上建立腿部选区，尝试“给腿部穿上白色过膝袜，保留姿势和其他区域”。
 5. 需要模型侧范围提示时开启范围辅助；使用角色参考时再选择参考图。预览后应用为独立图层，检查边缘与颜色。
 
@@ -77,4 +77,4 @@ Images 请求直接返回图片。本适配器没有可用于重取结果的远�
 
 拿到 Key 后需逐项测试：三种模型的权限与返回格式、九种模式、范围辅助／参考组合、透明素材、颜色与坐标、保护区、原图层和一次撤销、多候选、停止与断线恢复、中英面板及 CCX／Portable 安装。完成后再更新截图、兼容清单与发版状态；离线模拟不是平台或宿主验收。
 
-服务端接口与持久化开发约定见仓库根目录 `BACKEND.md` 和 `AGENTS.md`。
+服务端接口与持久化开发约定见仓库的 `docs/development/BACKEND.md` 和 `AGENTS.md`。

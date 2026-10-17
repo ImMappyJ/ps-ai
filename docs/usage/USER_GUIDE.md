@@ -1,12 +1,12 @@
-<p align="center"><img src="assets/brand/avatar.png" width="64" alt="PS-AI"></p>
+<p align="center"><img src="../../assets/brand/avatar.png" width="64" alt="PS-AI"></p>
 <h1 align="center">PS-AI 使用说明</h1>
 <p align="center"><strong>简体中文</strong> · <a href="USER_GUIDE.en.md">English</a></p>
 
 这份指南使用同一张 **3F3F3F.webp** 的独立副本演示九种模式。截图来自 Windows Photoshop 27.0 中的实际 Portable 面板；结果图来自 Photoshop 合成后的像素。点击图片可看原始 PNG，面板截图保留 541 像素宽，没有放大补画。
 
-**对应版本：0.4.0（实验版）。** 0.3.0 不包含配置向导、范围预览和可选 16 位输出。安装见 [README](README.md#安装发行包)，后端与模型见 [ComfyUI 配置](COMFYUI.md)。
+**对应版本：0.4.0（实验版）。** 0.3.0 不包含配置向导、范围预览和可选 16 位输出。安装见 [README](../../README.md#安装发行包)，后端与模型见 [ComfyUI 配置](../setup/COMFYUI.md)。
 
-以下截图与九种模式验收使用 ComfyUI。平台适配的配置和限制见 [百炼](BAILIAN.md)、[Gemini / Nano Banana](GEMINI.md) 与 [OpenAI Images](OPENAI.md)；这些平台路径尚未完成真图和宿主验收，不能套用下面的已测结果。
+以下截图与九种模式验收使用 ComfyUI。平台适配的配置和限制见 [百炼](../providers/BAILIAN.md)、[Gemini / Nano Banana](../providers/GEMINI.md) 与 [OpenAI Images](../providers/OPENAI.md)；这些平台路径尚未完成真图和宿主验收，不能套用下面的已测结果。
 
 ## 先连接，再准备副本
 
@@ -23,9 +23,9 @@
 
 ## 本例统一参数
 
-**候选 1 张、分辨率 992、25 步、锁定种子 42、上下文边距 15%、关闭颜色匹配、16-bit SDR 输出。** 使用兼容清单中的 Qwen 2.1 Q4_K_M、Qwen3-VL INT8 和 Qwen 2.1 VAE。编辑候选按来源长宽比生成，不一定是正方形。精确提示词、开关和实际尺寸见 [示例参数 JSON](assets/guide/recipes.json)。
+**候选 1 张、分辨率 992、25 步、锁定种子 42、上下文边距 15%、关闭颜色匹配、16-bit SDR 输出。** 使用兼容清单中的 Qwen 2.1 Q4_K_M、Qwen3-VL INT8 和 Qwen 2.1 VAE。编辑候选按来源长宽比生成，不一定是正方形。精确提示词、开关和实际尺寸见 [示例参数 JSON](../../assets/guide/recipes.json)。
 
-没有配置 16 位保存节点时，保持默认 **8-bit（兼容）** 即可。切换 16-bit SDR 前，按 [后端指南](COMFYUI.md) 安装 `PS_AISavePNG16` 并重启 ComfyUI。网页预览为 8 位，不能用于判断 16 位文件精度。
+没有配置 16 位保存节点时，保持默认 **8-bit（兼容）** 即可。切换 16-bit SDR 前，按 [后端指南](../setup/COMFYUI.md) 安装 `PS_AISavePNG16` 并重启 ComfyUI。网页预览为 8 位，不能用于判断 16 位文件精度。
 
 ## 选区编辑的共同步骤
 
@@ -35,19 +35,22 @@
 
 ## 模式索引
 
-- [局部物体／材质](#edit)
-- [移除](#remove)
-- [背景](#background)
-- [服装／道具](#costume)
-- [角色参考](#reference)
-- [场景](#scene)
-- [特效](#effect)
-- [氛围](#atmosphere)
-- [文字生图](#generate)
+| 修改与移除 | 服装、参考与场景 | 素材与文字生图 |
+| --- | --- | --- |
+| [01 · 局部物体／材质](#edit) | [04 · 服装／道具](#costume) | [07 · 特效](#effect) |
+| [02 · 移除](#remove) | [05 · 角色参考](#reference) | [08 · 氛围](#atmosphere) |
+| [03 · 背景](#background) | [06 · 场景](#scene) | [09 · 文字生图](#generate) |
+
+每个例子先看效果，再按步骤操作。选区和面板截图放在 **选区与面板设置** 中，点击展开；所有图片都能点击查看原图。
 
 <a id="edit"></a>
 
-## 局部物体／材质
+## 01 · 局部物体／材质
+
+<p align="center">
+  <a href="../../assets/guide/01-edit-compare.png"><img src="../../assets/guide/01-edit-compare.png" width="760" alt="左侧原图，右侧白色过膝袜"></a>
+  <br><sub>左：原图 · 右：白色过膝袜</sub>
+</p>
 
 1. 复制原样图，选中双腿，从膝盖上方到鞋口，给袜口留一点余量。
 2. 选择“局部修图 → 局部物体 / 材质修改”，应用位置选“原选区新图层”，输入下面的提示词。
@@ -58,17 +61,32 @@
 
 > 给双腿穿上白色过膝袜，袜口位于膝盖上方；保留腿部姿势、鞋子、原有衣服和透明背景。
 
-[![编辑范围示意](assets/guide/01-edit-selection.png)](assets/guide/01-edit-selection.png)
-
-[![左原图，右结果](assets/guide/01-edit-compare.png)](assets/guide/01-edit-compare.png)
-
-<a href="assets/guide/01-edit-panel.png"><img src="assets/guide/01-edit-panel.png" width="480" alt="真实 Portable 面板: 局部物体／材质"></a>
-
 实测得到白色过膝袜，原透明轮廓和选区外可见像素保持不变。候选为 800×1216，回填时恢复来源坐标，不需要手工放大来填满画布。
+
+<details>
+<summary>选区与面板设置</summary>
+
+<table>
+  <tr>
+    <th width="50%" align="center">可编辑范围</th>
+    <th width="50%" align="center">面板设置</th>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><a href="../../assets/guide/01-edit-selection.png"><img src="../../assets/guide/01-edit-selection.png" width="360" alt="橙色表示本次实际可编辑范围"></a></td>
+    <td align="center" valign="top"><a href="../../assets/guide/01-edit-panel.png"><img src="../../assets/guide/01-edit-panel.png" width="360" alt="真实 Portable 面板：局部物体／材质"></a></td>
+  </tr>
+</table>
+
+</details>
 
 <a id="remove"></a>
 
-## 移除
+## 02 · 移除
+
+<p align="center">
+  <a href="../../assets/guide/02-remove-compare.png"><img src="../../assets/guide/02-remove-compare.png" width="560" alt="左侧原图，右侧移除胸前玩偶"></a>
+  <br><sub>左：原图 · 右：移除胸前玩偶</sub>
+</p>
 
 1. 复制原样图，套索选中胸前黑色玩偶的头、身体和四肢，稍带周围白色衣料。不要只圈住玩偶中间。
 2. 选择“局部修图 → 移除杂物”，应用到原选区，输入下面的提示词。
@@ -79,17 +97,32 @@
 
 > 移除胸前的黑色毛绒玩偶挂件，包括头和四肢，在原位置补齐连续的白色褶皱衣料；保留金属链条、人物姿势和其他衣物。
 
-[![编辑范围示意](assets/guide/02-remove-selection.png)](assets/guide/02-remove-selection.png)
-
-[![左原图，右结果](assets/guide/02-remove-compare.png)](assets/guide/02-remove-compare.png)
-
-<a href="assets/guide/02-remove-panel.png"><img src="assets/guide/02-remove-panel.png" width="480" alt="真实 Portable 面板: 移除"></a>
-
 本次玩偶移除，白色衣褶接续，金属链条仍在。复杂遮挡未必一次补全；残片处可缩小选区再修一次。
+
+<details>
+<summary>选区与面板设置</summary>
+
+<table>
+  <tr>
+    <th width="50%" align="center">可编辑范围</th>
+    <th width="50%" align="center">面板设置</th>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><a href="../../assets/guide/02-remove-selection.png"><img src="../../assets/guide/02-remove-selection.png" width="280" alt="橙色表示本次实际可编辑范围"></a></td>
+    <td align="center" valign="top"><a href="../../assets/guide/02-remove-panel.png"><img src="../../assets/guide/02-remove-panel.png" width="360" alt="真实 Portable 面板：移除"></a></td>
+  </tr>
+</table>
+
+</details>
 
 <a id="background"></a>
 
-## 背景
+## 03 · 背景
+
+<p align="center">
+  <a href="../../assets/guide/03-background-compare.png"><img src="../../assets/guide/03-background-compare.png" width="760" alt="左侧原图，右侧浅紫摄影棚背景"></a>
+  <br><sub>左：原图 · 右：浅紫摄影棚背景</sub>
+</p>
 
 1. 复制透明样图。Ctrl+单击人物图层缩略图载入不透明范围，再 Ctrl+Shift+I 反选背景；选区覆盖整张画布的透明部分。
 2. 选择“局部修图 → 换背景”，应用到原选区，输入下面的提示词。
@@ -100,20 +133,37 @@
 
 > 只将透明背景替换为浅薰衣草紫色的简洁摄影棚，柔和均匀的墙面与地面，脚下有轻微接触阴影；完整保留原人物、发丝、衣服、姿势和构图。
 
-[![编辑范围示意](assets/guide/03-background-selection.png)](assets/guide/03-background-selection.png)
-
-[![左原图，右结果](assets/guide/03-background-compare.png)](assets/guide/03-background-compare.png)
-
-<a href="assets/guide/03-background-panel.png"><img src="assets/guide/03-background-panel.png" width="480" alt="真实 Portable 面板: 背景"></a>
-
 本次整张透明背景换为浅紫摄影棚，脚下有阴影，人物不透明部分保留来源像素。半透明发丝属于过渡边缘，会与新背景混合，需要时在结果蒙版上修边。
 
+<details>
+<summary>选区与面板设置</summary>
 
-[查看实际 Photoshop 整窗截图](assets/guide/03-background-workspace.png)
+<table>
+  <tr>
+    <th width="50%" align="center">可编辑范围</th>
+    <th width="50%" align="center">面板设置</th>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><a href="../../assets/guide/03-background-selection.png"><img src="../../assets/guide/03-background-selection.png" width="360" alt="橙色表示本次实际可编辑范围"></a></td>
+    <td align="center" valign="top"><a href="../../assets/guide/03-background-panel.png"><img src="../../assets/guide/03-background-panel.png" width="360" alt="真实 Portable 面板：背景"></a></td>
+  </tr>
+</table>
+
+<p align="center">
+  <a href="../../assets/guide/03-background-workspace.png"><img src="../../assets/guide/03-background-workspace.png" width="760" alt="实际 Photoshop 整窗截图"></a>
+  <br><sub>Photoshop 原始整窗截图，点击查看。</sub>
+</p>
+
+</details>
 
 <a id="costume"></a>
 
-## 服装／道具
+## 04 · 服装／道具
+
+<p align="center">
+  <a href="../../assets/guide/04-costume-compare.png"><img src="../../assets/guide/04-costume-compare.png" width="620" alt="左侧原图，右侧深紫色衣摆"></a>
+  <br><sub>左：原图 · 右：深紫色衣摆</sub>
+</p>
 
 1. 复制原样图，套索圈住画面右侧粉色外套的下半段，包括需要改材质的完整衣摆。
 2. 选择“COSPLAY → 服装 / 道具修复”，应用到原选区，输入下面的提示词。
@@ -124,19 +174,34 @@
 
 > 只将选中的画面右侧粉色外套衣摆改为深紫色丝绒，保留原有褶皱、菱形镂空、金色饰边和衣摆轮廓；保持人物姿势、其他衣服及透明背景不变。
 
-[![编辑范围示意](assets/guide/04-costume-selection.png)](assets/guide/04-costume-selection.png)
-
-[![左原图，右结果](assets/guide/04-costume-compare.png)](assets/guide/04-costume-compare.png)
-
-<a href="assets/guide/04-costume-panel.png"><img src="assets/guide/04-costume-panel.png" width="480" alt="真实 Portable 面板: 服装／道具"></a>
-
 选中的衣摆变为深紫色，金边和镂空保留。这验证了服装局部编辑；道具可用相同流程，但本例没有单独重建武器或复杂机械结构。
+
+<details>
+<summary>选区与面板设置</summary>
+
+<table>
+  <tr>
+    <th width="50%" align="center">可编辑范围</th>
+    <th width="50%" align="center">面板设置</th>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><a href="../../assets/guide/04-costume-selection.png"><img src="../../assets/guide/04-costume-selection.png" width="310" alt="橙色表示本次实际可编辑范围"></a></td>
+    <td align="center" valign="top"><a href="../../assets/guide/04-costume-panel.png"><img src="../../assets/guide/04-costume-panel.png" width="360" alt="真实 Portable 面板：服装／道具"></a></td>
+  </tr>
+</table>
+
+</details>
 
 <a id="reference"></a>
 
-## 角色参考
+## 05 · 角色参考
 
-1. 复制原样图，选择双腿。参考图使用同一张样图已经穿白袜的版本：[下载本次参考 PNG](assets/guide/reference-white-socks-icc.png)。
+<p align="center">
+  <a href="../../assets/guide/05-reference-compare.png"><img src="../../assets/guide/05-reference-compare.png" width="760" alt="左侧原图，右侧参考白袜特征"></a>
+  <br><sub>左：原图 · 右：参考白袜特征</sub>
+</p>
+
+1. 复制原样图，选择双腿。参考图使用同一张样图已经穿白袜的版本：[下载本次参考 PNG](../../assets/guide/reference-white-socks-icc.png)。
 2. 选择“COSPLAY → 角色参考辅助”。展开“参考图”，点“选择图片”导入 PNG，“参考用途”选“服装”，输入下面的提示词。
 3. 保持该模式默认关闭范围辅助，开启透明轮廓保留，关闭主体对齐与颜色匹配。预览腿部选区后生成。
 4. 对照参考检查袜口、颜色和原姿势，再应用。做完点“清除参考”；独立素材和文字生图提交前也要求清除参考。
@@ -145,17 +210,34 @@
 
 > 参考图片中的白色过膝袜，为原图选区内的双腿添加同类白色袜子；袜口在膝盖上方，保留原人物的腿部姿势、鞋子、衣服和透明背景。
 
-[![左原图，右结果](assets/guide/05-reference-compare.png)](assets/guide/05-reference-compare.png)
-
-<a href="assets/guide/05-reference-panel.png"><img src="assets/guide/05-reference-panel.png" width="480" alt="真实 Portable 面板: 角色参考"></a>
-
 本次参考成功带入白袜特征，人物姿势和鞋子保留。验证的是服装参考辅助，不等于身份锁定、精确复刻角色或多角度一致性。
 
 **导入提示未标记颜色时：** 本轮一张只有 PNG sRGB 标记、没有嵌入 ICC 的 PNG16，被 PS 27 读成未标记图片，因此安全检查拦截。确认真实来源色彩空间后，在副本中用“编辑 → 指定配置文件”指定正确配置，保存时嵌入 ICC，再导入。不要给未知来源随意指定 sRGB 或改后缀绕过。本次补入匹配的 sRGB ICC 后导入成功，图像压缩数据没有改变。
 
+<details>
+<summary>选区与面板设置</summary>
+
+<table>
+  <tr>
+    <th width="50%" align="center">本次参考图</th>
+    <th width="50%" align="center">面板设置</th>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><a href="../../assets/guide/reference-white-socks-icc.png"><img src="../../assets/guide/reference-white-socks-icc.png" width="360" alt="实测使用的白袜参考图"></a></td>
+    <td align="center" valign="top"><a href="../../assets/guide/05-reference-panel.png"><img src="../../assets/guide/05-reference-panel.png" width="360" alt="真实 Portable 面板：角色参考"></a></td>
+  </tr>
+</table>
+
+</details>
+
 <a id="scene"></a>
 
-## 场景
+## 06 · 场景
+
+<p align="center">
+  <a href="../../assets/guide/06-scene-compare.png"><img src="../../assets/guide/06-scene-compare.png" width="760" alt="左侧原图，右侧紫藤花园场景"></a>
+  <br><sub>左：原图 · 右：紫藤花园场景</sub>
+</p>
 
 1. 复制原样图，清除参考图和旧保护区。Ctrl+单击人物图层缩略图，再 Ctrl+Shift+I 反选整张透明背景。
 2. 选择“COSPLAY → 场景替换”，应用到原选区，输入下面的提示词。
@@ -166,18 +248,37 @@
 
 > 只将透明背景替换为晴日下午的紫藤花园小径：远处紫藤花架、柔和的绿色植物和透视自然的浅色石板路，人物双脚稳稳站在路面上并有接触阴影；保持原人物、服装、姿势与构图不变。
 
-[![左原图，右结果](assets/guide/06-scene-compare.png)](assets/guide/06-scene-compare.png)
-
-<a href="assets/guide/06-scene-panel.png"><img src="assets/guide/06-scene-panel.png" width="480" alt="真实 Portable 面板: 场景"></a>
-
 本次得到完整花园和路面，没有只在腿部周围填一小块；人物不透明部分保持来源像素。
 
+<details>
+<summary>选区与面板设置</summary>
 
-[查看实际 Photoshop 整窗截图](assets/guide/06-scene-workspace.png)
+<p align="center">
+  <a href="../../assets/guide/06-scene-panel.png"><img src="../../assets/guide/06-scene-panel.png" width="400" alt="真实 Portable 面板：场景"></a>
+  <br><sub>点击截图，查看原始分辨率的面板设置。</sub>
+</p>
+
+<p align="center">
+  <a href="../../assets/guide/06-scene-workspace.png"><img src="../../assets/guide/06-scene-workspace.png" width="760" alt="实际 Photoshop 整窗截图"></a>
+  <br><sub>Photoshop 原始整窗截图，点击查看。</sub>
+</p>
+
+</details>
 
 <a id="effect"></a>
 
-## 特效
+## 07 · 特效
+
+<table>
+  <tr>
+    <th width="50%" align="center">独立素材</th>
+    <th width="50%" align="center">在样图中合成</th>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><a href="../../assets/guide/effect-preview.png"><img src="../../assets/guide/effect-preview.png" width="320" alt="生成的特效素材"></a></td>
+    <td align="center" valign="top"><a href="../../assets/guide/07-effect-result.png"><img src="../../assets/guide/07-effect-result.png" width="320" alt="样图中的 Photoshop 实际合成"></a></td>
+  </tr>
+</table>
 
 1. 选择“COSPLAY → 特效素材”，应用位置选“新文档”。清除参考图；独立素材不需要人物选区。
 2. 输入下面的提示词，生成后检查曲线是否开放、是否混入人物、背景是否真的透明，再点“新文档查看”。本次打开 992×992、sRGB / 16 位素材。
@@ -188,17 +289,32 @@
 
 > 单独一缕紫色绸带形魔法烟雾，开放的 S 形曲线从左下方流向右上方，两端逐渐变细并消散，不闭合、不形成圆环；孤立透明背景，自然半透明边缘，无人物、无文字。
 
-| 独立素材 | 与样图实际合成 |
-| --- | --- |
-| ![effect](assets/guide/effect-preview.png) | ![PS 合成结果](assets/guide/07-effect-result.png) |
-
-[![真实 Photoshop 窗口：独立特效素材](assets/guide/07-effect-asset-workspace.png)](assets/guide/07-effect-asset-workspace.png)
-
 首轮“围绕腿部、中心留空”的描述生成了闭合圆环，未采纳。明确写开放曲线后得到本次素材，再完成实际 PS 合成。它更接近半透明紫色绸带，仍有曲线断点和很淡的 alpha 残留，需要合成修整。
+
+<details>
+<summary>查看 Photoshop 工作区</summary>
+
+<p align="center">
+  <a href="../../assets/guide/07-effect-asset-workspace.png"><img src="../../assets/guide/07-effect-asset-workspace.png" width="760" alt="实际 Photoshop 整窗截图"></a>
+  <br><sub>Photoshop 原始整窗截图，点击查看。</sub>
+</p>
+
+</details>
 
 <a id="atmosphere"></a>
 
-## 氛围
+## 08 · 氛围
+
+<table>
+  <tr>
+    <th width="50%" align="center">独立素材</th>
+    <th width="50%" align="center">在样图中合成</th>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><a href="../../assets/guide/atmosphere-preview.png"><img src="../../assets/guide/atmosphere-preview.png" width="320" alt="生成的氛围素材"></a></td>
+    <td align="center" valign="top"><a href="../../assets/guide/08-atmosphere-result.png"><img src="../../assets/guide/08-atmosphere-result.png" width="320" alt="样图中的 Photoshop 实际合成"></a></td>
+  </tr>
+</table>
 
 1. 选择“COSPLAY → 氛围素材”，应用位置选“新文档”，清除参考图。
 2. 输入下面的提示词。生成后检查顶部留空、底部有薄雾、没有人物和文字，再“新文档查看”。本次素材为 992×992、sRGB / 16 位。
@@ -209,17 +325,26 @@
 
 > 柔和的浅紫色薄雾与少量漂浮的柔光尘点，雾气集中在画面底部，向上逐渐淡出，顶部留空；透明背景，无人物、无文字、无实心底色。
 
-| 独立素材 | 与样图实际合成 |
-| --- | --- |
-| ![atmosphere](assets/guide/atmosphere-preview.png) | ![PS 合成结果](assets/guide/08-atmosphere-result.png) |
-
-<a href="assets/guide/08-atmosphere-panel.png"><img src="assets/guide/08-atmosphere-panel.png" width="480" alt="真实 Portable 面板: 氛围"></a>
-
 本次薄雾集中在下方，脸部仍清晰。素材有实际 alpha，但看似空白处仍有很低透明度像素。放到深色底检查，需要时用蒙版清理；写“透明背景”不能代替检查。
+
+<details>
+<summary>选区与面板设置</summary>
+
+<p align="center">
+  <a href="../../assets/guide/08-atmosphere-panel.png"><img src="../../assets/guide/08-atmosphere-panel.png" width="400" alt="真实 Portable 面板：氛围"></a>
+  <br><sub>点击截图，查看原始分辨率的面板设置。</sub>
+</p>
+
+</details>
 
 <a id="generate"></a>
 
-## 文字生图
+## 09 · 文字生图
+
+<p align="center">
+  <a href="../../assets/guide/generate-preview.png"><img src="../../assets/guide/generate-preview.png" width="560" alt="文字生图结果"></a>
+  <br><sub>文字描述生成的新立绘，不以原样图作为模型输入。</sub>
+</p>
 
 1. 选择“生图 → 文字生图”，应用位置选新文档，清除参考图。
 2. 观察 3F3F3F.webp 的外观后写成下面的描述。文字生图不会把原图作为模型输入，不需要选区。
@@ -230,14 +355,22 @@
 
 > 全身二次元角色立绘，一位成年女性，粉色长卷发，白色褶皱上衣，粉色与深蓝色长外套，黑色金边短裙，红色手套，黑色系带高跟鞋；一只手抬至脸旁，另一只手自然伸开，精细柔和的动漫插画，单人居中，完整显示双脚，干净的浅紫色背景，无文字。
 
-[![Text to image](assets/guide/generate-preview.png)](assets/guide/generate-preview.png)
-
-<a href="assets/guide/09-generate-panel.png"><img src="assets/guide/09-generate-panel.png" width="480" alt="真实 Portable 面板: 文字生图"></a>
-
 本次生成包含粉发、白色上衣、粉蓝外套和完整双脚。它是新的角色图，不会保持原图身份、姿势或每个配饰；在原人物上修改衣服请用选区编辑。
 
-[查看实际 Photoshop 整窗截图](assets/guide/09-generate-workspace.png)
+<details>
+<summary>选区与面板设置</summary>
 
+<p align="center">
+  <a href="../../assets/guide/09-generate-panel.png"><img src="../../assets/guide/09-generate-panel.png" width="400" alt="真实 Portable 面板：文字生图"></a>
+  <br><sub>点击截图，查看原始分辨率的面板设置。</sub>
+</p>
+
+<p align="center">
+  <a href="../../assets/guide/09-generate-workspace.png"><img src="../../assets/guide/09-generate-workspace.png" width="760" alt="实际 Photoshop 整窗截图"></a>
+  <br><sub>Photoshop 原始整窗截图，点击查看。</sub>
+</p>
+
+</details>
 
 ## 候选、进度和撤销
 
@@ -282,4 +415,4 @@
 
 通过范围限于这些具体操作和效果。服装验证了衣摆编辑，参考验证了白袜迁移；复杂道具重建、身份一致性、其他模型、校准显示器色准、长时间稳定性尚未覆盖。测试期间未发生 Photoshop 整体退出，不能保证以后不崩溃。角色参考、特效和氛围仍属实验能力；不做常规磨皮和去痘。
 
-只连接可信后端，本地 ComfyUI 也保存输入和输出。分享截图前检查隐私与图片授权。代码许可不替代权重和素材许可，版本和来源见 [兼容清单](config/compatibility.json)。
+只连接可信后端，本地 ComfyUI 也保存输入和输出。分享截图前检查隐私与图片授权。代码许可不替代权重和素材许可，版本和来源见 [兼容清单](../../config/compatibility.json)。

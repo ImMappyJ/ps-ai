@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';import type {FileHandle} from 'node:fs/promises';
 import path from 'node:path';import {randomUUID,createHash} from 'node:crypto';
-import {UUID,UPLOAD} from '../src/gateway-protocol';import type {GenerationRequest} from '../src/gateway-protocol';
-import {ServiceError} from './errors';
+import {UUID,UPLOAD} from '../../src/gateway-protocol';import type {GenerationRequest} from '../../src/gateway-protocol';
+import {ServiceError} from '../shared/errors';
 export interface DurableJob {
   id:string;clientId:string;fingerprint:string;request:GenerationRequest;providerBaseUrl:string;providerId?:string;
   state:'submitting'|'queued'|'running'|'ready'|'failed'|'cancelled'|'unknown';

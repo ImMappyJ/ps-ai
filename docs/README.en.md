@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/brand/avatar.png" width="72" alt="PS-AI">
+  <img src="../assets/brand/avatar.png" width="72" alt="PS-AI">
 </p>
 <h1 align="center">PS-AI</h1>
-<p align="center"><a href="README.md">简体中文</a> · <strong>English</strong></p>
+<p align="center"><a href="../README.md">简体中文</a> · <strong>English</strong></p>
 
 PS-AI connects ComfyUI to Photoshop for local edits, COSPLAY outfits and props, and text-to-image generation. Select an area, describe the change and preview candidates in the panel, then apply a result as a new layer with an editable mask.
 
@@ -10,7 +10,16 @@ PS-AI connects ComfyUI to Photoshop for local edits, COSPLAY outfits and props, 
 
 Upgrading from 0.3.0 changes the panel name from `PS-AI FOR ME` to `PS-AI` and introduces the Morph Frame identity. Plugin IDs and the `PS-AI-FOR-ME` installation directory stay the same.
 
-The development branch adds [Bailian](BAILIAN.en.md), [Gemini / Nano Banana](GEMINI.en.md) and [OpenAI Images](OPENAI.en.md) gateways. Live API-key and Photoshop acceptance are pending; **published v0.4.0 packages do not contain them**. Screenshots and validated behavior below refer to ComfyUI.
+The development branch adds [Bailian](providers/BAILIAN.en.md), [Gemini / Nano Banana](providers/GEMINI.en.md) and [OpenAI Images](providers/OPENAI.en.md) gateways. Live API-key and Photoshop acceptance are pending; **published v0.4.0 packages do not contain them**. Screenshots and validated behavior below refer to ComfyUI.
+
+## Documentation
+
+| Purpose | Guide |
+| --- | --- |
+| First steps and all nine modes | [Illustrated user guide](usage/USER_GUIDE.en.md) |
+| Local backend, models and troubleshooting | [ComfyUI setup](setup/COMFYUI.en.md) |
+| Platform adapters (development) | [Bailian](providers/BAILIAN.en.md) · [Gemini / Nano Banana](providers/GEMINI.en.md) · [OpenAI Images](providers/OPENAI.en.md) |
+| Contributing and server extensions | [Development entry point](../AGENTS.md#development-en) · [Backend and persistence contract](development/BACKEND.en.md) |
 
 ## Example
 
@@ -18,11 +27,11 @@ This example uses a copy of `3F3F3F.webp` to add white over-the-knee socks withi
 
 | Before | After |
 | --- | --- |
-| ![Before adding white over-the-knee socks](assets/guide/before.png) | ![After adding white over-the-knee socks](assets/guide/after.png) |
+| ![Before adding white over-the-knee socks](../assets/guide/before.png) | ![After adding white over-the-knee socks](../assets/guide/after.png) |
 
-![Actual Photoshop candidate preview; open the original PNG for detail](assets/guide/01-edit-workspace.png)
+![Actual Photoshop candidate preview; open the original PNG for detail](../assets/guide/01-edit-workspace.png)
 
-The [illustrated user guide](USER_GUIDE.en.md) walks through all nine modes with selection maps, tested prompts and clear PNG captures, using the same sample for full-background changes, reference assistance, asset compositing and text-to-image.
+The [illustrated user guide](usage/USER_GUIDE.en.md) walks through all nine modes with selection maps, tested prompts and clear PNG captures, using the same sample for full-background changes, reference assistance, asset compositing and text-to-image.
 
 ## What it does
 
@@ -33,14 +42,14 @@ The [illustrated user guide](USER_GUIDE.en.md) walks through all nine modes with
 - **Transparency and color:** preserve the source silhouette, optionally align the subject and match small context color shifts. RGB / Grayscale 8/16-bit round trips have been tested in Photoshop; model input remains sRGB 8-bit.
 - **Settings and language:** save the host, port and ComfyUI model mapping or platform model ID, import / export JSON, switch between Simplified Chinese and English.
 
-The ComfyUI path uses a fixed **Qwen-Image 2.1 GGUF workflow**. SD, SDXL and Flux cannot be substituted directly. See the [ComfyUI setup guide](COMFYUI.en.md) for model requirements and configuration.
+The ComfyUI path uses a fixed **Qwen-Image 2.1 GGUF workflow**. SD, SDXL and Flux cannot be substituted directly. See the [ComfyUI setup guide](setup/COMFYUI.en.md) for model requirements and configuration.
 
 ## Requirements
 
 | Component | Requirements and tested scope |
 | --- | --- |
 | OS / host | Windows, Photoshop 2026 / 27.0+; only 27.0 tested. macOS is unverified. |
-| Backend | Compatible ComfyUI and GGUF nodes. Tested revisions: [compatibility manifest](config/compatibility.json). |
+| Backend | Compatible ComfyUI and GGUF nodes. Tested revisions: [compatibility manifest](../config/compatibility.json). |
 | Local inference GPU / memory | Tested with NVIDIA RTX 5080 16 GiB and about 48 GB RAM. Minimum hardware requirements have not been established. |
 | Local model storage | About 14.63 GB for preset weights, plus backend, dependencies, cache and images. |
 | Source builds | Node.js 24.21.0 / npm 11.19.0 tested. ComfyUI plugin packages need no Node.js. The optional platform service requires Node.js 24+. |
@@ -77,7 +86,7 @@ CCX and Portable keep separate data. Export settings and save PNGs before switch
 
 ## Connect ComfyUI
 
-The [ComfyUI setup guide](COMFYUI.en.md) covers installation, models, versions and troubleshooting. An existing backend does not need reinstalling:
+The [ComfyUI setup guide](setup/COMFYUI.en.md) covers installation, models, versions and troubleshooting. An existing backend does not need reinstalling:
 
 1. Start ComfyUI and check its page in a browser.
 2. Expand **Backend and models**. Enter `http://localhost:8188`, `http://localhost:8199` or an address such as `http://192.168.1.20:8188`.
@@ -128,11 +137,11 @@ You can also build through **Actions → Build packages → Run workflow**. Down
 
 Open an [Issue](https://github.com/ImMappyJ/ps-ai/issues) with OS, Photoshop / plugin / ComfyUI versions, models, GPU, reproduction steps and sanitized errors. Share only comparisons you may publish. Do not upload full crash dumps or private photos.
 
-PRs are welcome; keep each change focused on one problem. After cloning, read `AGENTS.md` at the repository root for the source map and development conventions. The root-level `BACKEND.en.md` defines server-rewrite and provider contracts. Run `npm ci`, `npm test` and `npm run build` before submitting. Update the compatibility manifest and both language versions when changing workflows. Use a separate branch and discuss changes in Issues / PRs. Keep handoff notes, debugging records and machine reports local.
+PRs are welcome; keep each change focused on one problem. After cloning, read `AGENTS.md` at the repository root for the source map and development conventions. The [backend contract](development/BACKEND.en.md) defines server-rewrite and provider contracts. Run `npm ci`, `npm test` and `npm run build` before submitting. Update the compatibility manifest and both language versions when changing workflows. Use a separate branch and discuss changes in Issues / PRs. Keep handoff notes, debugging records and machine reports local.
 
 ## License and thanks
 
-Code: [GNU GPL v3.0](LICENSE), GPL-3.0-only. Distributing modified versions or binaries requires corresponding source, build scripts and the license. Weights have separate terms and are not included. Screenshots do not grant rights to third-party characters or artwork.
+Code: [GNU GPL v3.0](../LICENSE), GPL-3.0-only. Distributing modified versions or binaries requires corresponding source, build scripts and the license. Weights have separate terms and are not included. Screenshots do not grant rights to third-party characters or artwork.
 
 Thanks to these projects for their tools and inspiration:
 

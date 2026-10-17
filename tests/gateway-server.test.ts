@@ -2,13 +2,13 @@ import test from 'node:test';import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';import os from 'node:os';import path from 'node:path';
 import {GatewayClient} from '../src/gateway-client';import {uuid} from '../src/client';
 import {cloudRequest,cloudPng,testId} from './gateway-fixtures';
-import type {ImageProvider} from '../server/provider';
-import {ServiceError} from '../server/errors';
+import type {ImageProvider} from '../server/providers/contract';
+import {ServiceError} from '../server/shared/errors';
 import {request as httpRequest} from 'node:http';
 import {listenLoopback} from './loopback';
 
 async function fixture(options:{root?:string;configured?:boolean;loseSubmit?:boolean;inlineError?:ServiceError}={}){
-  const {createGateway}=await import('../server/gateway');const {BailianProvider}=await import('../server/bailian');
+  const {createGateway}=await import('../server/http/gateway');const {BailianProvider}=await import('../server/providers/bailian');
   const root=options.root??await fs.mkdtemp(path.join(os.tmpdir(),'ps-ai-gateway-'));let submits=0,ready=false;
   const cap=new BailianProvider({apiKey:options.configured===false?undefined:'fake-key'}).capabilities();
   const provider={baseUrl:'https://dashscope.aliyuncs.com/api/v1',execution:options.inlineError?'inline' as const:'task' as const,configured:cap.configured,capabilities:()=>cap,
@@ -63,7 +63,7 @@ test('输入不可覆盖或跨任务引用，PNG 上传与编辑画布必须一�
 });
 test('单数据目录互斥实例，释放后可重启；未知作业不借用其他任务',async()=>{
   const s=await fixture();try{
-    const {createGateway}=await import('../server/gateway');await assert.rejects(createGateway({dataDir:s.root,provider:s.provider}),/already|locked/i);
+    const {createGateway}=await import('../server/http/gateway');await assert.rejects(createGateway({dataDir:s.root,provider:s.provider}),/already|locked/i);
     assert.equal((await s.client.status(uuid())).state,'unknown');
     const r=await fetch(s.base+'/psai/v1/outputs/'+uuid()+'.png');assert.equal(r.status,404);
   }finally{await s.close();}
@@ -81,7 +81,7 @@ test('结果写盘暂时失败后重试原任务，保留已下载结果而不�
 });
 
 test('同步平台在后台执行，提交立即返回；同UUID不重复调用，原始结果可重启恢复',async()=>{
-  const {createGateway}=await import('../server/gateway');const {GeminiProvider}=await import('../server/gemini');
+  const {createGateway}=await import('../server/http/gateway');const {GeminiProvider}=await import('../server/providers/gemini');
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'ps-ai-inline-'));let release!:(v:{image:Uint8Array})=>void,calls=0;
   const provider:ImageProvider={...new GeminiProvider(),baseUrl:'https://generativelanguage.googleapis.com/v1',id:'gemini',execution:'inline',configured:true,capabilities:()=>new GeminiProvider({apiKey:'fake'}).capabilities(),submit:async()=>{calls++;return new Promise(r=>{release=r;});},normalizeOutput:(bytes,request)=>new GeminiProvider().normalizeOutput(bytes,request)};
   let gateway=await createGateway({dataDir:root,provider});await listenLoopback(gateway.server);
@@ -97,7 +97,7 @@ test('同步平台在后台执行，提交立即返回；同UUID不重复调用�
 });
 
 test('恢复或重提不能偷换同一作业的提供方',async()=>{
-  const {createGateway}=await import('../server/gateway');const s=await fixture();
+  const {createGateway}=await import('../server/http/gateway');const s=await fixture();
   try{
     const record=s.record();await s.client.submitJob(record);await s.gateway.close();
     const changed={...s.provider,id:'gemini',baseUrl:s.provider.baseUrl};const gateway=await createGateway({dataDir:s.root,provider:changed});await listenLoopback(gateway.server);
@@ -113,7 +113,7 @@ test('同步平台明确无图是失败，断线才是不确定；两者都不�
 });
 
 test('提交断开且首次落盘未完成时正常关闭，仍等待后续同步工作并持有数据锁',async()=>{
-  const {createGateway}=await import('../server/gateway');const {BailianProvider}=await import('../server/bailian');const root=await fs.mkdtemp(path.join(os.tmpdir(),'ps-ai-shutdown-'));
+  const {createGateway}=await import('../server/http/gateway');const {BailianProvider}=await import('../server/providers/bailian');const root=await fs.mkdtemp(path.join(os.tmpdir(),'ps-ai-shutdown-'));
   let releaseSave!:()=>void,seenSave!:()=>void,seenProvider!:()=>void,releaseProvider!:(r:{image:Uint8Array})=>void;
   const saved=new Promise<void>(r=>{seenSave=r;}),saveGate=new Promise<void>(r=>{releaseSave=r;}),started=new Promise<void>(r=>{seenProvider=r;});let closed=false;
   const provider:ImageProvider={id:'bailian',execution:'inline',baseUrl:'https://dashscope.aliyuncs.com/api/v1',configured:true,capabilities:()=>new BailianProvider({apiKey:'fake'}).capabilities(),submit:async()=>{seenProvider();return new Promise(r=>{releaseProvider=r;});}};
@@ -125,7 +125,7 @@ test('提交断开且首次落盘未完成时正常关闭，仍等待后续同�
 });
 
 test('实际百炼适配器创建响应预算丢失平台ID时，HTTP网关保留unknown与去重保护',async()=>{
-  const {createGateway}=await import('../server/gateway');const {BailianProvider}=await import('../server/bailian');const root=await fs.mkdtemp(path.join(os.tmpdir(),'ps-ai-accepted-response-'));let calls=0;
+  const {createGateway}=await import('../server/http/gateway');const {BailianProvider}=await import('../server/providers/bailian');const root=await fs.mkdtemp(path.join(os.tmpdir(),'ps-ai-accepted-response-'));let calls=0;
   const provider=new BailianProvider({apiKey:'fake',transport:async()=>{calls++;return Response.json({output:{task_id:testId}},{headers:{'Content-Length':'1048577'}});}});
   const g=await createGateway({dataDir:root,provider});await listenLoopback(g.server);const client=new GatewayClient(`http://127.0.0.1:${(g.server.address() as any).port}`,'qwen-image-2.1-pro'),record:any={id:uuid(),clientId:uuid(),graph:{},request:cloudRequest,state:'created',createdAt:new Date().toISOString()};
   try{await client.submitJob(record);assert.equal((await client.status(record.id)).state,'unknown');await client.submitJob(record);assert.equal(calls,1);assert.equal((await g.store.job(record.id))?.providerTaskId,undefined);}finally{await g.close();await fs.rm(root,{recursive:true,force:true});}

@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/brand/avatar.png" width="64" alt="PS-AI"></p>
+<p align="center"><img src="../../assets/brand/avatar.png" width="64" alt="PS-AI"></p>
 <h1 align="center">OpenAI Images setup</h1>
 <p align="center"><a href="OPENAI.md">简体中文</a> · <strong>English</strong></p>
 
@@ -27,11 +27,11 @@ The service binds only 127.0.0.1. Default data is `~/.ps-ai/openai`; override wi
 
 ## Connect the plugin
 
-For development, run `npm run build` and load the built plugin through UXP Developer Tool as described in the [README](README.en.md).
+For development, run `npm run build` and load the built plugin through UXP Developer Tool as described in the [README](../README.en.md).
 
 1. Open **Backend and models**, then select **Platform gateway (experimental)**.
 2. Enter `http://localhost:8192`, not the OpenAI API URL or key.
-3. Scan models, select an authorized model, save and connect. A [settings example](config/settings.openai.example.json) is available.
+3. Scan models, select an authorized model, save and connect. A [settings example](../../config/settings.openai.example.json) is available.
 4. Try one text-to-image result. Then work on a saved copy, select the legs and try: “Add white over-the-knee socks; preserve the pose and other areas.”
 5. Enable edit guidance for a model-side mask. Add a reference image when needed. Preview before applying a separate layer, then inspect edges and color.
 
@@ -77,4 +77,4 @@ Each original or prepared input PNG is capped at 10 MiB; OpenAI response JSON at
 
 With a key, validate model access/output for all three models, nine modes, guide/reference combinations, transparent assets, color/coordinates, protection, original layers/undo, multiple candidates, stopping/recovery, both UI languages and CCX/Portable installation. Update screenshots, compatibility and release status afterwards. Offline mocks do not establish platform or host acceptance.
 
-The repository-root `BACKEND.en.md` and `AGENTS.md` define server and persistence contracts.
+The repository’s `docs/development/BACKEND.en.md` and `AGENTS.md` define server and persistence contracts.

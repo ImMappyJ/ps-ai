@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/brand/avatar.png" width="64" alt="PS-AI"></p>
+<p align="center"><img src="../../assets/brand/avatar.png" width="64" alt="PS-AI"></p>
 <h1 align="center">Connect Alibaba Cloud Model Studio (Bailian)</h1>
 <p align="center"><a href="BAILIAN.md">简体中文</a> · <strong>English</strong></p>
 
@@ -55,12 +55,12 @@ Supported workspace regions also include Singapore, US Virginia, China Hong Kong
 
 ## 3. Configure the panel
 
-For development, run `npm run build` and load `dist/plugin/manifest.json` through UXP Developer Tool, following the [README](README.en.md).
+For development, run `npm run build` and load `dist/plugin/manifest.json` through UXP Developer Tool, following the [README](../README.en.md).
 
 1. Expand **Backend and models**.
 2. Choose **Platform gateway (experimental)**.
 3. Enter `http://localhost:8190`; match the server port if customized.
-4. Choose **Scan models**, select an enabled model, then **Save settings** and **Connect**. Alternatively import the [Bailian settings example](config/settings.bailian.example.json).
+4. Choose **Scan models**, select an enabled model, then **Save settings** and **Connect**. Alternatively import the [Bailian settings example](../../config/settings.bailian.example.json).
 5. Start with one text-to-image candidate, then a selected local edit. Example: add white over-knee stockings while preserving the pose and unselected regions.
 
 There are no GGUF, encoder or VAE fields in platform mode. Sampling steps are platform-controlled and output is currently 8-bit. “Connected” confirms the local configuration check; live model access still requires a generation request.

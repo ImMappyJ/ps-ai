@@ -2,14 +2,14 @@
 
 中文 | [English](BACKEND.en.md)
 
-本文面向准备重写服务端、接入其他平台或修改任务存储的开发者。启动步骤见 [百炼](BAILIAN.md) 与 [Gemini / Nano Banana](GEMINI.md)。现有 ComfyUI 配置见 [COMFYUI.md](COMFYUI.md)。
+本文面向准备重写服务端、接入其他平台或修改任务存储的开发者。启动步骤见 [百炼](../providers/BAILIAN.md)、[Gemini / Nano Banana](../providers/GEMINI.md) 与 [OpenAI Images](../providers/OPENAI.md)。现有 ComfyUI 配置见 [COMFYUI.md](../setup/COMFYUI.md)。
 
 ## 两条后端路径
 
 | 设置 | 请求方式 | 实现 |
 | --- | --- | --- |
-| `backend` 省略或 `comfyui` | ComfyUI 节点图、节点 schema、模型文件名 | [src/client.ts](src/client.ts)、[src/workflow.ts](src/workflow.ts) |
-| `backend: gateway` | `ps-ai/1` 语义请求与模型能力清单 | [src/gateway-client.ts](src/gateway-client.ts)、[src/gateway-protocol.ts](src/gateway-protocol.ts) |
+| `backend` 省略或 `comfyui` | ComfyUI 节点图、节点 schema、模型文件名 | [src/client.ts](../../src/client.ts)、[src/workflow.ts](../../src/workflow.ts) |
+| `backend: gateway` | `ps-ai/1` 语义请求与模型能力清单 | [src/gateway-client.ts](../../src/gateway-client.ts)、[src/gateway-protocol.ts](../../src/gateway-protocol.ts) |
 
 新协议不要求服务端安装 ComfyUI 或提供虚构的 GGUF 节点。插件负责捕获、选区、保护区、预览和安全回填；适配服务负责平台鉴权、参数转换、任务身份与结果文件。
 
@@ -23,6 +23,39 @@
 | [Black Forest Labs / FLUX](https://docs.bfl.ai/quick_start/generating_images) | 返回轮询地址，异步取图 | 已调研，未实现 |
 
 不能把“OpenAI 兼容”、相同端点名或可填写模型 ID 当作图像编辑兼容。Google Interactions 是另一套协议，本适配器尚未采用，不能用它的恢复能力描述 GenerateContent。
+
+<a id="server-architecture"></a>
+
+## 服务端结构
+
+`server` 按职责拆分，根目录只留启动入口。启动命令仍为 `npm run gateway`，构建输出仍为 `dist/gateway/ps-ai-gateway.mjs`。
+
+```text
+server/
+├── main.ts                   # 参数、环境配置、组装依赖、监听与退出
+├── http/
+│   ├── gateway.ts            # 路由、HTTP 状态、Host/Origin、连接生命周期
+│   └── messages.ts           # 有预算的请求体与 JSON 响应
+├── application/
+│   └── jobs.ts               # 提交、去重、查询、恢复、串行操作与后台任务
+├── persistence/
+│   └── job-store.ts          # 作业记录、原子写入、输入/输出文件与目录锁
+├── providers/
+│   ├── contract.ts           # ImageProvider，task/inline 的共同接口
+│   ├── bailian.ts
+│   ├── gemini.ts
+│   └── openai.ts
+└── shared/
+    ├── errors.ts             # 可安全返回的错误及不确定结果标记
+    ├── images.ts             # PNG 输入校验与默认输出归一化
+    └── io.ts                 # 平台响应的有界读取
+```
+
+HTTP 调用作业服务，作业服务调用持久化与 `ImageProvider` 接口。具体平台由 `main.ts` 注入，作业服务不导入百炼、Gemini 或 OpenAI 类。平台实现不访问作业目录，也不写入 HTTP 响应；失败抛出统一的 `ServiceError`，由 HTTP 层序列化。`shared` 不导入上层模块。插件与服务共同使用 `src/gateway-protocol.ts` 和已有像素工具，不复制一套协议，也不把 Node 模块打进 UXP。
+
+作业服务负责 UUID、状态和后台工作；HTTP 层负责停止接入并等待仍在落盘的 handlers。正常退出严格按 **handlers → workers → 串行写入 → store 锁** 收尾。不能为了目录拆分先释放锁，否则断线请求仍可能启动工作。`gateway.store` 仍指向同一实例，便于原有诊断和故障注入；运行时只通过作业服务读写结果。
+
+新增平台只需在 `providers` 实现统一接口、在 `main.ts` 显式注册并补能力／请求／恢复测试。当前只有一种文件存储，不为目录整齐额外引入数据库接口、依赖注入容器或框架。文件迁移不改变 HTTP 协议、环境变量、持久化格式及任务恢复规则。
 
 ## ps-ai/1 接口
 
@@ -69,7 +102,7 @@
 
 ## 持久化是接口的一部分
 
-参考实现在 [server/store.ts](server/store.ts) 和 [server/gateway.ts](server/gateway.ts)。更换数据库或语言时仍须保持以下顺序：
+作业编排见 [application/jobs.ts](../../server/application/jobs.ts)，落盘实现见 [persistence/job-store.ts](../../server/persistence/job-store.ts)，传输入口见 [http/gateway.ts](../../server/http/gateway.ts)。更换数据库或语言时仍须保持以下顺序：
 
 1. 校验请求和输入，计算包含 `clientId` 与规范化请求的摘要。
 2. **先保存本地 UUID、请求摘要、提供方身份、平台端点和 `submitting` 状态，再创建平台任务。**
@@ -88,7 +121,7 @@
 
 ## 实现新的提供方
 
-实现 [server/provider.ts](server/provider.ts) 的 `ImageProvider`：声明 `id`、`execution`（`task` 或 `inline`）、`baseUrl`，提供 `capabilities()` 与 `submit()`。异步适配返回 `{taskId}`，实现 `poll()` 与 `download()`；同步适配返回 `{image}`，不能捏造平台 ID。可选 `normalizeOutput()` 必须产出请求尺寸的 sRGB8 PNG，所有几何变换须有明确的逆映射。参考 [百炼](server/bailian.ts)、[Gemini](server/gemini.ts) 与 [OpenAI](server/openai.ts)，在 [server/main.ts](server/main.ts) 的显式注册点选择，不使用任意模块或外部 URL 动态加载。Key 留在服务端。
+实现 [server/providers/contract.ts](../../server/providers/contract.ts) 的 `ImageProvider`：声明 `id`、`execution`（`task` 或 `inline`）、`baseUrl`，提供 `capabilities()` 与 `submit()`。异步适配返回 `{taskId}`，实现 `poll()` 与 `download()`；同步适配返回 `{image}`，不能捏造平台 ID。可选 `normalizeOutput()` 必须产出请求尺寸的 sRGB8 PNG，所有几何变换须有明确的逆映射。参考 [百炼](../../server/providers/bailian.ts)、[Gemini](../../server/providers/gemini.ts) 与 [OpenAI](../../server/providers/openai.ts)，在 [server/main.ts](../../server/main.ts) 的显式注册点选择，不使用任意模块或外部 URL 动态加载。Key 留在服务端。
 
 错误返回只包含脱敏的 `code`、`message`。别原样回显平台响应、请求 Header、图片 Base64、提示词或签名 URL。提交是否确定失败必须与“未确认是否已接受”区分；后者保留 unknown，不能自动重发。
 
@@ -104,6 +137,6 @@
 
 ## 验证与后续维护
 
-运行 `npm test`、`npm run typecheck`、`npm run build`。`tests/bailian.test.ts` 、`tests/gemini.test.ts` 与 `tests/openai.test.ts` 校验平台请求与结果，`tests/gateway-server.test.ts` 校验真实本地 HTTP 和持久化，`tests/gateway-panel.test.ts` 校验面板流程。模拟平台不能证明实际权限、速度、效果、颜色、透明度或原生宿主 UI 已通过。
+运行 `npm test`、`npm run typecheck`、`npm run build`。`tests/application-jobs.test.ts` 不启动 HTTP，直接校验提交前落盘、去重、排空与原始结果恢复；`tests/bailian.test.ts` 、`tests/gemini.test.ts` 与 `tests/openai.test.ts` 校验平台请求与结果，`tests/gateway-server.test.ts` 校验真实本地 HTTP 和持久化，`tests/gateway-panel.test.ts` 校验面板流程。模拟平台不能证明实际权限、速度、效果、颜色、透明度或原生宿主 UI 已通过。
 
-拿到 Key 后按 `BAILIAN.md`、`GEMINI.md` 与 `OPENAI.md` 的清单完成平台与 Photoshop 验收，再更新 [兼容清单](config/compatibility.json)、两种语言的指南及 [AGENTS.md](AGENTS.md)。发布时必须让测试结果对应实际代码与发行包；现有 v0.4.0 附件不包含本轮尚未发布的能力。
+拿到 Key 后按 [百炼](../providers/BAILIAN.md)、[Gemini](../providers/GEMINI.md) 与 [OpenAI Images](../providers/OPENAI.md) 的清单完成平台与 Photoshop 验收，再更新 [兼容清单](../../config/compatibility.json)、两种语言的指南及 [AGENTS.md](../../AGENTS.md)。发布时必须让测试结果对应实际代码与发行包；现有 v0.4.0 附件不包含本轮尚未发布的能力。

@@ -1,8 +1,8 @@
-import {GATEWAY_PROTOCOL,validateGeneration} from '../src/gateway-protocol';
-import type {GatewayCapabilities,GenerationRequest} from '../src/gateway-protocol';
-import {decodePng,encodePng,rasterDepth,resize} from '../src/image';import type {Raster} from '../src/image';
-import type {ImageProvider} from './provider';import {ServiceError} from './errors';
-import {readBounded} from './io';import {validateInput} from './images';
+import {GATEWAY_PROTOCOL,validateGeneration} from '../../src/gateway-protocol';
+import type {GatewayCapabilities,GenerationRequest} from '../../src/gateway-protocol';
+import {decodePng,encodePng,rasterDepth,resize} from '../../src/image';import type {Raster} from '../../src/image';
+import type {ImageProvider} from './contract';import {ServiceError} from '../shared/errors';
+import {readBounded} from '../shared/io';import {validateInput} from '../shared/images';
 
 function frame(width:number,height:number){const scale=1024/Math.max(width,height),w=Math.max(1,Math.round(width*scale)),h=Math.max(1,Math.round(height*scale));return {width:w,height:h,left:Math.floor((1024-w)/2),top:Math.floor((1024-h)/2)};}
 function pad(image:Raster,mask:boolean):Uint8Array {

@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/brand/avatar.png" width="64" alt="PS-AI"></p>
+<p align="center"><img src="../../assets/brand/avatar.png" width="64" alt="PS-AI"></p>
 <h1 align="center">接入 Gemini / Nano Banana</h1>
 <p align="center"><strong>简体中文</strong> · <a href="GEMINI.en.md">English</a></p>
 
@@ -27,11 +27,11 @@ node .\backend\ps-ai-gateway.mjs --port 8191
 
 ## 在 Photoshop 中连接
 
-开发测试先构建插件，按 [README](README.md) 用 UXP Developer Tool 加载。
+开发测试先构建插件，按 [README](../../README.md) 用 UXP Developer Tool 加载。
 
 1. 展开“模型与连接”，选择“平台适配服务（实验）”。
 2. 地址填 `http://localhost:8191`，不要填 Google API 地址或 Key。
-3. 点击“扫描模型”，选择有权限的模型，保存配置，再连接。也可以导入 [配置样例](config/settings.gemini.example.json)。
+3. 点击“扫描模型”，选择有权限的模型，保存配置，再连接。也可以导入 [配置样例](../../config/settings.gemini.example.json)。
 4. 先做一张文字生图，再在已保存的副本中选择腿部，尝试“给腿部穿上白色过膝袜，保留姿势和其他区域”。
 5. 预览候选后再应用。选区、保护区、保留原透明轮廓、独立图层与一次撤销仍由插件处理。
 
@@ -68,4 +68,4 @@ Gemini 这条接口直接返回图片，没有可用于本适配器重取结果�
 - 没有图片、安全拒绝、非 PNG、尺寸或颜色不符会报错。不要换成宽松解码强行回填。
 - 异常退出遗留 `gateway.lock` 时，先确认记录的进程已结束，再移除锁。数据目录包含私人图片和提示词，不要公开。
 
-拿到 Key 后，需逐项验收七种模式、中英界面、颜色／透明边缘、选区和保护区、回填与撤销、多个候选、断线与服务重启，以及两种插件安装路径。完成这些检查后再更新兼容清单、截图和发布状态。服务端抽象、重写与恢复约定见仓库根目录 `BACKEND.md` 和 `AGENTS.md`。
+拿到 Key 后，需逐项验收七种模式、中英界面、颜色／透明边缘、选区和保护区、回填与撤销、多个候选、断线与服务重启，以及两种插件安装路径。完成这些检查后再更新兼容清单、截图和发布状态。服务端抽象、重写与恢复约定见仓库的 `docs/development/BACKEND.md` 和 `AGENTS.md`。

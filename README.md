@@ -2,7 +2,7 @@
   <img src="assets/brand/avatar.png" width="72" alt="PS-AI">
 </p>
 <h1 align="center">PS-AI</h1>
-<p align="center"><strong>简体中文</strong> · <a href="README.en.md">English</a></p>
+<p align="center"><strong>简体中文</strong> · <a href="docs/README.en.md">English</a></p>
 
 PS-AI 将 ComfyUI 接到 Photoshop 中，用于局部修图、COSPLAY 服装和道具处理，以及文字生图。圈选区域、描述修改要求，在面板里生成并预览候选，确认后应用为带蒙版的新图层。
 
@@ -10,7 +10,16 @@ PS-AI 将 ComfyUI 接到 Photoshop 中，用于局部修图、COSPLAY 服装和�
 
 从 0.3.0 升级后，面板名称由 `PS-AI FOR ME` 改为 `PS-AI`，图标使用 Morph Frame 标识。插件 ID 与 `PS-AI-FOR-ME` 安装目录保持不变。
 
-开发分支新增 [百炼](BAILIAN.md)、[Gemini / Nano Banana](GEMINI.md) 与 [OpenAI Images](OPENAI.md) 的平台适配服务。平台路径仍待真实 API Key 和 Photoshop 验收，**不在已发布的 v0.4.0 包中**。本页下方截图及已测能力对应 ComfyUI 路径。
+开发分支新增 [百炼](docs/providers/BAILIAN.md)、[Gemini / Nano Banana](docs/providers/GEMINI.md) 与 [OpenAI Images](docs/providers/OPENAI.md) 的平台适配服务。平台路径仍待真实 API Key 和 Photoshop 验收，**不在已发布的 v0.4.0 包中**。本页下方截图及已测能力对应 ComfyUI 路径。
+
+## 文档导航
+
+| 用途 | 文档 |
+| --- | --- |
+| 入门操作与九种模式示例 | [图文使用指南](docs/usage/USER_GUIDE.md) |
+| 本地后端、模型与排错 | [ComfyUI 配置](docs/setup/COMFYUI.md) |
+| 平台适配（开发中） | [百炼](docs/providers/BAILIAN.md) · [Gemini / Nano Banana](docs/providers/GEMINI.md) · [OpenAI Images](docs/providers/OPENAI.md) |
+| 参与开发与服务端扩展 | [开发入口](AGENTS.md#development-zh) · [后端与持久化契约](docs/development/BACKEND.md) |
 
 ## 看看效果
 
@@ -22,7 +31,7 @@ PS-AI 将 ComfyUI 接到 Photoshop 中，用于局部修图、COSPLAY 服装和�
 
 ![Photoshop 中的实际候选预览，点击查看原始 PNG](assets/guide/01-edit-workspace.png)
 
-九种模式的逐步操作、选区范围、实测提示词及清晰 PNG 截图见 [图文使用说明](USER_GUIDE.md)。所有例子使用同一张样图，包含整张背景替换、参考辅助、独立素材合成和文字生图。
+九种模式的逐步操作、选区范围、实测提示词及清晰 PNG 截图见 [图文使用说明](docs/usage/USER_GUIDE.md)。所有例子使用同一张样图，包含整张背景替换、参考辅助、独立素材合成和文字生图。
 
 ## 能做什么
 
@@ -33,7 +42,7 @@ PS-AI 将 ComfyUI 接到 Photoshop 中，用于局部修图、COSPLAY 服装和�
 - **透明与颜色**：默认保留原透明轮廓，可选主体对齐和小幅上下文颜色匹配。RGB／灰度 8/16 位已在 Photoshop 中测试图像往返；模型输入仍是 sRGB 8-bit。
 - **连接与语言**：保存后端地址、端口，ComfyUI 模型文件映射或平台模型 ID，导入／导出 JSON；面板可切换简体中文和 English。
 
-ComfyUI 路径使用固定的 **Qwen-Image 2.1 GGUF 工作流**，不支持直接替换成 SD、SDXL 或 Flux。模型要求和配置方法见 [ComfyUI 配置指南](COMFYUI.md)。
+ComfyUI 路径使用固定的 **Qwen-Image 2.1 GGUF 工作流**，不支持直接替换成 SD、SDXL 或 Flux。模型要求和配置方法见 [ComfyUI 配置指南](docs/setup/COMFYUI.md)。
 
 ## 系统要求
 
@@ -77,7 +86,7 @@ CCX 与 Portable 的设置和历史各自独立。切换前导出设置、保存
 
 ## 连接 ComfyUI
 
-完整的安装、模型下载、版本和排错步骤在 [ComfyUI 配置指南](COMFYUI.md)。已有后端不需要重装：
+完整的安装、模型下载、版本和排错步骤在 [ComfyUI 配置指南](docs/setup/COMFYUI.md)。已有后端不需要重装：
 
 1. 启动 ComfyUI，先在浏览器确认服务能打开。
 2. 展开面板“模型与连接”，填写地址，例如 `http://localhost:8188`、`http://localhost:8199` 或 `http://192.168.1.20:8188`。
@@ -128,7 +137,7 @@ npm run build
 
 在 [Issues](https://github.com/ImMappyJ/ps-ai/issues) 提供系统、PS／插件／ComfyUI 版本、模型、显卡、复现步骤和脱敏错误。效果问题可以附有权公开的局部对比；不要上传完整崩溃转储或私人照片。
 
-欢迎提交 PR，尽量让每次改动集中解决一个问题。克隆仓库后，先读根目录的 `AGENTS.md` 了解代码结构和开发约定。服务端重写与新增平台的契约见根目录 `BACKEND.md`。提交前运行 `npm ci`、`npm test`、`npm run build`；改动工作流时，同步更新兼容清单和中英文说明。开发使用独立分支，讨论和评审放在 Issue／PR。交接笔记、调试记录和本机报告留在本地。
+欢迎提交 PR，尽量让每次改动集中解决一个问题。克隆仓库后，先读根目录的 `AGENTS.md` 了解代码结构和开发约定。服务端重写与新增平台的契约见 [后端开发文档](docs/development/BACKEND.md)。提交前运行 `npm ci`、`npm test`、`npm run build`；改动工作流时，同步更新兼容清单和中英文说明。开发使用独立分支，讨论和评审放在 Issue／PR。交接笔记、调试记录和本机报告留在本地。
 
 ## 许可与鸣谢
 

@@ -2,14 +2,14 @@
 
 [中文](BACKEND.md) | English
 
-This guide is for rewriting the server, adding providers or changing job storage. See [Bailian](BAILIAN.en.md), [Gemini / Nano Banana](GEMINI.en.md) and [OpenAI Images](OPENAI.en.md) for setup and [COMFYUI.en.md](COMFYUI.en.md) for the existing local backend.
+This guide is for rewriting the server, adding providers or changing job storage. See [Bailian](../providers/BAILIAN.en.md), [Gemini / Nano Banana](../providers/GEMINI.en.md) and [OpenAI Images](../providers/OPENAI.en.md) for setup and [COMFYUI.en.md](../setup/COMFYUI.en.md) for the existing local backend.
 
 ## Backend paths
 
 | Setting | Request contract | Implementation |
 | --- | --- | --- |
-| Omitted `backend`, or `comfyui` | ComfyUI graph, node schemas and model filenames | [src/client.ts](src/client.ts), [src/workflow.ts](src/workflow.ts) |
-| `backend: gateway` | Semantic `ps-ai/1` requests and model capabilities | [src/gateway-client.ts](src/gateway-client.ts), [src/gateway-protocol.ts](src/gateway-protocol.ts) |
+| Omitted `backend`, or `comfyui` | ComfyUI graph, node schemas and model filenames | [src/client.ts](../../src/client.ts), [src/workflow.ts](../../src/workflow.ts) |
+| `backend: gateway` | Semantic `ps-ai/1` requests and model capabilities | [src/gateway-client.ts](../../src/gateway-client.ts), [src/gateway-protocol.ts](../../src/gateway-protocol.ts) |
 
 The new server does not need ComfyUI or pretend GGUF nodes. Photoshop retains capture, selections, protection, previews and safe application. The gateway owns provider authentication, translation, task identities and output files.
 
@@ -23,6 +23,39 @@ Bailian, Gemini and OpenAI Images are implemented, with live platform and host a
 | [Black Forest Labs / FLUX](https://docs.bfl.ai/quick_start/generating_images) | Returned polling URL and async result | Researched, not implemented |
 
 An OpenAI-compatible label, similar endpoint name or accepted model ID does not establish image-editing compatibility. Google Interactions is a separate API, not used by this adapter; do not assign its recovery guarantees to GenerateContent.
+
+<a id="server-architecture"></a>
+
+## Server structure
+
+The server is organized by responsibility, with only its entry point at the root. `npm run gateway` and `dist/gateway/ps-ai-gateway.mjs` remain unchanged.
+
+```text
+server/
+├── main.ts                   # Arguments, environment, composition, listen/exit
+├── http/
+│   ├── gateway.ts            # Routes, status codes, Host/Origin, connections
+│   └── messages.ts           # Bounded request bodies and JSON responses
+├── application/
+│   └── jobs.ts               # Submit, dedupe, status, recovery and workers
+├── persistence/
+│   └── job-store.ts          # Durable records, atomic writes, files and lock
+├── providers/
+│   ├── contract.ts           # Shared task/inline ImageProvider interface
+│   ├── bailian.ts
+│   ├── gemini.ts
+│   └── openai.ts
+└── shared/
+    ├── errors.ts             # Safe errors and uncertain-outcome marker
+    ├── images.ts             # PNG inputs and default output normalization
+    └── io.ts                 # Bounded provider-response reading
+```
+
+HTTP calls the job service, which depends on persistence and the ImageProvider contract. main.ts injects concrete adapters; jobs never import Bailian, Gemini or OpenAI classes. Adapters neither access job directories nor write incoming HTTP responses. Failures use the shared ServiceError, serialized by HTTP; shared does not import upper layers. UXP and Node continue to use src/gateway-protocol.ts and the existing pixel utilities, without duplicating the protocol or introducing Node modules into the plugin.
+
+Jobs own UUIDs, state and background work. HTTP stops accepting work and drains handlers that may still persist a submission. Shutdown follows **handlers → workers → serialized writes → store lock**. Releasing the lock earlier could let a disconnected handler start work afterwards. gateway.store remains the original instance for diagnostics/fault injection; route operations use the job service.
+
+Add a provider implementation and an explicit factory in main.ts, with capability, request and recovery tests. A single file store does not need a database abstraction, dependency injection container or framework. Moving files does not change HTTP, environment variables, on-disk formats or recovery rules.
 
 ## ps-ai/1 routes
 
@@ -69,7 +102,7 @@ States are `queued`, `running`, `ready`, `failed`, `cancelled` and `unknown`. On
 
 ## Persistence is part of the contract
 
-See [server/store.ts](server/store.ts) and [server/gateway.ts](server/gateway.ts). A rewrite in another language or database must preserve this ordering:
+See job orchestration in [application/jobs.ts](../../server/application/jobs.ts), durable files in [persistence/job-store.ts](../../server/persistence/job-store.ts) and transport in [http/gateway.ts](../../server/http/gateway.ts). A rewrite in another language or database must preserve this ordering:
 
 1. Validate inputs and hash the normalized request together with `clientId`.
 2. **Persist the local UUID, fingerprint, provider identity, endpoint and `submitting` state before creating a platform task.**
@@ -88,7 +121,7 @@ Each job keeps its provider identity and endpoint. Do not query an old task thro
 
 ## Implement another provider
 
-Implement [server/provider.ts](server/provider.ts): declare `id`, `execution` (`task` or `inline`) and `baseUrl`, then provide `capabilities()` and `submit()`. Task APIs return `{taskId}` and implement `poll()` / `download()`. Inline APIs return `{image}` without inventing a remote ID. Optional `normalizeOutput()` must produce tagged sRGB8 at requested dimensions, with a documented inverse for geometric transforms. See [Bailian](server/bailian.ts), [Gemini](server/gemini.ts) and [OpenAI](server/openai.ts). Register explicitly in [server/main.ts](server/main.ts), without dynamic modules or arbitrary provider URLs. Keep keys on the server.
+Implement [server/providers/contract.ts](../../server/providers/contract.ts): declare `id`, `execution` (`task` or `inline`) and `baseUrl`, then provide `capabilities()` and `submit()`. Task APIs return `{taskId}` and implement `poll()` / `download()`. Inline APIs return `{image}` without inventing a remote ID. Optional `normalizeOutput()` must produce tagged sRGB8 at requested dimensions, with a documented inverse for geometric transforms. See [Bailian](../../server/providers/bailian.ts), [Gemini](../../server/providers/gemini.ts) and [OpenAI](../../server/providers/openai.ts). Register explicitly in [server/main.ts](../../server/main.ts), without dynamic modules or arbitrary provider URLs. Keep keys on the server.
 
 Errors expose only sanitized `code` and `message`. Never forward raw provider messages, headers, Base64 images, prompts or signed URLs. Distinguish definite rejection from uncertain acceptance; retain unknown outcomes without reposting.
 
@@ -104,6 +137,6 @@ Errors expose only sanitized `code` and `message`. Never forward raw provider me
 
 ## Validation and maintenance
 
-Run `npm test`, `npm run typecheck` and `npm run build`. Provider contracts live in `tests/bailian.test.ts` , `tests/gemini.test.ts` and `tests/openai.test.ts`, real loopback HTTP and persistence tests in `tests/gateway-server.test.ts`, and panel tests in `tests/gateway-panel.test.ts`. Simulated providers cannot prove live access, speed, quality, color, transparency or native host UI compatibility.
+Run `npm test`, `npm run typecheck` and `npm run build`. `tests/application-jobs.test.ts` checks identity persistence before submission, deduplication, draining and raw-result recovery without HTTP. Provider contracts live in `tests/bailian.test.ts` , `tests/gemini.test.ts` and `tests/openai.test.ts`, real loopback HTTP and persistence tests in `tests/gateway-server.test.ts`, and panel tests in `tests/gateway-panel.test.ts`. Simulated providers cannot prove live access, speed, quality, color, transparency or native host UI compatibility.
 
-Once a key is available, follow `BAILIAN.en.md`, `GEMINI.en.md` and `OPENAI.en.md` for platform and Photoshop acceptance, then update the [compatibility manifest](config/compatibility.json), both language guides and [AGENTS.md](AGENTS.md). Match releases to validated source and packages. Existing v0.4.0 assets do not contain this unpublished work.
+Once a key is available, follow [Bailian](../providers/BAILIAN.en.md), [Gemini](../providers/GEMINI.en.md) and [OpenAI Images](../providers/OPENAI.en.md) for platform and Photoshop acceptance, then update the [compatibility manifest](../../config/compatibility.json), both language guides and [AGENTS.md](../../AGENTS.md). Match releases to validated source and packages. Existing v0.4.0 assets do not contain this unpublished work.

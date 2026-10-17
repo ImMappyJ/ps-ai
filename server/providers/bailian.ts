@@ -1,8 +1,8 @@
-import {GATEWAY_PROTOCOL,UUID,validateGeneration} from '../src/gateway-protocol';
-import type {GatewayCapabilities,GenerationRequest} from '../src/gateway-protocol';
-import {ServiceError,platformCode} from './errors';
-import {readBounded} from './io';import {validateInput} from './images';
-import type {ImageProvider,ProviderStatus} from './provider';
+import {GATEWAY_PROTOCOL,UUID,validateGeneration} from '../../src/gateway-protocol';
+import type {GatewayCapabilities,GenerationRequest} from '../../src/gateway-protocol';
+import {ServiceError,platformCode} from '../shared/errors';
+import {readBounded} from '../shared/io';import {validateInput} from '../shared/images';
+import type {ImageProvider,ProviderStatus} from './contract';
 export interface BailianOptions {apiKey?:string;baseUrl?:string;transport?:typeof fetch;timeoutMs?:number}
 export class BailianProvider implements ImageProvider {
   readonly id='bailian';readonly execution='task' as const;

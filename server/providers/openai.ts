@@ -1,11 +1,11 @@
-import {GATEWAY_PROTOCOL,validateGeneration} from '../src/gateway-protocol';
-import type {GatewayCapabilities,GenerationRequest} from '../src/gateway-protocol';
-import {checkSize,decodePng,encodePng,rasterDepth,resize} from '../src/image';
-import type {Raster} from '../src/image';
-import type {ImageProvider} from './provider';
-import {ServiceError} from './errors';
-import {readBounded} from './io';
-import {validateInput,MAX_INPUT_BYTES} from './images';
+import {GATEWAY_PROTOCOL,validateGeneration} from '../../src/gateway-protocol';
+import type {GatewayCapabilities,GenerationRequest} from '../../src/gateway-protocol';
+import {checkSize,decodePng,encodePng,rasterDepth,resize} from '../../src/image';
+import type {Raster} from '../../src/image';
+import type {ImageProvider} from './contract';
+import {ServiceError} from '../shared/errors';
+import {readBounded} from '../shared/io';
+import {validateInput,MAX_INPUT_BYTES} from '../shared/images';
 
 const MODELS=['gpt-image-2.5-sunburst','gpt-image-2.5-flare','gpt-image-1.5'];
 const RESPONSE_BYTES=32*1024*1024;

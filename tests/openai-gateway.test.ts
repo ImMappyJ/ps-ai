@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';import path from 'node:path';import os from 'node:os';
-import {createGateway} from '../server/gateway';import {OpenAIImagesProvider,openAIFrame} from '../server/openai';
+import {createGateway} from '../server/http/gateway';import {OpenAIImagesProvider,openAIFrame} from '../server/providers/openai';
 import {GatewayClient} from '../src/gateway-client';import {uuid} from '../src/client';import {decodePng} from '../src/image';
 import {cloudPng,cloudRequest} from './gateway-fixtures';
 import {listenLoopback} from './loopback';

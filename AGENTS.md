@@ -7,11 +7,11 @@
 
 ### 从这里开始
 
-PS-AI 是 Photoshop 的 UXP 插件。已发布的本地路径通过 ComfyUI 运行 Qwen-Image 2.1；开发分支另有百炼、Gemini / Nano Banana 与 OpenAI Images 平台适配，真实平台与宿主验收待 API Key。先读 [README](README.md) 了解功能边界，再读 [ComfyUI 配置](COMFYUI.md) 和 [使用指南](USER_GUIDE.md)。平台启动见 [百炼](BAILIAN.md) 、[Gemini](GEMINI.md) 与 [OpenAI Images](OPENAI.md)；重写服务端先读 [接口与持久化契约](BACKEND.md)。后端版本、节点、模型文件与验收范围以 [兼容清单](config/compatibility.json) 为准；可迁移配置见 [配置样例](config/settings.example.json)。
+PS-AI 是 Photoshop 的 UXP 插件。已发布的本地路径通过 ComfyUI 运行 Qwen-Image 2.1；开发分支另有百炼、Gemini / Nano Banana 与 OpenAI Images 平台适配，真实平台与宿主验收待 API Key。先读 [README](README.md) 了解功能边界，再读 [ComfyUI 配置](docs/setup/COMFYUI.md) 和 [使用指南](docs/usage/USER_GUIDE.md)。平台启动见 [百炼](docs/providers/BAILIAN.md) 、[Gemini](docs/providers/GEMINI.md) 与 [OpenAI Images](docs/providers/OPENAI.md)；重写服务端先读 [接口与持久化契约](docs/development/BACKEND.md)。后端版本、节点、模型文件与验收范围以 [兼容清单](config/compatibility.json) 为准；可迁移配置见 [配置样例](config/settings.example.json)。
 
 功能分为局部修图、COSPLAY、文字生图，共九种模式。角色参考辅助、特效与氛围素材在当前范围内，常规人像精修不在范围内。参考图不保证锁定身份，透明素材与生成效果仍需检查。新增模型或工作流不能仅凭“能选到模型”就宣布兼容。
 
-公开文档和当前源码是开发入口。本机交接、旧方案和原生验收证据被 Git 忽略，不是克隆或 Fork 后的前置条件；不要为了补齐开发资料把它们整目录上传。
+公开文档和当前源码是开发入口。品牌几何源文件在 assets/brand，修改后同步导出；保持开放框、单色结构和安全边距，不拉伸或添加发光。本机交接、旧方案和原生验收证据被 Git 忽略，不是克隆或 Fork 后的前置条件；不要为了补齐开发资料把它们整目录上传。
 
 ### 代码地图
 
@@ -21,12 +21,16 @@ PS-AI 是 Photoshop 的 UXP 插件。已发布的本地路径通过 ComfyUI 运�
 | Photoshop 捕获、选区、保护区、回填和撤销 | [src/photoshop.ts](src/photoshop.ts)、[src/range-preview.ts](src/range-preview.ts) |
 | 像素、透明度、坐标和色彩 | [src/image.ts](src/image.ts)、[src/composite.ts](src/composite.ts)、[src/color.ts](src/color.ts)、[src/png-decode.ts](src/png-decode.ts)、[src/png16.ts](src/png16.ts) |
 | 九种模式和 ComfyUI 图 | [src/intent.ts](src/intent.ts)、[src/workflow.ts](src/workflow.ts) |
-| 平台协议、能力与适配服务 | [src/gateway-protocol.ts](src/gateway-protocol.ts)、[src/gateway-client.ts](src/gateway-client.ts)、[server/provider.ts](server/provider.ts)、[server/gateway.ts](server/gateway.ts)、[server/store.ts](server/store.ts)、[server/bailian.ts](server/bailian.ts)、[server/gemini.ts](server/gemini.ts)、[server/openai.ts](server/openai.ts) |
+| 平台协议与插件客户端 | [src/gateway-protocol.ts](src/gateway-protocol.ts)、[src/gateway-client.ts](src/gateway-client.ts) |
+| 服务端启动与 HTTP | [server/main.ts](server/main.ts)、[server/http/gateway.ts](server/http/gateway.ts)、[server/http/messages.ts](server/http/messages.ts) |
+| 平台任务流程与持久化 | [server/application/jobs.ts](server/application/jobs.ts)、[server/persistence/job-store.ts](server/persistence/job-store.ts) |
+| 平台接口与具体适配 | [server/providers/contract.ts](server/providers/contract.ts)、[server/providers/bailian.ts](server/providers/bailian.ts)、[server/providers/gemini.ts](server/providers/gemini.ts)、[server/providers/openai.ts](server/providers/openai.ts) |
+| 服务端错误、PNG 与响应预算 | [server/shared/errors.ts](server/shared/errors.ts)、[server/shared/images.ts](server/shared/images.ts)、[server/shared/io.ts](server/shared/io.ts) |
 | 上传、任务状态、取消和恢复 | [src/client.ts](src/client.ts)、[src/jobs.ts](src/jobs.ts)、[src/storage.ts](src/storage.ts) |
 | 地址、模型映射、环境检查和诊断 | [src/profile.ts](src/profile.ts)、[src/environment.ts](src/environment.ts)、[src/diagnostics.ts](src/diagnostics.ts) |
 | 可选 16 位输出节点 | [comfyui/ps_ai_sdr16/__init__.py](comfyui/ps_ai_sdr16/__init__.py)、[tests/test_sdr16.py](tests/test_sdr16.py) |
 | 构建、打包、环境工具和 CI | [scripts/build.mjs](scripts/build.mjs)、[scripts/package.mjs](scripts/package.mjs)、[scripts/check-environment.ps1](scripts/check-environment.ps1)、[scripts/prepare-environment.ps1](scripts/prepare-environment.ps1)、[.github/workflows/build.yml](.github/workflows/build.yml) |
-| 品牌 SVG、图标和导出 | [BRAND.md](BRAND.md)、[assets/brand/mark.svg](assets/brand/mark.svg)、[scripts/export-brand.mjs](scripts/export-brand.mjs) |
+| 品牌 SVG、图标和导出 | [assets/brand/mark.svg](assets/brand/mark.svg)、[scripts/export-brand.mjs](scripts/export-brand.mjs) |
 
 ### 环境与常用命令
 
@@ -69,10 +73,12 @@ ComfyUI 图中第一张输入是来源，启用引导后占用下一输入位，
 
 ### 平台适配与服务端重写
 
-公开契约在 [BACKEND.md](BACKEND.md)，不能只依赖被忽略的本机开发笔记。插件运行在 UXP，平台服务是独立 Node.js 24+ 进程；不要把 Node 文件系统、Key 或平台 SDK 塞进插件。服务构建到 `dist/gateway/ps-ai-gateway.mjs`，环境工具 ZIP 包含同一独立文件与许可证，不增加插件运行时依赖。
+公开契约在 [BACKEND.md](docs/development/BACKEND.md)，不能只依赖被忽略的本机开发笔记。插件运行在 UXP，平台服务是独立 Node.js 24+ 进程；不要把 Node 文件系统、Key 或平台 SDK 塞进插件。服务构建到 `dist/gateway/ps-ai-gateway.mjs`，环境工具 ZIP 包含同一独立文件与许可证，不增加插件运行时依赖。
+
+目录与依赖见 [服务端结构](docs/development/BACKEND.md#server-architecture)。`main.ts` 是组合与启动入口；`http` 只处理传输和连接生命周期，调用 `application/jobs.ts`；作业服务使用 `persistence` 与 `providers/contract.ts`，不依赖具体平台类或 HTTP。具体平台只依赖统一接口、共享协议和校验；`shared` 不反向依赖上层。不要只按平台名字移动文件后继续把任务状态写进路由。正常关闭顺序为停止接入、等待 HTTP handlers、等待任务 workers 和串行写入、最后释放 store 锁。新增平台在 providers 增加实现并由 main 显式注册，不加入动态模块加载或额外分层框架。
 
 - 用 `PSAI_PROVIDER=bailian|gemini|openai` 选择一个提供方，`npm run gateway -- --port 8190` 启动。并行平台用不同端口和数据目录。配置默认目录为 `~/.ps-ai/bailian` / `~/.ps-ai/gemini` / `~/.ps-ai/openai`；凭据只读服务进程环境。默认只绑定 127.0.0.1，当前没有多人认证或公网部署能力。
-- `ImageProvider` 抽象位于 `server/provider.ts`。能力清单决定模式、输入数、输出位深、像素预算和种子。`seedMax: 0` 表示不可设种子，使用占位 0 且不传给平台。未知参数必须拒绝；界面和历史恢复不能把禁用的 16 位、素材模式或参数带回平台配置。
+- `ImageProvider` 抽象位于 `server/providers/contract.ts`。能力清单决定模式、输入数、输出位深、像素预算和种子。`seedMax: 0` 表示不可设种子，使用占位 0 且不传给平台。未知参数必须拒绝；界面和历史恢复不能把禁用的 16 位、素材模式或参数带回平台配置。
 - 调用上游前持久化本地 UUID、规范化摘要、提供方身份和端点。相同 UUID 只能创建一次上游任务，不同请求或提供方返回 409。百炼异步任务保存原平台 ID 后继续查询；Gemini GenerateContent 与 OpenAI Images 同步返回图片，在本机后台执行，不能伪造远程任务 ID。提交窗口结果不确定、且没有可查 ID／原始结果时保留 unknown，不自动重发收费请求。
 - 原始结果先落盘，再验证和发布 PNG。临时 I/O 失败保持可重试，不作为图片损坏终态；原始文件存在即可按原 UUID 恢复转换。来源、参考与提示词保存在私人数据目录；只跟踪阶段和 ID，不把内容、Key、原始平台错误或签名 URL 写入诊断或响应。
 - 作业、输入、原始输出和转换输出一起迁移。提供方／地域变化不得把旧任务路由到新平台。数据目录互斥，正常退出释放锁；异常结束后先确认进程退出，再清理遗留锁。没有自动对账、认领任务 ID、放弃跟踪、自动清理或长期稳定保证。
@@ -94,18 +100,18 @@ ComfyUI 图中第一张输入是来源，启用引导后占用下一输入位，
 
 GitHub Actions 在推送到 `main` 和 PR 时检查构建，只有手动运行工作流才上传发行产物；当前不自动创建 Release。发布标签与附件应对应实际验收的代码，不移动已公开标签。文档改动不意味着需要重发已有发行包。
 
-面向使用的中英文说明放在仓库根目录，顶部保留语言切换、使用相对链接，描述以实际实现和验收为准。修改配置标准同步两种语言的 COMFYUI 与兼容清单；修改交互同步 USER_GUIDE；品牌 SVG 变更同步导出和引用。新截图使用有权公开的素材，保持原始清晰度，不补画宿主界面。模型、输入输出、私人诊断与构建产物保持被忽略。提交署名遵循本文件末尾的共同作者规则。
+根目录 Markdown 只保留 README.md 与 AGENTS.md；英文首页在 docs/README.en.md，配置、使用、平台和开发文档分别放 docs/setup、docs/usage、docs/providers、docs/development。README 提供分类入口，页面顶部保留语言切换，使用相对链接，描述以实际实现和验收为准。docs 只通过明确白名单公开这些指南；本机交接与验收记录放 docs/local 并继续忽略，不扩大目录例外。修改配置标准同步两种语言的 COMFYUI 与兼容清单；修改交互同步 USER_GUIDE；品牌 SVG 变更同步导出和引用。新截图使用有权公开的素材，保持原始清晰度，不补画宿主界面。模型、输入输出、私人诊断与构建产物保持被忽略。提交署名遵循本文件末尾的共同作者规则。
 
 <a id="development-en"></a>
 ## English
 
 ### Start here
 
-PS-AI is a Photoshop UXP plugin. The published local path uses ComfyUI and Qwen-Image 2.1. The development branch also contains Bailian, Gemini / Nano Banana and OpenAI Images adapters; live platform and host acceptance await API keys. Read the [README](README.en.md), [ComfyUI setup](COMFYUI.en.md) and [user guide](USER_GUIDE.en.md). See [Bailian](BAILIAN.en.md), [Gemini](GEMINI.en.md), [OpenAI Images](OPENAI.en.md) and the [backend / persistence contract](BACKEND.en.md) before platform or server work. The [compatibility manifest](config/compatibility.json) records backend, node and model pins and the scope of validation; the [settings example](config/settings.example.json) defines portable configuration.
+PS-AI is a Photoshop UXP plugin. The published local path uses ComfyUI and Qwen-Image 2.1. The development branch also contains Bailian, Gemini / Nano Banana and OpenAI Images adapters; live platform and host acceptance await API keys. Read the [README](docs/README.en.md), [ComfyUI setup](docs/setup/COMFYUI.en.md) and [user guide](docs/usage/USER_GUIDE.en.md). See [Bailian](docs/providers/BAILIAN.en.md), [Gemini](docs/providers/GEMINI.en.md), [OpenAI Images](docs/providers/OPENAI.en.md) and the [backend / persistence contract](docs/development/BACKEND.en.md) before platform or server work. The [compatibility manifest](config/compatibility.json) records backend, node and model pins and the scope of validation; the [settings example](config/settings.example.json) defines portable configuration.
 
 The three workspaces cover local editing, COSPLAY and text-to-image, with nine modes. Character references, effects and atmosphere assets are in scope; routine portrait retouching is not. References do not guarantee identity preservation, and generated results and transparency need inspection. Finding a model in the backend list does not establish compatibility.
 
-Use public guides and current source as the development entry point. Ignored handoff notes, historical plans and native evidence are local records, not prerequisites for a clone or fork. Do not publish those directories wholesale.
+Use public guides and current source as the development entry point. Brand geometry lives in assets/brand; regenerate exports after changes and preserve the open frame, monochrome structure and clear space without stretching or adding glow. Ignored handoff notes, historical plans and native evidence are local records, not prerequisites for a clone or fork. Do not publish those directories wholesale.
 
 ### Source map
 
@@ -115,12 +121,16 @@ Use public guides and current source as the development entry point. Ignored han
 | Capture, selections, protection, apply and undo | [src/photoshop.ts](src/photoshop.ts), [src/range-preview.ts](src/range-preview.ts) |
 | Pixels, alpha, coordinates and color | [src/image.ts](src/image.ts), [src/composite.ts](src/composite.ts), [src/color.ts](src/color.ts), [src/png-decode.ts](src/png-decode.ts), [src/png16.ts](src/png16.ts) |
 | Mode intent and ComfyUI graphs | [src/intent.ts](src/intent.ts), [src/workflow.ts](src/workflow.ts) |
-| Platform protocol, capabilities and service | [src/gateway-protocol.ts](src/gateway-protocol.ts), [src/gateway-client.ts](src/gateway-client.ts), [server/provider.ts](server/provider.ts), [server/gateway.ts](server/gateway.ts), [server/store.ts](server/store.ts), [server/bailian.ts](server/bailian.ts), [server/gemini.ts](server/gemini.ts) |
+| Platform protocol and plugin client | [src/gateway-protocol.ts](src/gateway-protocol.ts), [src/gateway-client.ts](src/gateway-client.ts) |
+| Server entry and HTTP | [server/main.ts](server/main.ts), [server/http/gateway.ts](server/http/gateway.ts), [server/http/messages.ts](server/http/messages.ts) |
+| Platform jobs and persistence | [server/application/jobs.ts](server/application/jobs.ts), [server/persistence/job-store.ts](server/persistence/job-store.ts) |
+| Provider contract and adapters | [server/providers/contract.ts](server/providers/contract.ts), [server/providers/bailian.ts](server/providers/bailian.ts), [server/providers/gemini.ts](server/providers/gemini.ts), [server/providers/openai.ts](server/providers/openai.ts) |
+| Server errors, PNG and response budgets | [server/shared/errors.ts](server/shared/errors.ts), [server/shared/images.ts](server/shared/images.ts), [server/shared/io.ts](server/shared/io.ts) |
 | Uploads, job state, cancellation and recovery | [src/client.ts](src/client.ts), [src/jobs.ts](src/jobs.ts), [src/storage.ts](src/storage.ts) |
 | Profiles, environment checks and diagnostics | [src/profile.ts](src/profile.ts), [src/environment.ts](src/environment.ts), [src/diagnostics.ts](src/diagnostics.ts) |
 | Optional 16-bit output | [comfyui/ps_ai_sdr16/__init__.py](comfyui/ps_ai_sdr16/__init__.py), [tests/test_sdr16.py](tests/test_sdr16.py) |
 | Build, packages, environment tools and CI | [scripts/build.mjs](scripts/build.mjs), [scripts/package.mjs](scripts/package.mjs), [scripts/check-environment.ps1](scripts/check-environment.ps1), [scripts/prepare-environment.ps1](scripts/prepare-environment.ps1), [.github/workflows/build.yml](.github/workflows/build.yml) |
-| Brand sources and exports | [BRAND.en.md](BRAND.en.md), [assets/brand/mark.svg](assets/brand/mark.svg), [scripts/export-brand.mjs](scripts/export-brand.mjs) |
+| Brand sources and exports | [assets/brand/mark.svg](assets/brand/mark.svg), [scripts/export-brand.mjs](scripts/export-brand.mjs) |
 
 ### Setup and commands
 
@@ -163,10 +173,12 @@ Persist the caller-assigned UUID before POST. Recover lost responses by querying
 
 ### Platform adapters and server rewrites
 
-The public contract is [BACKEND.en.md](BACKEND.en.md), not ignored local notes. UXP hosts the plugin; a separate Node.js 24+ process hosts platform adapters. Never put Node filesystem calls, provider keys or SDKs in the plugin. Build output is `dist/gateway/ps-ai-gateway.mjs`; environment archives include this standalone bundle and notices without new plugin runtime dependencies.
+The public contract is [BACKEND.en.md](docs/development/BACKEND.en.md), not ignored local notes. UXP hosts the plugin; a separate Node.js 24+ process hosts platform adapters. Never put Node filesystem calls, provider keys or SDKs in the plugin. Build output is `dist/gateway/ps-ai-gateway.mjs`; environment archives include this standalone bundle and notices without new plugin runtime dependencies.
+
+See the [server structure](docs/development/BACKEND.en.md#server-architecture). main.ts composes and starts the service. HTTP handles transport and connection lifecycle, calling application/jobs.ts. Jobs depend on persistence and providers/contract.ts, never concrete provider classes or incoming HTTP. Adapters depend on the contract, shared protocol and validation; shared must not import upper layers. Keep task state out of routes. Shutdown stops incoming work, drains HTTP handlers, then workers and serialized writes, and finally releases the store lock. Add provider implementations under providers and register explicitly in main, without dynamic loading or another layering framework.
 
 - Select one provider with `PSAI_PROVIDER=bailian|gemini|openai`, then `npm run gateway -- --port 8190`. Concurrent providers need separate ports/data directories. Defaults are `~/.ps-ai/bailian`, `~/.ps-ai/gemini` and `~/.ps-ai/openai`. Keys come only from the service environment. The reference binds 127.0.0.1 and provides neither multi-account authentication nor public hosting.
-- `server/provider.ts` defines `ImageProvider`. Capabilities constrain operations, image counts, depth, pixels and seeds. `seedMax: 0` means no configurable seed; use placeholder 0 without sending a provider seed. Reject unknown parameters. History restoration must not introduce disabled 16-bit output or unsupported asset modes/settings into platform configuration.
+- `server/providers/contract.ts` defines `ImageProvider`. Capabilities constrain operations, image counts, depth, pixels and seeds. `seedMax: 0` means no configurable seed; use placeholder 0 without sending a provider seed. Reject unknown parameters. History restoration must not introduce disabled 16-bit output or unsupported asset modes/settings into platform configuration.
 - Persist UUID, normalized fingerprint, provider identity and endpoint before the upstream call. A UUID creates at most one upstream request; conflicting bodies/providers get 409. Bailian saves its remote ID and resumes polling. Gemini GenerateContent and OpenAI Images return an image inline, running in a local worker without an invented remote ID. Keep unknown outcomes when neither a queryable ID nor raw result exists; never automatically replay a potentially billable creation.
 - Persist raw output before validating/publishing PNG. Temporary I/O failures remain retryable rather than becoming invalid-image terminal states; recover saved raw output by the original UUID. Inputs, references and prompts are private stored data. Diagnostics/responses must not expose content, keys, raw provider errors or signed URLs.
 - Migrate jobs, inputs and outputs together. A provider/region change cannot route old jobs elsewhere. One process locks each data directory. After an unclean exit, confirm the process is dead before removing a stale lock. Reconciliation, task-ID attachment, abandoning tracking, automatic cleanup and long-term stability guarantees are not implemented.
@@ -188,7 +200,7 @@ Before release, align versions in `package.json`, `package-lock.json` and `plugi
 
 GitHub Actions validates pushes to `main` and PRs. Package artifacts upload only on manual workflow runs; releases are currently published separately. Tags and assets must match validated code; do not move public tags. Documentation updates alone do not require replacing existing release assets.
 
-Keep public guides at the repository root, bilingual, with language links at the top and relative repository links. Reflect implementation and actual validation. Configuration changes update both COMFYUI guides and the manifest; interaction changes update USER_GUIDE; brand SVG changes update exports and references. Use publishable screenshots at their original clarity, without fabricated host UI. Keep models, runtime images, private diagnostics and build artifacts ignored. Follow the shared attribution rules below for commits.
+Keep only README.md and AGENTS.md as root Markdown files. The English homepage is docs/README.en.md; use docs/setup, docs/usage, docs/providers and docs/development for categorized public guides. README links to each category. Keep language links at the top, use relative repository links and reflect actual implementation and validation. Publish only explicitly allowlisted guides; keep local handoff and evidence under ignored docs/local without broadening the exceptions. Configuration changes update both COMFYUI guides and the manifest; interaction changes update USER_GUIDE; brand SVG changes update exports and references. Use publishable screenshots at their original clarity, without fabricated host UI. Keep models, runtime images, private diagnostics and build artifacts ignored. Follow the shared attribution rules below for commits.
 
 ## Git Commit Attribution
 

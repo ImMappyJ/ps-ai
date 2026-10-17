@@ -1,4 +1,4 @@
-import type {GatewayCapabilities,GenerationRequest} from '../src/gateway-protocol';
+import type {GatewayCapabilities,GenerationRequest} from '../../src/gateway-protocol';
 
 export type ProviderStatus={state:'queued'|'running'|'ready'|'failed'|'cancelled'|'unknown';imageUrl?:string;detail?:string};
 export type ProviderSubmission={taskId:string}|{image:Uint8Array};

@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/brand/avatar.png" width="64" alt="PS-AI"></p>
+<p align="center"><img src="../../assets/brand/avatar.png" width="64" alt="PS-AI"></p>
 <h1 align="center">Gemini / Nano Banana setup</h1>
 <p align="center"><a href="GEMINI.md">简体中文</a> · <strong>English</strong></p>
 
@@ -27,11 +27,11 @@ Node.js is still required; ComfyUI and source compilation are not. Another free 
 
 ## Connect Photoshop
 
-For development, build the plugin and load it through UXP Developer Tool as described in the [README](README.en.md).
+For development, build the plugin and load it through UXP Developer Tool as described in the [README](../README.en.md).
 
 1. Open **Backend and models**, then choose **Platform gateway (experimental)**.
 2. Enter `http://localhost:8191`, not the Google API URL or an API key.
-3. Scan models, select an authorized model, save settings and connect. A [settings example](config/settings.gemini.example.json) is available.
+3. Scan models, select an authorized model, save settings and connect. A [settings example](../../config/settings.gemini.example.json) is available.
 4. Start with one text-to-image result. Then use a saved image copy, select the legs and try: “Add white over-the-knee socks; preserve the pose and other areas.”
 5. Inspect the candidate before applying it. The plugin still controls selections, protection, source transparency, independent layers and one-step undo.
 
@@ -68,4 +68,4 @@ This Gemini API returns an image directly. The adapter has no remote task ID for
 - Refusals, missing images, non-PNG output and invalid dimensions/color produce errors. Do not bypass validation to force application.
 - After a crash, remove a stale `gateway.lock` only after confirming its recorded process has exited. Data contains private images and prompts; keep it private.
 
-With a key, validate all seven modes, both UI languages, color/alpha edges, selections/protection, apply/undo, multiple candidates, disconnects/restarts and both installation paths. Update compatibility, screenshots and release status only after acceptance. The repository-root `BACKEND.en.md` and `AGENTS.md` document adapter and persistence contracts.
+With a key, validate all seven modes, both UI languages, color/alpha edges, selections/protection, apply/undo, multiple candidates, disconnects/restarts and both installation paths. Update compatibility, screenshots and release status only after acceptance. The repository’s `docs/development/BACKEND.en.md` and `AGENTS.md` document adapter and persistence contracts.

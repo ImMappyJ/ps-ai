@@ -11,8 +11,29 @@ __pycache__/
 # Local handoff, planning state, editor settings and operating-system caches
 HANDOFF.md
 README.github.md
-# Internal notes and machine evidence stay local. Public guides live at the root.
-docs/
+# Publish only the categorized guides; plans and machine evidence stay local.
+docs/*
+!docs/README.en.md
+!docs/setup/
+docs/setup/*
+!docs/setup/COMFYUI.md
+!docs/setup/COMFYUI.en.md
+!docs/usage/
+docs/usage/*
+!docs/usage/USER_GUIDE.md
+!docs/usage/USER_GUIDE.en.md
+!docs/providers/
+docs/providers/*
+!docs/providers/BAILIAN.md
+!docs/providers/BAILIAN.en.md
+!docs/providers/GEMINI.md
+!docs/providers/GEMINI.en.md
+!docs/providers/OPENAI.md
+!docs/providers/OPENAI.en.md
+!docs/development/
+docs/development/*
+!docs/development/BACKEND.md
+!docs/development/BACKEND.en.md
 scripts/photoshop-network.ps1
 tests/network-isolation.test.ts
 .vscode/

@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/brand/avatar.png" width="64" alt="PS-AI"></p>
+<p align="center"><img src="../../assets/brand/avatar.png" width="64" alt="PS-AI"></p>
 <h1 align="center">接入阿里云百炼</h1>
 <p align="center"><strong>简体中文</strong> · <a href="BAILIAN.en.md">English</a></p>
 
@@ -55,12 +55,12 @@ $env:DASHSCOPE_BASE_URL = 'https://WORKSPACE_ID.cn-beijing.maas.aliyuncs.com/api
 
 ## 3. 在插件中选择
 
-开发测试先运行 `npm run build`，通过 UXP Developer Tool 加载 `dist/plugin/manifest.json`，完整加载步骤见 [README](README.md)。
+开发测试先运行 `npm run build`，通过 UXP Developer Tool 加载 `dist/plugin/manifest.json`，完整加载步骤见 [README](../../README.md)。
 
 1. 展开“模型与连接”。
 2. 后端类型选择“平台适配服务（实验）”。
 3. 地址填 `http://localhost:8190`；自定义端口时两处保持一致。
-4. 点击“扫描模型”，选择已开通的模型，再“保存配置”和“连接”。也可导入 [百炼配置样例](config/settings.bailian.example.json)。
+4. 点击“扫描模型”，选择已开通的模型，再“保存配置”和“连接”。也可导入 [百炼配置样例](../../config/settings.bailian.example.json)。
 5. 先用文字生图生成一张候选，再测试有选区的局部编辑。描述示例：给腿部穿上白色过膝袜，保留姿势和未选区域。
 
 平台模式下不配置 GGUF、编码器或 VAE；步数由平台控制，输出目前固定 8 位。即使显示“已连接”，也只表示服务与配置检查通过，实际权限和出图仍须调用验证。
@@ -95,7 +95,7 @@ $env:DASHSCOPE_BASE_URL = 'https://WORKSPACE_ID.cn-beijing.maas.aliyuncs.com/api
 | `unknown` 且没有平台 ID | 人工核对平台记录，当前没有自动对账或放弃跟踪界面；不要删除元数据并重复创建 |
 | 数据目录已加锁 | 先关闭原服务；异常终止时，确认 `gateway.lock` 中的 PID 已退出后才移除遗留锁 |
 
-服务只监听本机，不是带账户认证的公共服务。需要迁移时，正常停止后备份整个数据目录；它包含提示词和图片，不要上传到仓库或 Issue。服务端重写、持久化顺序及接口字段见克隆仓库根目录的 `BACKEND.md` 与 `AGENTS.md`。
+服务只监听本机，不是带账户认证的公共服务。需要迁移时，正常停止后备份整个数据目录；它包含提示词和图片，不要上传到仓库或 Issue。服务端重写、持久化顺序及接口字段见 [后端开发文档](../development/BACKEND.md) 与 [AGENTS.md](../../AGENTS.md)。
 
 ## 6. 有 Key 后的验收清单
 

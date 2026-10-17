@@ -1,6 +1,6 @@
 import path from 'node:path';import os from 'node:os';import {pathToFileURL} from 'node:url';import {parseArgs} from 'node:util';
-import {BailianProvider} from './bailian';import {GeminiProvider} from './gemini';import {OpenAIImagesProvider} from './openai';import {createGateway} from './gateway';
-import type {ImageProvider} from './provider';
+import {BailianProvider} from './providers/bailian';import {GeminiProvider} from './providers/gemini';import {OpenAIImagesProvider} from './providers/openai';import {createGateway} from './http/gateway';
+import type {ImageProvider} from './providers/contract';
 export async function startGateway(options:{port?:number;dataDir?:string;env?:NodeJS.ProcessEnv}={}){
   if(Number(process.versions.node.split('.')[0])<24)throw new Error('PS-AI gateway requires Node.js 24 or later');
   const env=options.env??process.env,port=options.port??Number(env.PSAI_GATEWAY_PORT??8190);

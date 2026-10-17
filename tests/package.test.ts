@@ -39,7 +39,16 @@ test('打包校验拒绝缺失 ZIP64 字段的畸形归档且不会无限循环'
 test('独立环境工具归档可直接解压运行，包含配置与指南且无 Node/个人路径/模型',async()=>{
   // @ts-expect-error Packaging is plain JS.
   const {createEnvironmentPackage}=await import('../scripts/package.mjs');const root=await fs.mkdtemp(path.join(os.tmpdir(),'ps-ai-env-package-'));
-  try{const target=path.join(root,'environment.zip');await createEnvironmentPackage(process.cwd(),target);const entries=unzipSync(await fs.readFile(target));for(const name of ['scripts/check-environment.ps1','scripts/prepare-environment.ps1','scripts/install-ccx.ps1','config/settings.example.json','config/compatibility.json','COMFYUI.md','COMFYUI.en.md'])assert.ok(entries[name],name);assert.equal(Object.keys(entries).some(name=>/node_modules|\.gguf$|\.safetensors$|HANDOFF|docs\/|network-isolation/.test(name)),false);for(const bytes of Object.values(entries))assert.doesNotMatch(strFromU8(bytes),/D:\\AI|D:\\Dev\\Repos|C:\\Users\\Administrator/);}finally{await fs.rm(root,{recursive:true,force:true});}
+  try{
+    const target=path.join(root,'environment.zip');await createEnvironmentPackage(process.cwd(),target);const entries=unzipSync(await fs.readFile(target));
+    const guides=['docs/README.en.md','docs/setup/COMFYUI.md','docs/setup/COMFYUI.en.md','docs/usage/USER_GUIDE.md','docs/usage/USER_GUIDE.en.md',...['BAILIAN','GEMINI','OPENAI'].flatMap(name=>['docs/providers/'+name+'.md','docs/providers/'+name+'.en.md'])];
+    for(const name of ['README.md','scripts/check-environment.ps1','scripts/prepare-environment.ps1','scripts/install-ccx.ps1','config/settings.example.json','config/compatibility.json',...guides])assert.ok(entries[name],name);
+    assert.deepEqual(Object.keys(entries).filter(name=>name.endsWith('.md')&&!name.includes('/')),['README.md']);
+    for(const name of Object.keys(entries))if(name.startsWith('docs/'))assert.ok(guides.includes(name),name);
+    assert.equal(Object.keys(entries).some(name=>/node_modules|\.gguf$|\.safetensors$|HANDOFF|BRAND|docs\/local\/|network-isolation/.test(name)),false);
+    const readme=strFromU8(entries['README.md']);assert.match(readme,/https:\/\/github\.com\/ImMappyJ\/ps-ai\/blob\/main\/docs\/development\/BACKEND\.md/);assert.match(readme,/https:\/\/github\.com\/ImMappyJ\/ps-ai\/blob\/main\/AGENTS\.md/);
+    for(const bytes of Object.values(entries))assert.doesNotMatch(strFromU8(bytes),/D:\\AI|D:\\Dev\\Repos|C:\\Users\\Administrator/);
+  }finally{await fs.rm(root,{recursive:true,force:true});}
 });
 test('CCX 根目录包含单宿主清单和有效资源，不携带模型/源码/测试',async()=>{
   // @ts-expect-error Build script is deliberately plain JS.
@@ -61,7 +70,7 @@ test('环境包内网关脱离源码和依赖目录运行，三种平台缺Key�
   const {createEnvironmentPackage}=await import('../scripts/package.mjs');const root=await fs.mkdtemp(path.join(os.tmpdir(),'ps-ai-env-gateway-'));
   try{
     const zip=path.join(root,'env.zip');await createEnvironmentPackage(process.cwd(),zip);const entries=unzipSync(await fs.readFile(zip));
-    for(const name of ['BAILIAN.md','BAILIAN.en.md','GEMINI.md','GEMINI.en.md','OPENAI.md','OPENAI.en.md','backend/ps-ai-gateway.mjs','backend/LICENSE','backend/THIRD_PARTY_NOTICES.txt','config/settings.bailian.example.json','config/settings.gemini.example.json','config/settings.openai.example.json'])assert.ok(entries[name],name);
+    for(const name of ['docs/providers/BAILIAN.md','docs/providers/BAILIAN.en.md','docs/providers/GEMINI.md','docs/providers/GEMINI.en.md','docs/providers/OPENAI.md','docs/providers/OPENAI.en.md','backend/ps-ai-gateway.mjs','backend/LICENSE','backend/THIRD_PARTY_NOTICES.txt','config/settings.bailian.example.json','config/settings.gemini.example.json','config/settings.openai.example.json'])assert.ok(entries[name],name);
     assert.match(strFromU8(entries['backend/THIRD_PARTY_NOTICES.txt']),/UPNG.js/);assert.match(strFromU8(entries['backend/THIRD_PARTY_NOTICES.txt']),/pako/);
     const file=path.join(root,'ps-ai-gateway.mjs');await fs.writeFile(file,entries['backend/ps-ai-gateway.mjs']);
     const script=String.raw`import assert from 'node:assert/strict';import path from 'node:path';import {pathToFileURL} from 'node:url';

@@ -1,12 +1,12 @@
-<p align="center"><img src="assets/brand/avatar.png" width="64" alt="PS-AI"></p>
+<p align="center"><img src="../../assets/brand/avatar.png" width="64" alt="PS-AI"></p>
 <h1 align="center">Using PS-AI</h1>
 <p align="center"><a href="USER_GUIDE.md">简体中文</a> · <strong>English</strong></p>
 
 This walkthrough tests all nine modes on separate copies of **3F3F3F.webp**. Screenshots show the actual Portable panel in Windows Photoshop 27.0. Results were exported from Photoshop composites. Click an image for its original PNG; panel captures retain their native 541-pixel width, without enlargement or reconstructed UI.
 
-**For version 0.4.0 (experimental).** Version 0.3.0 lacks guided setup, range previews and optional 16-bit output. See [installation](README.en.md#install-a-release-package) and [ComfyUI setup](COMFYUI.en.md).
+**For version 0.4.0 (experimental).** Version 0.3.0 lacks guided setup, range previews and optional 16-bit output. See [installation](../README.en.md#install-a-release-package) and [ComfyUI setup](../setup/COMFYUI.en.md).
 
-The screenshots and nine-mode acceptance use ComfyUI. See [Bailian](BAILIAN.en.md), [Gemini / Nano Banana](GEMINI.en.md) and [OpenAI Images](OPENAI.en.md) for platform setup and limits; their live results and host behavior are not validated by these examples.
+The screenshots and nine-mode acceptance use ComfyUI. See [Bailian](../providers/BAILIAN.en.md), [Gemini / Nano Banana](../providers/GEMINI.en.md) and [OpenAI Images](../providers/OPENAI.en.md) for platform setup and limits; their live results and host behavior are not validated by these examples.
 
 ## Connect and make a copy
 
@@ -23,9 +23,9 @@ Use a source with the correct ICC profile. Tagged RGB / Grayscale 8/16-bit is su
 
 ## Shared test settings
 
-**One candidate, resolution 992, 25 steps, locked seed 42, 15% context margin, color matching off and 16-bit SDR output.** Models: the compatibility list's Qwen 2.1 Q4_K_M, Qwen3-VL INT8 and Qwen 2.1 VAE. Edit candidates follow the captured aspect ratio. [Recipes JSON](assets/guide/recipes.json) records exact Chinese prompts, switches and dimensions. English prompts below are translations for readability; they were not independently tested.
+**One candidate, resolution 992, 25 steps, locked seed 42, 15% context margin, color matching off and 16-bit SDR output.** Models: the compatibility list's Qwen 2.1 Q4_K_M, Qwen3-VL INT8 and Qwen 2.1 VAE. Edit candidates follow the captured aspect ratio. [Recipes JSON](../../assets/guide/recipes.json) records exact Chinese prompts, switches and dimensions. English prompts below are translations for readability; they were not independently tested.
 
-Without the optional save node, keep **8-bit (compatible)**. For 16-bit SDR, install `PS_AISavePNG16` and restart ComfyUI as described in the [backend guide](COMFYUI.en.md). Web previews are 8-bit and cannot demonstrate 16-bit precision.
+Without the optional save node, keep **8-bit (compatible)**. For 16-bit SDR, install `PS_AISavePNG16` and restart ComfyUI as described in the [backend guide](../setup/COMFYUI.en.md). Web previews are 8-bit and cannot demonstrate 16-bit precision.
 
 ## Shared selection-edit steps
 
@@ -35,19 +35,22 @@ Generate candidates, wait, inspect thumbnails and View at 100%, then Apply as ne
 
 ## Mode index
 
-- [Objects and materials](#edit)
-- [Remove](#remove)
-- [Background](#background)
-- [Clothing and props](#costume)
-- [Character reference](#reference)
-- [Scene](#scene)
-- [Effect](#effect)
-- [Atmosphere](#atmosphere)
-- [Text to image](#generate)
+| Edits and removal | Clothing, reference and scenes | Assets and text to image |
+| --- | --- | --- |
+| [01 · Objects and materials](#edit) | [04 · Clothing and props](#costume) | [07 · Effect](#effect) |
+| [02 · Remove](#remove) | [05 · Character reference](#reference) | [08 · Atmosphere](#atmosphere) |
+| [03 · Background](#background) | [06 · Scene](#scene) | [09 · Text to image](#generate) |
+
+Each example starts with the result. Expand **Selection and panel settings** for the setup screenshots. Click any image to inspect the original file.
 
 <a id="edit"></a>
 
-## Objects and materials
+## 01 · Objects and materials
+
+<p align="center">
+  <a href="../../assets/guide/01-edit-compare.png"><img src="../../assets/guide/01-edit-compare.png" width="760" alt="Before on the left, white over-the-knee socks on the right"></a>
+  <br><sub>Before (left) · White over-the-knee socks (right)</sub>
+</p>
 
 1. Duplicate the original. Select both legs from above the knees down to the shoe openings, leaving room for the sock tops.
 2. Choose Local edit → Edit objects / materials, with the selection destination. Enter the prompt below.
@@ -58,17 +61,32 @@ Prompt translation:
 
 > Add white over-the-knee socks to both legs, with the tops above the knees. Keep the leg pose, shoes, existing clothes and transparent background.
 
-[![Selection map](assets/guide/01-edit-selection.png)](assets/guide/01-edit-selection.png)
-
-[![Original left, result right](assets/guide/01-edit-compare.png)](assets/guide/01-edit-compare.png)
-
-<a href="assets/guide/01-edit-panel.png"><img src="assets/guide/01-edit-panel.png" width="480" alt="Actual Portable panel: Objects and materials"></a>
-
 The test added white over-the-knee socks while preserving the alpha outline and visible pixels outside the edit mask. The 800×1216 candidate maps back to source coordinates; no manual enlargement is needed.
+
+<details>
+<summary>Selection and panel settings</summary>
+
+<table>
+  <tr>
+    <th width="50%" align="center">Editable area</th>
+    <th width="50%" align="center">Panel settings</th>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><a href="../../assets/guide/01-edit-selection.png"><img src="../../assets/guide/01-edit-selection.png" width="360" alt="Actual selection mask shown in amber"></a></td>
+    <td align="center" valign="top"><a href="../../assets/guide/01-edit-panel.png"><img src="../../assets/guide/01-edit-panel.png" width="360" alt="Actual Portable panel: Objects and materials"></a></td>
+  </tr>
+</table>
+
+</details>
 
 <a id="remove"></a>
 
-## Remove
+## 02 · Remove
+
+<p align="center">
+  <a href="../../assets/guide/02-remove-compare.png"><img src="../../assets/guide/02-remove-compare.png" width="560" alt="Before on the left, plush charm removed on the right"></a>
+  <br><sub>Before (left) · Plush charm removed (right)</sub>
+</p>
 
 1. Duplicate the original. Lasso the black plush charm on the chest, including its head, body, limbs and a little surrounding white fabric.
 2. Choose Local edit → Remove objects, with the selection destination. Enter the prompt.
@@ -79,17 +97,32 @@ Prompt translation:
 
 > Remove the black plush charm on the chest, including its head and limbs. Continue the white pleated fabric through that area. Keep the metal chain, pose and other clothing.
 
-[![Selection map](assets/guide/02-remove-selection.png)](assets/guide/02-remove-selection.png)
-
-[![Original left, result right](assets/guide/02-remove-compare.png)](assets/guide/02-remove-compare.png)
-
-<a href="assets/guide/02-remove-panel.png"><img src="assets/guide/02-remove-panel.png" width="480" alt="Actual Portable panel: Remove"></a>
-
 The charm was removed and replaced by white fabric, with the chain retained. Complex occlusion may need a second, smaller edit to remove remaining fragments.
+
+<details>
+<summary>Selection and panel settings</summary>
+
+<table>
+  <tr>
+    <th width="50%" align="center">Editable area</th>
+    <th width="50%" align="center">Panel settings</th>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><a href="../../assets/guide/02-remove-selection.png"><img src="../../assets/guide/02-remove-selection.png" width="280" alt="Actual selection mask shown in amber"></a></td>
+    <td align="center" valign="top"><a href="../../assets/guide/02-remove-panel.png"><img src="../../assets/guide/02-remove-panel.png" width="360" alt="Actual Portable panel: Remove"></a></td>
+  </tr>
+</table>
+
+</details>
 
 <a id="background"></a>
 
-## Background
+## 03 · Background
+
+<p align="center">
+  <a href="../../assets/guide/03-background-compare.png"><img src="../../assets/guide/03-background-compare.png" width="760" alt="Before on the left, lavender studio background on the right"></a>
+  <br><sub>Before (left) · Lavender studio background (right)</sub>
+</p>
 
 1. Duplicate the transparent sample. Ctrl-click the character layer thumbnail to load its opacity, then Ctrl+Shift+I to select the background across the entire canvas.
 2. Choose Local edit → Replace background, with the selection destination. Enter the prompt.
@@ -100,20 +133,37 @@ Prompt translation:
 
 > Replace only the transparent background with a simple pale lavender photography studio. Use softly lit walls and floor, with a slight contact shadow under the feet. Preserve the character, hair, clothes, pose and framing.
 
-[![Selection map](assets/guide/03-background-selection.png)](assets/guide/03-background-selection.png)
-
-[![Original left, result right](assets/guide/03-background-compare.png)](assets/guide/03-background-compare.png)
-
-<a href="assets/guide/03-background-panel.png"><img src="assets/guide/03-background-panel.png" width="480" alt="Actual Portable panel: Background"></a>
-
 The full background became a lavender studio with a foot shadow. Opaque character pixels retain the source. Partially transparent hair blends with the new background; refine the result mask where needed.
 
+<details>
+<summary>Selection and panel settings</summary>
 
-[View the actual Photoshop window](assets/guide/03-background-workspace.png)
+<table>
+  <tr>
+    <th width="50%" align="center">Editable area</th>
+    <th width="50%" align="center">Panel settings</th>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><a href="../../assets/guide/03-background-selection.png"><img src="../../assets/guide/03-background-selection.png" width="360" alt="Actual selection mask shown in amber"></a></td>
+    <td align="center" valign="top"><a href="../../assets/guide/03-background-panel.png"><img src="../../assets/guide/03-background-panel.png" width="360" alt="Actual Portable panel: Background"></a></td>
+  </tr>
+</table>
+
+<p align="center">
+  <a href="../../assets/guide/03-background-workspace.png"><img src="../../assets/guide/03-background-workspace.png" width="760" alt="Actual Photoshop window"></a>
+  <br><sub>Original Photoshop capture; click to inspect.</sub>
+</p>
+
+</details>
 
 <a id="costume"></a>
 
-## Clothing and props
+## 04 · Clothing and props
+
+<p align="center">
+  <a href="../../assets/guide/04-costume-compare.png"><img src="../../assets/guide/04-costume-compare.png" width="620" alt="Before on the left, deep violet coat tail on the right"></a>
+  <br><sub>Before (left) · Deep violet coat tail (right)</sub>
+</p>
 
 1. Duplicate the original. Lasso the lower pink coat tail on the right, covering the entire area intended for the material change.
 2. Choose COSPLAY → Repair clothing / props, with the selection destination. Enter the prompt.
@@ -124,19 +174,34 @@ Prompt translation:
 
 > Change only the selected right-hand pink coat tail to deep violet velvet. Keep its folds, diamond cutouts, gold trim and outline. Preserve the pose, other clothing and transparent background.
 
-[![Selection map](assets/guide/04-costume-selection.png)](assets/guide/04-costume-selection.png)
-
-[![Original left, result right](assets/guide/04-costume-compare.png)](assets/guide/04-costume-compare.png)
-
-<a href="assets/guide/04-costume-panel.png"><img src="assets/guide/04-costume-panel.png" width="480" alt="Actual Portable panel: Clothing and props"></a>
-
 The selected coat tail became deep violet while retaining trim and cutouts. This verifies clothing editing. Props use the same workflow, but complex weapons and mechanical reconstruction were not separately tested here.
+
+<details>
+<summary>Selection and panel settings</summary>
+
+<table>
+  <tr>
+    <th width="50%" align="center">Editable area</th>
+    <th width="50%" align="center">Panel settings</th>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><a href="../../assets/guide/04-costume-selection.png"><img src="../../assets/guide/04-costume-selection.png" width="310" alt="Actual selection mask shown in amber"></a></td>
+    <td align="center" valign="top"><a href="../../assets/guide/04-costume-panel.png"><img src="../../assets/guide/04-costume-panel.png" width="360" alt="Actual Portable panel: Clothing and props"></a></td>
+  </tr>
+</table>
+
+</details>
 
 <a id="reference"></a>
 
-## Character reference
+## 05 · Character reference
 
-1. Duplicate the original and select both legs. Use the white-socks edit of the same sample: [download the tested reference](assets/guide/reference-white-socks-icc.png).
+<p align="center">
+  <a href="../../assets/guide/05-reference-compare.png"><img src="../../assets/guide/05-reference-compare.png" width="760" alt="Before on the left, white socks from the reference on the right"></a>
+  <br><sub>Before (left) · White socks from the reference (right)</sub>
+</p>
+
+1. Duplicate the original and select both legs. Use the white-socks edit of the same sample: [download the tested reference](../../assets/guide/reference-white-socks-icc.png).
 2. Choose COSPLAY → Character reference. Open the reference section, Choose image, import the PNG and set Reference use to clothing. Enter the prompt.
 3. Leave the selection guide off, the default for this mode. Enable transparency preservation; disable alignment and color matching. Preview and generate.
 4. Compare sock tops, color and source pose, then apply. Clear reference afterward; standalone assets and text-to-image also require it cleared.
@@ -145,17 +210,34 @@ Prompt translation:
 
 > Use the reference's white over-the-knee socks on both selected legs, with the sock tops above the knees. Keep the source character's leg pose, shoes, clothes and transparent background.
 
-[![Original left, result right](assets/guide/05-reference-compare.png)](assets/guide/05-reference-compare.png)
-
-<a href="assets/guide/05-reference-panel.png"><img src="assets/guide/05-reference-panel.png" width="480" alt="Actual Portable panel: Character reference"></a>
-
 The reference transferred the white-socks feature while preserving pose and shoes. This is clothing-reference assistance, not identity locking, exact replication or multi-view consistency.
 
 **If import reports an untagged image:** PS 27 treated one PNG16 with only an sRGB chunk and no embedded ICC as untagged, so validation blocked it. Confirm its true color space, use Edit → Assign Profile on a copy, save with the correct ICC embedded and import again. Do not arbitrarily assign sRGB to unknown sources or rename extensions to bypass validation. Adding a matching sRGB ICC resolved this test without changing compressed pixel data.
 
+<details>
+<summary>Selection and panel settings</summary>
+
+<table>
+  <tr>
+    <th width="50%" align="center">Reference image</th>
+    <th width="50%" align="center">Panel settings</th>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><a href="../../assets/guide/reference-white-socks-icc.png"><img src="../../assets/guide/reference-white-socks-icc.png" width="360" alt="The tested white-socks reference"></a></td>
+    <td align="center" valign="top"><a href="../../assets/guide/05-reference-panel.png"><img src="../../assets/guide/05-reference-panel.png" width="360" alt="Actual Portable panel: Character reference"></a></td>
+  </tr>
+</table>
+
+</details>
+
 <a id="scene"></a>
 
-## Scene
+## 06 · Scene
+
+<p align="center">
+  <a href="../../assets/guide/06-scene-compare.png"><img src="../../assets/guide/06-scene-compare.png" width="760" alt="Before on the left, wisteria garden scene on the right"></a>
+  <br><sub>Before (left) · Wisteria garden scene (right)</sub>
+</p>
 
 1. Duplicate the original and clear old references and protection. Ctrl-click the character layer thumbnail, then Ctrl+Shift+I to select the full transparent background.
 2. Choose COSPLAY → Replace scene, with the selection destination. Enter the prompt.
@@ -166,18 +248,37 @@ Prompt translation:
 
 > Replace only the transparent background with a wisteria garden path on a sunny afternoon: a distant purple flower pergola, soft green plants and a pale stone path with natural perspective. Place both feet firmly on the path with contact shadows. Preserve the character, clothes, pose and framing.
 
-[![Original left, result right](assets/guide/06-scene-compare.png)](assets/guide/06-scene-compare.png)
-
-<a href="assets/guide/06-scene-panel.png"><img src="assets/guide/06-scene-panel.png" width="480" alt="Actual Portable panel: Scene"></a>
-
 The garden and path fill the background, rather than a small patch around the legs. Opaque character pixels remain unchanged.
 
+<details>
+<summary>Selection and panel settings</summary>
 
-[View the actual Photoshop window](assets/guide/06-scene-workspace.png)
+<p align="center">
+  <a href="../../assets/guide/06-scene-panel.png"><img src="../../assets/guide/06-scene-panel.png" width="400" alt="Actual Portable panel: Scene"></a>
+  <br><sub>Click the capture to read the full-resolution panel.</sub>
+</p>
+
+<p align="center">
+  <a href="../../assets/guide/06-scene-workspace.png"><img src="../../assets/guide/06-scene-workspace.png" width="760" alt="Actual Photoshop window"></a>
+  <br><sub>Original Photoshop capture; click to inspect.</sub>
+</p>
+
+</details>
 
 <a id="effect"></a>
 
-## Effect
+## 07 · Effect
+
+<table>
+  <tr>
+    <th width="50%" align="center">Standalone asset</th>
+    <th width="50%" align="center">Composited in Photoshop</th>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><a href="../../assets/guide/effect-preview.png"><img src="../../assets/guide/effect-preview.png" width="320" alt="Generated effect asset"></a></td>
+    <td align="center" valign="top"><a href="../../assets/guide/07-effect-result.png"><img src="../../assets/guide/07-effect-result.png" width="320" alt="Photoshop composite on the sample"></a></td>
+  </tr>
+</table>
 
 1. Choose COSPLAY → Effect asset, set New document and clear the reference. A standalone asset needs no character selection.
 2. Enter the prompt and generate. Check the open curve, absence of characters and real transparency. Open as new document; this test created a 992×992 sRGB / 16-bit asset.
@@ -188,17 +289,32 @@ Prompt translation:
 
 > A single violet ribbon of magical smoke, an open S curve flowing from lower left to upper right, tapering and fading at both ends. No closed loop or ring. Isolated transparent background, natural translucent edges, no people or text.
 
-| Standalone asset | Composited onto the sample |
-| --- | --- |
-| ![effect](assets/guide/effect-preview.png) | ![Photoshop composite](assets/guide/07-effect-result.png) |
-
-[![Actual Photoshop window: standalone effect asset](assets/guide/07-effect-asset-workspace.png)](assets/guide/07-effect-asset-workspace.png)
-
 The first prompt asked for smoke around the legs with an empty center and produced a closed ring, which was rejected. The explicit open-curve prompt produced the accepted asset, then actually composited in Photoshop. It resembles a translucent violet ribbon, with small curve gaps and faint alpha residue; it still needs finishing.
+
+<details>
+<summary>View the Photoshop workspace</summary>
+
+<p align="center">
+  <a href="../../assets/guide/07-effect-asset-workspace.png"><img src="../../assets/guide/07-effect-asset-workspace.png" width="760" alt="Actual Photoshop window"></a>
+  <br><sub>Original Photoshop capture; click to inspect.</sub>
+</p>
+
+</details>
 
 <a id="atmosphere"></a>
 
-## Atmosphere
+## 08 · Atmosphere
+
+<table>
+  <tr>
+    <th width="50%" align="center">Standalone asset</th>
+    <th width="50%" align="center">Composited in Photoshop</th>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><a href="../../assets/guide/atmosphere-preview.png"><img src="../../assets/guide/atmosphere-preview.png" width="320" alt="Generated atmosphere asset"></a></td>
+    <td align="center" valign="top"><a href="../../assets/guide/08-atmosphere-result.png"><img src="../../assets/guide/08-atmosphere-result.png" width="320" alt="Photoshop composite on the sample"></a></td>
+  </tr>
+</table>
 
 1. Choose COSPLAY → Atmosphere asset, set New document and clear the reference.
 2. Enter the prompt and generate. Check for an empty upper area, bottom mist, no character and no text. Open the 992×992 sRGB / 16-bit asset as a new document.
@@ -209,17 +325,26 @@ Prompt translation:
 
 > Soft pale lavender mist with a few floating light specks, concentrated at the bottom and fading upward, leaving the top empty. Transparent background, no people, no text, no solid backdrop.
 
-| Standalone asset | Composited onto the sample |
-| --- | --- |
-| ![atmosphere](assets/guide/atmosphere-preview.png) | ![Photoshop composite](assets/guide/08-atmosphere-result.png) |
-
-<a href="assets/guide/08-atmosphere-panel.png"><img src="assets/guide/08-atmosphere-panel.png" width="480" alt="Actual Portable panel: Atmosphere"></a>
-
 The mist stays low and leaves the face clear. It has real alpha, but apparently empty areas retain very low-opacity pixels. Check on a dark background and clean the mask when needed; asking for transparency does not guarantee clean alpha.
+
+<details>
+<summary>Selection and panel settings</summary>
+
+<p align="center">
+  <a href="../../assets/guide/08-atmosphere-panel.png"><img src="../../assets/guide/08-atmosphere-panel.png" width="400" alt="Actual Portable panel: Atmosphere"></a>
+  <br><sub>Click the capture to read the full-resolution panel.</sub>
+</p>
+
+</details>
 
 <a id="generate"></a>
 
-## Text to image
+## 09 · Text to image
+
+<p align="center">
+  <a href="../../assets/guide/generate-preview.png"><img src="../../assets/guide/generate-preview.png" width="560" alt="Text-to-image result"></a>
+  <br><sub>A new illustration generated from text; the source image is not used as input.</sub>
+</p>
 
 1. Choose Generate → Text to image, set New document and clear the reference.
 2. Describe the appearance of 3F3F3F.webp using the prompt below. The source image is not sent as model input; no selection is needed.
@@ -230,14 +355,22 @@ Prompt translation:
 
 > Full-body anime illustration of an adult woman with long pink curls, a white pleated blouse, a pink and navy long coat, a black skirt with gold trim, red gloves and black lace-up heels. One hand raised beside the face, the other extended naturally. Soft detailed anime rendering, one centered character, both feet fully visible, clean pale lavender background, no text.
 
-[![Text to image](assets/guide/generate-preview.png)](assets/guide/generate-preview.png)
-
-<a href="assets/guide/09-generate-panel.png"><img src="assets/guide/09-generate-panel.png" width="480" alt="Actual Portable panel: Text to image"></a>
-
 The result includes pink hair, a white blouse, a pink / navy coat and complete feet. It is a new illustration, without guaranteed identity, pose or accessory matching. Use a selection edit to change clothing on the original.
 
-[View the actual Photoshop window](assets/guide/09-generate-workspace.png)
+<details>
+<summary>Selection and panel settings</summary>
 
+<p align="center">
+  <a href="../../assets/guide/09-generate-panel.png"><img src="../../assets/guide/09-generate-panel.png" width="400" alt="Actual Portable panel: Text to image"></a>
+  <br><sub>Click the capture to read the full-resolution panel.</sub>
+</p>
+
+<p align="center">
+  <a href="../../assets/guide/09-generate-workspace.png"><img src="../../assets/guide/09-generate-workspace.png" width="760" alt="Actual Photoshop window"></a>
+  <br><sub>Original Photoshop capture; click to inspect.</sub>
+</p>
+
+</details>
 
 ## Candidates, progress and undo
 
@@ -282,4 +415,4 @@ The 2026-10-17 session used Windows Photoshop 27.0, GPU enabled and this sample:
 
 Acceptance is limited to these examples. Clothing tested a coat tail; reference tested socks transfer. Complex prop reconstruction, identity consistency, other models, calibrated-display accuracy and long-term stability remain unverified. Photoshop did not exit during this session; that is not a permanent stability guarantee. Reference, effect and atmosphere modes remain experimental. Routine skin retouching is outside scope.
 
-Use a trusted backend. Local ComfyUI also stores inputs and outputs. Check privacy and image permissions before sharing screenshots. Code licensing does not replace model or image licensing; see [compatibility and model sources](config/compatibility.json).
+Use a trusted backend. Local ComfyUI also stores inputs and outputs. Check privacy and image permissions before sharing screenshots. Code licensing does not replace model or image licensing; see [compatibility and model sources](../../config/compatibility.json).
