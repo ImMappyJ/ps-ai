@@ -6,6 +6,8 @@ This walkthrough tests all nine modes on separate copies of **3F3F3F.webp**. Scr
 
 **For version 0.4.0 (experimental).** Version 0.3.0 lacks guided setup, range previews and optional 16-bit output. See [installation](README.en.md#install-a-release-package) and [ComfyUI setup](COMFYUI.en.md).
 
+The screenshots and nine-mode acceptance use ComfyUI. See [Bailian](BAILIAN.en.md), [Gemini / Nano Banana](GEMINI.en.md) and [OpenAI Images](OPENAI.en.md) for platform setup and limits; their live results and host behavior are not validated by these examples.
+
 ## Connect and make a copy
 
 1. Start ComfyUI and confirm its address opens in a browser.

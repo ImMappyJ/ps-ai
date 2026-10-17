@@ -56,6 +56,37 @@ test('CCX 根目录包含单宿主清单和有效资源，不携带模型/源码
     await fs.writeFile(path.join(input,'model.gguf'),'model');await assert.rejects(createPackage(input,archive),/文件/);
   }finally{await fs.rm(root,{recursive:true,force:true});}
 });
+test('环境包内网关脱离源码和依赖目录运行，三种平台缺Key时禁止远程调用',async()=>{
+  // @ts-expect-error Packaging is plain JS.
+  const {createEnvironmentPackage}=await import('../scripts/package.mjs');const root=await fs.mkdtemp(path.join(os.tmpdir(),'ps-ai-env-gateway-'));
+  try{
+    const zip=path.join(root,'env.zip');await createEnvironmentPackage(process.cwd(),zip);const entries=unzipSync(await fs.readFile(zip));
+    for(const name of ['BAILIAN.md','BAILIAN.en.md','GEMINI.md','GEMINI.en.md','OPENAI.md','OPENAI.en.md','backend/ps-ai-gateway.mjs','backend/LICENSE','backend/THIRD_PARTY_NOTICES.txt','config/settings.bailian.example.json','config/settings.gemini.example.json','config/settings.openai.example.json'])assert.ok(entries[name],name);
+    assert.match(strFromU8(entries['backend/THIRD_PARTY_NOTICES.txt']),/UPNG.js/);assert.match(strFromU8(entries['backend/THIRD_PARTY_NOTICES.txt']),/pako/);
+    const file=path.join(root,'ps-ai-gateway.mjs');await fs.writeFile(file,entries['backend/ps-ai-gateway.mjs']);
+    const script=String.raw`import assert from 'node:assert/strict';import path from 'node:path';import {pathToFileURL} from 'node:url';
+const {startGateway}=await import(pathToFileURL(process.argv[2]));const real=fetch;
+globalThis.fetch=(url,init)=>{assert.match(String(url),/^http:\/\/127\.0\.0\.1:/);return real(url,init);};
+for(const provider of ['bailian','gemini','openai']){
+  let g,cap,base;
+  for(let attempt=0;attempt<32;attempt++){
+    g=await startGateway({port:0,dataDir:path.join(process.argv[3],provider),env:{PSAI_PROVIDER:provider,DASHSCOPE_API_KEY:'',GEMINI_API_KEY:'',OPENAI_API_KEY:''}});
+    base='http://127.0.0.1:'+g.server.address().port;
+    try{cap=await(await fetch(base+'/psai/v1/capabilities')).json();break;}
+    catch(error){await g.close();g=undefined;if(error.cause?.message!=='bad port')throw error;}
+  }
+  assert.ok(g,'No Fetch-compatible loopback port');
+  try{
+    assert.equal(cap.provider,provider);assert.equal(cap.configured,false);
+    const result=await fetch(base+'/psai/v1/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:'00000000-0000-4000-8000-000000000001',clientId:'00000000-0000-4000-8000-000000000002',request:{model:cap.models[0].id,kind:'t2i',mode:'generate',prompt:'white stockings',seed:0,width:512,height:512,outputDepth:8}})});
+    assert.equal(result.status,401);
+  }finally{await g.close();}
+}
+console.log('all three no-key paths passed');`;
+    const smoke=path.join(root,'smoke.mjs');await fs.writeFile(smoke,script);const result=spawnSync(process.execPath,[smoke,file,root],{cwd:root,encoding:'utf8',timeout:8000});assert.equal(result.status,0,result.stderr||result.error?.message);assert.match(result.stdout,/all three no-key paths passed/);
+  }finally{await fs.rm(root,{recursive:true,force:true});}
+});
+
 test('独立环境工具的 Markdown 和 HTML 相对链接都指向归档内文件',async()=>{
   // @ts-expect-error Packaging is plain JS.
   const {createEnvironmentPackage}=await import('../scripts/package.mjs');const dir=await fs.mkdtemp(path.join(os.tmpdir(),'ps-ai-env-links-'));

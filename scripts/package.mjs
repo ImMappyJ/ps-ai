@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';import path from 'node:path';import {pathToFileURL} from 'node:url';import {createHash} from 'node:crypto';import {zipSync,unzipSync,strToU8,strFromU8} from 'fflate';
+import {gatewayBundle,gatewayNotices} from './build-gateway.mjs';
 export const INSTALL_GUIDE=`# PS-AI — 安装 / Installation
 
 [简体中文](#中文) · [English](#english)
@@ -44,6 +45,9 @@ export async function createEnvironmentPackage(root,target){
   const brand=['mark.svg','wordmark.svg','mark-on-dark.svg','mark-on-light.svg','mark-mono-dark.svg','mark-mono-light.svg','lockup-on-dark.svg','lockup-on-light.svg','lockup-mono-dark.svg','lockup-mono-light.svg','avatar.png','favicon.ico','wordmark-on-dark.png','overview.svg',...[16,23,24,32,46,48,64,96,128,256,512].map(n=>`icons/mark-${n}.png`),...[48,96,512].map(n=>`icons/app-${n}.png`)];
   names.push(...brand.map(name=>'assets/brand/'+name),...[23,46].flatMap(size=>['light','dark'].map(color=>`assets/brand/icons/sidebar-${color}-${size}.png`)));
   const entries={};for(const name of names)entries[name]=new Uint8Array(await fs.readFile(path.join(root,name)));
+  for(const name of ['BAILIAN.md','BAILIAN.en.md','GEMINI.md','GEMINI.en.md','OPENAI.md','OPENAI.en.md','config/settings.bailian.example.json','config/settings.gemini.example.json','config/settings.openai.example.json'])entries[name]=new Uint8Array(await fs.readFile(path.join(root,name)));
+  entries['backend/ps-ai-gateway.mjs']=await gatewayBundle(root);
+  entries['backend/THIRD_PARTY_NOTICES.txt']=strToU8(await gatewayNotices(root));entries['backend/LICENSE']=entries.LICENSE;
   await fs.writeFile(target,zipSync(entries,{level:9}));return Object.keys(entries);
 }
 async function packageEntries(directory){

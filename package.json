@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && node scripts/build.mjs",
     "p0": "node --import tsx scripts/p0-live.ts",
+    "gateway": "node --import tsx server/main.ts",
     "brand:export": "node scripts/export-brand.mjs",
     "brand:check": "node scripts/export-brand.mjs --check",
     "package": "npm run test && npm run build && node scripts/package.mjs"

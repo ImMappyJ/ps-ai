@@ -1,4 +1,5 @@
 import type {Graph} from './workflow';import {DEFAULT_MODELS,validateModels,ModelFiles,normalizeBaseUrl} from './profile';
+import type {JobRecord} from './jobs';
 import {DiagnosticError,backendFailureCode} from './diagnostics';import type {DiagnosticCode} from './diagnostics';
 export interface OutputFile {filename:string;subfolder:string;type:string}
 export type Status={state:'queued'|'running'|'ready'|'failed'|'cancelled'|'unknown';images?:OutputFile[];detail?:string;code?:DiagnosticCode};
@@ -74,6 +75,7 @@ export class ComfyClient {
     if(result.prompt_id!==promptId)throw new Error('服务返回了不同任务 ID，请保留记录并检查版本');
     return result.prompt_id;
   }
+  async submitJob(record:JobRecord):Promise<string>{return this.submit(record.graph,record.id,record.clientId);}
   private validateId(id:string):void {if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id))throw new Error('任务 ID 无效');}
   async status(id:string):Promise<Status> {
     this.validateId(id);const history=await this.json(`/history/${id}`);const own=history[id];

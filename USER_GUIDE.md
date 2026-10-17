@@ -6,6 +6,8 @@
 
 **对应版本：0.4.0（实验版）。** 0.3.0 不包含配置向导、范围预览和可选 16 位输出。安装见 [README](README.md#安装发行包)，后端与模型见 [ComfyUI 配置](COMFYUI.md)。
 
+以下截图与九种模式验收使用 ComfyUI。平台适配的配置和限制见 [百炼](BAILIAN.md)、[Gemini / Nano Banana](GEMINI.md) 与 [OpenAI Images](OPENAI.md)；这些平台路径尚未完成真图和宿主验收，不能套用下面的已测结果。
+
 ## 先连接，再准备副本
 
 1. 启动 ComfyUI，在浏览器确认地址可以打开。

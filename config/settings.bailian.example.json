@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "backend": "gateway",
+  "baseUrl": "http://localhost:8190",
+  "gatewayModel": "qwen-image-2.1-pro",
+  "language": "zh-CN",
+  "outputDepth": 8
+}

@@ -6,6 +6,8 @@
 
 插件不包含推理后端和模型。已有 ComfyUI 能运行下面的工作流，就可以直接接入，不必重装环境。8 位使用 `qwen21-local-v2-rgba`，16 位使用 `qwen21-local-v3-rgba16`。文中的旧面板截图来自 0.3.0；0.4.0 的配置流程见下文。
 
+本页只讲 ComfyUI 本地模型路径。开发中的平台接入见 [百炼](BAILIAN.md)、[Gemini / Nano Banana](GEMINI.md) 与 [OpenAI Images](OPENAI.md)，不要求安装这里的权重。服务端重写的公开契约在根目录 `BACKEND.md`，不能把 ComfyUI 节点协议与平台接口混用。
+
 ## 16 位输出（0.4.0）
 
 默认仍为 8 位。需要保留生成结果的更高精度时：

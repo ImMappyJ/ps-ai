@@ -1,6 +1,6 @@
 export interface ModelFiles {unet:string;clip:string;vae:string}
 export type Language='zh-CN'|'en-US';
-export interface BackendSettings {schemaVersion:1;baseUrl:string;models:ModelFiles;language?:Language;outputDepth?:8|16}
+export interface BackendSettings {schemaVersion:1;baseUrl:string;models:ModelFiles;language?:Language;outputDepth?:8|16;backend?:'comfyui'|'gateway';gatewayModel?:string}
 export const DEFAULT_MODELS:ModelFiles={unet:'qwen-image-2.1-Q4_K_M.gguf',clip:'qwen3vl_8b_int8_convrot.safetensors',vae:'qwen_image_2.1_vae_bf16.safetensors'};
 export function defaultSettings():BackendSettings {return {schemaVersion:1,baseUrl:'http://localhost:8188',models:{...DEFAULT_MODELS}};}
 // UXP does not provide the browser URL constructor on every supported host.
@@ -34,5 +34,8 @@ export function validateSettings(value:unknown):BackendSettings {
   const baseUrl=normalizeBaseUrl(input.baseUrl);
   if(input.language!==undefined&&!['zh-CN','en-US'].includes(String(input.language)))throw new Error('不支持的界面语言');
   if(input.outputDepth!==undefined&&input.outputDepth!==8&&input.outputDepth!==16)throw new Error('输出位深须为 8 或 16');
-  return {schemaVersion:1,baseUrl,models:validateModels(input.models),...(input.language?{language:input.language as Language}:{}),...(input.outputDepth!==undefined?{outputDepth:input.outputDepth as 8|16}:{})};
+  if(input.backend!==undefined&&input.backend!=='comfyui'&&input.backend!=='gateway')throw new Error('不支持的后端类型');
+  if(input.backend==='gateway'&&input.outputDepth===16)throw new Error('平台后端仅支持 8 位输出；16 位请切回 ComfyUI');
+  if(input.gatewayModel!==undefined&&(typeof input.gatewayModel!=='string'||!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,99}$/.test(input.gatewayModel)))throw new Error('平台模型 ID 无效');
+  return {schemaVersion:1,baseUrl,models:validateModels(input.models??(input.backend==='gateway'?DEFAULT_MODELS:undefined)),...(input.language?{language:input.language as Language}:{}),...(input.outputDepth!==undefined?{outputDepth:input.outputDepth as 8|16}:{}),...(input.backend?{backend:input.backend as 'comfyui'|'gateway'}:{}),...(input.gatewayModel?{gatewayModel:input.gatewayModel as string}:{})};
 }

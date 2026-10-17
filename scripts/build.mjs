@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';import {build} from 'esbuild';import {INSTALL_GUIDE} from './package.mjs';
+import {gatewayBundle} from './build-gateway.mjs';
 await fs.mkdir('dist/plugin',{recursive:true});
 for(const file of ['manifest.json','index.html','style.css'])await fs.copyFile(`plugin/${file}`,`dist/plugin/${file}`);
 await fs.mkdir('dist/plugin/icons',{recursive:true});
@@ -20,3 +21,6 @@ await fs.writeFile('dist/plugin/THIRD_PARTY_NOTICES.txt',notices);
 await fs.writeFile('dist/plugin/INSTALL.md',INSTALL_GUIDE);
 await fs.copyFile('LICENSE','dist/plugin/LICENSE');
 console.log('Built dist/plugin (UXP; Photoshop/UXP are the only external modules).');
+await fs.mkdir('dist/gateway',{recursive:true});await fs.writeFile('dist/gateway/ps-ai-gateway.mjs',await gatewayBundle(process.cwd()));
+await fs.writeFile('dist/gateway/THIRD_PARTY_NOTICES.txt',notices);await fs.copyFile('LICENSE','dist/gateway/LICENSE');
+console.log('Built dist/gateway/ps-ai-gateway.mjs (Node.js 24; no local ComfyUI required).');

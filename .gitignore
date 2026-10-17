@@ -28,6 +28,8 @@ desktop.ini
 
 # Runtime input/output and private diagnostics (publish reviewed screenshots explicitly)
 PluginData/
+.ps-ai/
+gateway-data/
 input/
 output/
 temp/

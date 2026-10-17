@@ -7,7 +7,7 @@
 
 ### 从这里开始
 
-PS-AI 是 Photoshop 的 UXP 插件，通过 ComfyUI 运行本地 Qwen-Image 2.1 工作流。先读 [README](README.md) 了解功能边界，再读 [ComfyUI 配置](COMFYUI.md) 和 [使用指南](USER_GUIDE.md)。后端版本、节点、模型文件与验收范围以 [兼容清单](config/compatibility.json) 为准；可迁移配置见 [配置样例](config/settings.example.json)。
+PS-AI 是 Photoshop 的 UXP 插件。已发布的本地路径通过 ComfyUI 运行 Qwen-Image 2.1；开发分支另有百炼、Gemini / Nano Banana 与 OpenAI Images 平台适配，真实平台与宿主验收待 API Key。先读 [README](README.md) 了解功能边界，再读 [ComfyUI 配置](COMFYUI.md) 和 [使用指南](USER_GUIDE.md)。平台启动见 [百炼](BAILIAN.md) 、[Gemini](GEMINI.md) 与 [OpenAI Images](OPENAI.md)；重写服务端先读 [接口与持久化契约](BACKEND.md)。后端版本、节点、模型文件与验收范围以 [兼容清单](config/compatibility.json) 为准；可迁移配置见 [配置样例](config/settings.example.json)。
 
 功能分为局部修图、COSPLAY、文字生图，共九种模式。角色参考辅助、特效与氛围素材在当前范围内，常规人像精修不在范围内。参考图不保证锁定身份，透明素材与生成效果仍需检查。新增模型或工作流不能仅凭“能选到模型”就宣布兼容。
 
@@ -21,6 +21,7 @@ PS-AI 是 Photoshop 的 UXP 插件，通过 ComfyUI 运行本地 Qwen-Image 2.1 
 | Photoshop 捕获、选区、保护区、回填和撤销 | [src/photoshop.ts](src/photoshop.ts)、[src/range-preview.ts](src/range-preview.ts) |
 | 像素、透明度、坐标和色彩 | [src/image.ts](src/image.ts)、[src/composite.ts](src/composite.ts)、[src/color.ts](src/color.ts)、[src/png-decode.ts](src/png-decode.ts)、[src/png16.ts](src/png16.ts) |
 | 九种模式和 ComfyUI 图 | [src/intent.ts](src/intent.ts)、[src/workflow.ts](src/workflow.ts) |
+| 平台协议、能力与适配服务 | [src/gateway-protocol.ts](src/gateway-protocol.ts)、[src/gateway-client.ts](src/gateway-client.ts)、[server/provider.ts](server/provider.ts)、[server/gateway.ts](server/gateway.ts)、[server/store.ts](server/store.ts)、[server/bailian.ts](server/bailian.ts)、[server/gemini.ts](server/gemini.ts)、[server/openai.ts](server/openai.ts) |
 | 上传、任务状态、取消和恢复 | [src/client.ts](src/client.ts)、[src/jobs.ts](src/jobs.ts)、[src/storage.ts](src/storage.ts) |
 | 地址、模型映射、环境检查和诊断 | [src/profile.ts](src/profile.ts)、[src/environment.ts](src/environment.ts)、[src/diagnostics.ts](src/diagnostics.ts) |
 | 可选 16 位输出节点 | [comfyui/ps_ai_sdr16/__init__.py](comfyui/ps_ai_sdr16/__init__.py)、[tests/test_sdr16.py](tests/test_sdr16.py) |
@@ -60,11 +61,26 @@ npm run build
 
 PNG 在解码前校验尺寸、解压预算、扫描行、CRC 和色彩标记。不要用宽松解码兜底绕过验证；无 sRGB 标记的兼容例外只适用于既有、已验证的 8 位模板。
 
-**后端与任务。** 设置格式当前为 `schemaVersion: 1`；地址只接受 HTTP(S) 根地址与可选端口，不接受路径、凭据、查询参数。模型映射使用后端模型目录中的相对文件名，不写开发机绝对路径。现有模板支持 Qwen 2.1 GGUF，不支持导入任意 ComfyUI 网页工作流。新增适配要一起核对节点必填项、连接类型、模型和真实效果。
+**后端与任务。** 设置格式当前为 `schemaVersion: 1`；省略 `backend` 保持原 ComfyUI 路径，`backend: gateway` 使用 `gatewayModel` 平台 ID，密钥不属于插件设置；地址只接受 HTTP(S) 根地址与可选端口，不接受路径、凭据、查询参数。ComfyUI 模型映射使用后端模型目录中的相对文件名，不写开发机绝对路径。ComfyUI 模板支持 Qwen 2.1 GGUF，不支持导入任意 ComfyUI 网页工作流。新增适配要一起核对节点必填项、连接类型、模型和真实效果。
 
-图中第一张输入是来源，启用引导后占用下一输入位，参考图顺延。`LoadImage` 的反向 MASK 直接连接到 `JoinImageWithAlpha` 以还原 alpha，不额外反转一次；不要因输入顺序或裁切缩放改变而破坏原图对应关系。输出取约定的保存节点 `8`，16 位缺少保存节点时在上传／提交前报错。
+ComfyUI 图中第一张输入是来源，启用引导后占用下一输入位，参考图顺延。`LoadImage` 的反向 MASK 直接连接到 `JoinImageWithAlpha` 以还原 alpha，不额外反转一次；不要因输入顺序或裁切缩放改变而破坏原图对应关系。输出取约定的保存节点 `8`，16 位缺少保存节点时在上传／提交前报错。
 
-提交前持久化调用方生成的 UUID；响应丢失时用原 ID 查询恢复，不能自动重新提交。历史任务继续使用它原来保存的后端地址。进度、结果和取消都按任务 ID 隔离；取消只用原子的 `/api/jobs/{id}/cancel`，不回退到全局 `/interrupt`。展示真实阶段或步数，不编造预计耗时。诊断追踪只记录阶段和任务标识，不把私人像素或提示词写入追踪日志；不要把所有后端错误都归为显存不足。
+提交前持久化调用方生成的 UUID；响应丢失时用原 ID 查询恢复，不能自动重新提交。历史任务继续使用它原来保存的后端地址。进度、结果和取消都按任务 ID 隔离；ComfyUI 取消只用原子的 `/api/jobs/{id}/cancel`，不回退到全局 `/interrupt`。展示真实阶段或步数，不编造预计耗时。诊断追踪只记录阶段和任务标识，不把私人像素或提示词写入追踪日志；不要把所有后端错误都归为显存不足。
+
+### 平台适配与服务端重写
+
+公开契约在 [BACKEND.md](BACKEND.md)，不能只依赖被忽略的本机开发笔记。插件运行在 UXP，平台服务是独立 Node.js 24+ 进程；不要把 Node 文件系统、Key 或平台 SDK 塞进插件。服务构建到 `dist/gateway/ps-ai-gateway.mjs`，环境工具 ZIP 包含同一独立文件与许可证，不增加插件运行时依赖。
+
+- 用 `PSAI_PROVIDER=bailian|gemini|openai` 选择一个提供方，`npm run gateway -- --port 8190` 启动。并行平台用不同端口和数据目录。配置默认目录为 `~/.ps-ai/bailian` / `~/.ps-ai/gemini` / `~/.ps-ai/openai`；凭据只读服务进程环境。默认只绑定 127.0.0.1，当前没有多人认证或公网部署能力。
+- `ImageProvider` 抽象位于 `server/provider.ts`。能力清单决定模式、输入数、输出位深、像素预算和种子。`seedMax: 0` 表示不可设种子，使用占位 0 且不传给平台。未知参数必须拒绝；界面和历史恢复不能把禁用的 16 位、素材模式或参数带回平台配置。
+- 调用上游前持久化本地 UUID、规范化摘要、提供方身份和端点。相同 UUID 只能创建一次上游任务，不同请求或提供方返回 409。百炼异步任务保存原平台 ID 后继续查询；Gemini GenerateContent 与 OpenAI Images 同步返回图片，在本机后台执行，不能伪造远程任务 ID。提交窗口结果不确定、且没有可查 ID／原始结果时保留 unknown，不自动重发收费请求。
+- 原始结果先落盘，再验证和发布 PNG。临时 I/O 失败保持可重试，不作为图片损坏终态；原始文件存在即可按原 UUID 恢复转换。来源、参考与提示词保存在私人数据目录；只跟踪阶段和 ID，不把内容、Key、原始平台错误或签名 URL 写入诊断或响应。
+- 作业、输入、原始输出和转换输出一起迁移。提供方／地域变化不得把旧任务路由到新平台。数据目录互斥，正常退出释放锁；异常结束后先确认进程退出，再清理遗留锁。没有自动对账、认领任务 ID、放弃跟踪、自动清理或长期稳定保证。
+- 当前平台协议只输出带 sRGB 标记的 8 位 PNG。百炼要求请求尺寸；Gemini 使用显式 1K 方形等比补边与逆向裁切，长条选区和大图存在有效精度限制。无标记输出只有服务端对应 `PSAI_BAILIAN_ASSUME_SRGB=1` / `PSAI_GEMINI_ASSUME_SRGB=1` / `PSAI_OPENAI_ASSUME_SRGB=1` 的明确策略才可接受；不放宽共享客户端对色彩、CRC、预算和位深的验证。
+- 三个适配器都声明 `cancellation: none`：停止后续候选，当前请求继续并保留结果；不假称取消计费。只有阶段进度。Gemini 不开放透明特效／氛围素材、可设种子、4K、对话编辑或 16 位；未来新增能力需单独验证。
+- 新适配器至少补协议、HTTP、重启／重复请求、错误脱敏、几何与面板回归，运行 `npm test`、`npm run build` 及打包检查。API Key 缺失时只能记录离线证据；实际推理、颜色／透明度、宿主操作和安装验收另行完成，之后再更新两种语言指南和兼容清单。FLUX 只有接口调研，尚无实现。现有 v0.4.0 附件不包含本轮平台能力。
+
+- 平台意图使用无自动编号的语义提示，原用户文字不替换。图片角色由各适配器绑定：百炼／Gemini 仍传来源、辅助、参考；OpenAI JSON 的 images 只传来源、参考，guide 转独立原生 mask，alpha=255-gray，补边保护。不要把辅助图占用的旧图片编号带入 OpenAI。2.5 画布按16倍数／最低像素预算规划，1.5按固定画布补边，来源与蒙版同几何变换，结果逆裁后回到请求尺寸。Key 只读 OPENAI_API_KEY，不接受任意中转URL。
 
 ### 修改、验证与发布
 
@@ -85,7 +101,7 @@ GitHub Actions 在推送到 `main` 和 PR 时检查构建，只有手动运行�
 
 ### Start here
 
-PS-AI is a Photoshop UXP plugin that runs local Qwen-Image 2.1 workflows through ComfyUI. Read the [README](README.en.md), [ComfyUI setup](COMFYUI.en.md) and [user guide](USER_GUIDE.en.md). The [compatibility manifest](config/compatibility.json) records backend, node and model pins and the scope of validation; the [settings example](config/settings.example.json) defines portable configuration.
+PS-AI is a Photoshop UXP plugin. The published local path uses ComfyUI and Qwen-Image 2.1. The development branch also contains Bailian, Gemini / Nano Banana and OpenAI Images adapters; live platform and host acceptance await API keys. Read the [README](README.en.md), [ComfyUI setup](COMFYUI.en.md) and [user guide](USER_GUIDE.en.md). See [Bailian](BAILIAN.en.md), [Gemini](GEMINI.en.md), [OpenAI Images](OPENAI.en.md) and the [backend / persistence contract](BACKEND.en.md) before platform or server work. The [compatibility manifest](config/compatibility.json) records backend, node and model pins and the scope of validation; the [settings example](config/settings.example.json) defines portable configuration.
 
 The three workspaces cover local editing, COSPLAY and text-to-image, with nine modes. Character references, effects and atmosphere assets are in scope; routine portrait retouching is not. References do not guarantee identity preservation, and generated results and transparency need inspection. Finding a model in the backend list does not establish compatibility.
 
@@ -99,6 +115,7 @@ Use public guides and current source as the development entry point. Ignored han
 | Capture, selections, protection, apply and undo | [src/photoshop.ts](src/photoshop.ts), [src/range-preview.ts](src/range-preview.ts) |
 | Pixels, alpha, coordinates and color | [src/image.ts](src/image.ts), [src/composite.ts](src/composite.ts), [src/color.ts](src/color.ts), [src/png-decode.ts](src/png-decode.ts), [src/png16.ts](src/png16.ts) |
 | Mode intent and ComfyUI graphs | [src/intent.ts](src/intent.ts), [src/workflow.ts](src/workflow.ts) |
+| Platform protocol, capabilities and service | [src/gateway-protocol.ts](src/gateway-protocol.ts), [src/gateway-client.ts](src/gateway-client.ts), [server/provider.ts](server/provider.ts), [server/gateway.ts](server/gateway.ts), [server/store.ts](server/store.ts), [server/bailian.ts](server/bailian.ts), [server/gemini.ts](server/gemini.ts) |
 | Uploads, job state, cancellation and recovery | [src/client.ts](src/client.ts), [src/jobs.ts](src/jobs.ts), [src/storage.ts](src/storage.ts) |
 | Profiles, environment checks and diagnostics | [src/profile.ts](src/profile.ts), [src/environment.ts](src/environment.ts), [src/diagnostics.ts](src/diagnostics.ts) |
 | Optional 16-bit output | [comfyui/ps_ai_sdr16/__init__.py](comfyui/ps_ai_sdr16/__init__.py), [tests/test_sdr16.py](tests/test_sdr16.py) |
@@ -138,11 +155,26 @@ Internal RGBA is straight alpha. When “Preserve source transparency” (`prese
 
 Validate PNG dimensions, inflation budget, scanlines, CRC and color tags before decoding. Do not fall back to permissive decoding. The untagged-output exception belongs only to the existing verified 8-bit template.
 
-**Backend and jobs.** Settings currently use `schemaVersion: 1`. Accept HTTP(S) origins with optional ports, without paths, credentials or queries. Model mappings are filenames relative to backend model directories. The existing graph supports Qwen 2.1 GGUF, not arbitrary imported UI workflows. New adapters need node-required-input, connection-type, model and real-output validation.
+**Backend and jobs.** Settings use `schemaVersion: 1`. Omitted `backend` preserves ComfyUI; `backend: gateway` uses a platform `gatewayModel` ID. API keys are never plugin settings. Accept HTTP(S) origins with optional ports, without paths, credentials or queries. ComfyUI model mappings are filenames relative to backend model directories. The ComfyUI graph supports Qwen 2.1 GGUF, not arbitrary imported UI workflows. New adapters need node-required-input, connection-type, model and real-output validation.
 
-The source is the first image, an enabled guide occupies the next slot and references follow it. `JoinImageWithAlpha` restores alpha from `LoadImage`'s inverted MASK; preserve the direct connection without adding another inversion. Preserve image ordering and crop/scale correspondence. Read outputs from save node `8`; missing optional 16-bit support must fail before upload/submission.
+In ComfyUI graphs, the source is the first image, an enabled guide occupies the next slot and references follow it. `JoinImageWithAlpha` restores alpha from `LoadImage`'s inverted MASK; preserve the direct connection without adding another inversion. Preserve image ordering and crop/scale correspondence. Read outputs from save node `8`; missing optional 16-bit support must fail before upload/submission.
 
-Persist the caller-assigned UUID before POST. Recover lost responses by querying that ID, never by automatic resubmission. Historical jobs use their saved backend URL. Filter progress, results and cancellation by job ID. Use only atomic `/api/jobs/{id}/cancel`, without a global `/interrupt` fallback. Show real stages or steps, not invented timing. Diagnostic traces record stages and task IDs, not private pixels or prompts; classify backend errors rather than assuming every failure is OOM.
+Persist the caller-assigned UUID before POST. Recover lost responses by querying that ID, never by automatic resubmission. Historical jobs use their saved backend URL. Filter progress, results and cancellation by job ID. For ComfyUI, use only atomic `/api/jobs/{id}/cancel`, without a global `/interrupt` fallback. Show real stages or steps, not invented timing. Diagnostic traces record stages and task IDs, not private pixels or prompts; classify backend errors rather than assuming every failure is OOM.
+
+### Platform adapters and server rewrites
+
+The public contract is [BACKEND.en.md](BACKEND.en.md), not ignored local notes. UXP hosts the plugin; a separate Node.js 24+ process hosts platform adapters. Never put Node filesystem calls, provider keys or SDKs in the plugin. Build output is `dist/gateway/ps-ai-gateway.mjs`; environment archives include this standalone bundle and notices without new plugin runtime dependencies.
+
+- Select one provider with `PSAI_PROVIDER=bailian|gemini|openai`, then `npm run gateway -- --port 8190`. Concurrent providers need separate ports/data directories. Defaults are `~/.ps-ai/bailian`, `~/.ps-ai/gemini` and `~/.ps-ai/openai`. Keys come only from the service environment. The reference binds 127.0.0.1 and provides neither multi-account authentication nor public hosting.
+- `server/provider.ts` defines `ImageProvider`. Capabilities constrain operations, image counts, depth, pixels and seeds. `seedMax: 0` means no configurable seed; use placeholder 0 without sending a provider seed. Reject unknown parameters. History restoration must not introduce disabled 16-bit output or unsupported asset modes/settings into platform configuration.
+- Persist UUID, normalized fingerprint, provider identity and endpoint before the upstream call. A UUID creates at most one upstream request; conflicting bodies/providers get 409. Bailian saves its remote ID and resumes polling. Gemini GenerateContent and OpenAI Images return an image inline, running in a local worker without an invented remote ID. Keep unknown outcomes when neither a queryable ID nor raw result exists; never automatically replay a potentially billable creation.
+- Persist raw output before validating/publishing PNG. Temporary I/O failures remain retryable rather than becoming invalid-image terminal states; recover saved raw output by the original UUID. Inputs, references and prompts are private stored data. Diagnostics/responses must not expose content, keys, raw provider errors or signed URLs.
+- Migrate jobs, inputs and outputs together. A provider/region change cannot route old jobs elsewhere. One process locks each data directory. After an unclean exit, confirm the process is dead before removing a stale lock. Reconciliation, task-ID attachment, abandoning tracking, automatic cleanup and long-term stability guarantees are not implemented.
+- Gateways currently output tagged sRGB8 PNG. Bailian requires exact dimensions; Gemini uses explicit 1K square padding and inverse cropping, with effective-resolution limits for narrow selections or large requests. Untagged output needs explicit per-provider `PSAI_BAILIAN_ASSUME_SRGB=1` / `PSAI_GEMINI_ASSUME_SRGB=1` / `PSAI_OPENAI_ASSUME_SRGB=1` policy. Never relax shared client color/CRC/budget/depth checks.
+- All three adapters declare `cancellation: none`: stop future candidates, let the current request finish and retain its result. Do not imply billing stopped. Report stages only. Gemini excludes transparent effects/atmosphere assets, configurable seeds, 4K, conversations and 16-bit output; validate future additions separately.
+- Add protocol, HTTP, restart/idempotency, redaction, geometry and panel regressions for adapters. Run `npm test`, `npm run build` and package checks. Without keys, record offline evidence only. Real inference, color/alpha, host interaction and installation need separate acceptance, followed by bilingual guides and manifest updates. FLUX is researched, not implemented. Published v0.4.0 assets do not contain these platform changes.
+
+- Platform intents use semantic prompts without automatic image numbering; preserve original prompt text. Adapters bind roles: Bailian/Gemini send source, guide, reference. OpenAI JSON images contains source/reference; guide becomes a separate native mask with alpha=255-gray and protected padding. Never carry the old guide image slot into OpenAI prompts. Plan 2.5 canvases to multiples of16 and minimum area, use fixed 1.5 canvases, transform source/mask identically and inverse-crop outputs. Read only OPENAI_API_KEY; do not accept arbitrary relay URLs.
 
 ### Changes, validation and releases
 

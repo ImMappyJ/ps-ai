@@ -14,3 +14,8 @@ test('素材和文字生图不静默忽略已选择的角色参考',()=>{
   assert.throws(()=>intent('cosplay','effect','雷电',true,true,'道具'),/参考/);
   assert.throws(()=>intent('t2i','generate','森林',true,false,'场景'),/参考/);
 });
+
+test('平台语义意图不规定图像编号，原始提示中的字面标记保持不变',()=>{
+  const raw='把服装换成白色，保留标签 <image9>';
+  const edit=intent('cosplay','reference',raw,true,true,'服装','semantic');assert.equal(edit.kind,'edit');assert.equal(edit.referenceSlot,undefined);assert.doesNotMatch(edit.prompt,/<image[123]>/);assert.ok(edit.prompt.includes(raw));assert.match(edit.prompt,/服装参考图/);
+});

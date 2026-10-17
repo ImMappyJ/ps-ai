@@ -5,9 +5,12 @@
 <section id="setup-body" style="display:none"><h3 id="setup-step"></h3><p id="setup-help" class="hint"></p><p id="setup-preset" class="hint"></p><p id="setup-privacy" class="hint"></p><p id="setup-report" class="hint"></p><div class="row"><button id="setup-connect" data-i18n="1. 测试并保存地址">1. 测试并保存地址</button><button id="setup-check" data-i18n="2. 检查环境">2. 检查环境</button></div><div class="row"><button id="setup-example" data-i18n="3. 运行生成示例">3. 运行生成示例</button><button id="close-setup" data-i18n="返回工作区">返回工作区</button></div></section>
 <section class="fold"><button data-i18n="模型与连接 ▸" id="toggle-settings" class="disclosure" aria-expanded="false">模型与连接 ▸</button><div id="settings-body">
 <label><span data-i18n="界面语言 / Language">界面语言 / Language</span><select id="language"><option value="zh-CN">简体中文</option><option value="en-US">English</option></select></label>
-<label><span data-i18n="ComfyUI 地址">ComfyUI 地址</span><input id="backend-url" type="text" value="http://localhost:8188" placeholder="http://localhost:8188"></label>
+<label><span data-i18n="后端类型">后端类型</span><select id="backend-kind"><option data-i18n="ComfyUI" value="comfyui" selected>ComfyUI</option><option data-i18n="平台适配服务（实验）" value="gateway">平台适配服务（实验）</option></select></label>
+<label><span data-i18n="后端地址">后端地址</span><input id="backend-url" type="text" value="http://localhost:8188" placeholder="http://localhost:8188"></label>
+<div id="local-model-settings">
 <p data-i18n="Qwen-Image 2.1 GGUF · 保存后连接检查。图像和提示词会发送到此地址；远程服务需自行保证可信和可访问。" class="hint">Qwen-Image 2.1 GGUF · 保存后连接检查。图像和提示词会发送到此地址；远程服务需自行保证可信和可访问。</p>
 <label><span data-i18n="生成模型">生成模型</span><select id="model-unet"></select></label><label><span data-i18n="视觉／文本编码器">视觉／文本编码器</span><select id="model-clip"></select></label><label>VAE<select id="model-vae"></select></label>
+</div><div id="gateway-model-settings" style="display:none"><label><span data-i18n="平台模型">平台模型</span><select id="gateway-model"></select></label><p id="gateway-info" class="hint"></p></div>
 <div class="row"><button data-i18n="扫描模型" id="scan-models">扫描模型</button><button data-i18n="保存配置" id="save-settings">保存配置</button></div><div class="row"><button data-i18n="导入 JSON" id="import-settings">导入 JSON</button><button data-i18n="导出 JSON" id="export-settings">导出 JSON</button></div>
 </div></section>
 <div class="row tabs"><button data-i18n="局部修图" id="tab-local" class="active">局部修图</button><button id="tab-cosplay">COSPLAY</button><button data-i18n="生图" id="tab-t2i">生图</button></div>

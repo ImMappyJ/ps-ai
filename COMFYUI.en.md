@@ -6,6 +6,8 @@
 
 The plugin includes neither the backend nor weights. Reuse an existing ComfyUI if it meets the contract below. 8-bit uses `qwen21-local-v2-rgba`; 16-bit uses `qwen21-local-v3-rgba16`. Older screenshots show 0.3.0; setup for 0.4.0 is described below.
 
+This page covers the local ComfyUI path. Development gateways for [Bailian](BAILIAN.en.md), [Gemini / Nano Banana](GEMINI.en.md) and [OpenAI Images](OPENAI.en.md) use platform models instead. The root-level `BACKEND.en.md` defines server rewrites; ComfyUI graphs and platform APIs are separate contracts.
+
 ## 16-bit output (0.4.0)
 
 8-bit remains the default. To retain higher precision from generation:

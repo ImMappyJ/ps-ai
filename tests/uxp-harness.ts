@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';import os from 'node:os';import path from 'node:path';import vm from 'node:vm';import {parseHTML} from 'linkedom';import {build} from 'esbuild';
 import {encodePng,decodePng,Raster} from '../src/image';import type {JobRecord} from '../src/jobs';
-export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boolean;delayCheck?:boolean;settings?:unknown;models?:{unet:string;clip:string;vae:string};noDocuments?:boolean;delaySettings?:boolean;nativePreviewUnavailable?:boolean;source?:Raster;output?:Raster;save16Node?:boolean}={}) {
+export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boolean;delayCheck?:boolean;settings?:unknown;models?:{unet:string;clip:string;vae:string};noDocuments?:boolean;delaySettings?:boolean;nativePreviewUnavailable?:boolean;source?:Raster;output?:Raster;save16Node?:boolean;gateway?:{configured?:boolean;provider?:'bailian'|'gemini'|'openai'}}={}) {
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'ps-ai-panel-'));
   const html=await fs.readFile('plugin/index.html','utf8');const {document,window}=parseHTML(html);
   for(const select of Array.from(document.querySelectorAll('select'))) {
@@ -23,7 +23,7 @@ export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boo
     getEntry:async(name:string)=>({read:async()=>{if(!(name in files))throw new Error('Missing '+name);return files[name];}})
   };
   let holdCheck=false;let releaseCheck:()=>void=()=>{};let checkBarrier:Promise<void>=Promise.resolve();
-  const posts:any[]=[],captured:number[]=[],uploads:{name:string;image:Raster}[]=[];let documentId=11;let ownStatus:'queued'|'running'|'ready'='ready';const sockets:any[]=[];
+  const posts:any[]=[],gatewayPosts:any[]=[],captured:number[]=[],uploads:{name:string;image:Raster}[]=[];let documentId=11;let ownStatus:'queued'|'running'|'ready'='ready';const sockets:any[]=[];
   class TestSocket {onmessage?: (event:{data:string})=>void;onerror?:()=>void;closed=false;constructor(public url:string){sockets.push(this);}close(){this.closed=true;}}
   const png=encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)});
   const modelInfo:any={UnetLoaderGGUF:{input:{required:{unet_name:[['qwen-image-2.1-Q4_K_M.gguf']]}}},CLIPLoader:{input:{required:{clip_name:[['qwen3vl_8b_int8_convrot.safetensors']]}}},VAELoader:{input:{required:{vae_name:[['qwen_image_2.1_vae_bf16.safetensors']]}}},TextEncodeQwenImage21:{input:{required:{images:['COMFY_AUTOGROW_V3',{template:{names:['image_1','image_2','image_3']}}]}}}};
@@ -32,6 +32,14 @@ export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boo
   if(options.models)for(const [cls,field,key] of [['UnetLoaderGGUF','unet_name','unet'],['CLIPLoader','clip_name','clip'],['VAELoader','vae_name','vae']] as const)modelInfo[cls].input.required[field][0].push(options.models[key]);
   const fetcher=async(url:string,init:any)=>{
     if(url.startsWith('http://offline.invalid:9999'))throw new TypeError('fetch failed');
+    if(url.includes('/psai/v1/')){
+      if(url.endsWith('/capabilities'))return Response.json({protocol:'ps-ai/1',provider:options.gateway?.provider??'bailian',configured:options.gateway?.configured!==false,cancellation:'none',progress:'stages',models:(options.gateway?.provider==='gemini'?['gemini-2.5-flash-image']:options.gateway?.provider==='openai'?['gpt-image-2.5-sunburst']:['qwen-image-2.1-pro','qwen-image-3.0-pro']).map(id=>({id,label:id,operations:id.startsWith('qwen-image-2.1')||id.startsWith('gpt-')?['t2i','edit','asset']:['t2i','edit'],maxInputImages:3,outputDepths:[8],seedMax:id.startsWith('gemini-')||id.startsWith('gpt-')?0:2147483647,minPixels:262144,maxPixels:4194304,maxAspectRatio:id.startsWith('gpt-')?3:8}))});
+      if(url.includes('/uploads/')){const name=url.split('/').pop()!;uploads.push({name,image:decodePng(new Uint8Array(init.body))});return Response.json({name});}
+      if(url.endsWith('/jobs')){const post=JSON.parse(init.body);gatewayPosts.push(post);return Response.json({id:post.id});}
+      if(url.includes('/outputs/')){const r=gatewayPosts[gatewayPosts.length-1]?.request;return new Response(new Uint8Array(encodePng(options.output??{width:r?.width??512,height:r?.height??512,rgba:new Uint8Array((r?.width??512)*(r?.height??512)*4).fill(255)})).buffer);}
+      if(url.endsWith('/cancel'))return Response.json({cancelled:false});
+      const id=url.split('/').pop()!;return Response.json(ownStatus==='ready'?{state:'ready',images:[{filename:id+'.png',subfolder:'',type:'output'}]}:{state:ownStatus});
+    }
     if(url.endsWith('/system_stats')){if(holdCheck)await checkBarrier;return Response.json({system:{comfyui_version:'0.37.4'}});}
     if(url.includes('/object_info/')){const c=url.split('/').pop()!;return Response.json({[c]:modelInfo[c]??{}});}
     if(url.endsWith('/prompt')){const post=JSON.parse(init.body);posts.push(post);return Response.json({prompt_id:post.prompt_id});}
@@ -56,7 +64,7 @@ export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boo
   await new Promise(r=>setTimeout(r,25));
   const click=(id:string)=>el(id).dispatchEvent(new window.Event('click'));
   const wait=async()=>{for(let n=0;n<300;n++){await new Promise(r=>setTimeout(r,10));if(!el('generate').disabled)return;}throw new Error('Panel did not settle');};
-  return {el,click,change:(id:string)=>el(id).dispatchEvent(new window.Event('change')),wait,posts,captured,uploads,errors,files,setDocument:(id:number)=>{documentId=id;},
+  return {el,click,change:(id:string)=>el(id).dispatchEvent(new window.Event('change')),wait,posts,gatewayPosts,captured,uploads,errors,files,setDocument:(id:number)=>{documentId=id;},
     setJobStatus(value:'queued'|'running'|'ready'){ownStatus=value;},progress(id:string,value:number,max:number){for(const s of sockets)if(!s.closed)s.onmessage?.({data:JSON.stringify({type:'progress',data:{prompt_id:id,value,max}})});},
     releaseSettings(){holdStartup=false;releaseStartup();},
     holdHistory(){holdHistory=true;historyBarrier=new Promise(r=>{releaseHistory=r;});},releaseHistory(){holdHistory=false;releaseHistory();},

@@ -171,5 +171,80 @@
       "compositing": "Effect and atmosphere copied into sample derivatives as separate layers, 900x900 at (50,555), Normal at approximately 85% and 35%.",
       "limitations": "One illustration and fixed model preset. Clothing transfer, not identity consistency or complex prop reconstruction. Invisible RGB under zero alpha excluded from composite appearance comparison. Asset alpha can contain faint residue; first effect prompt formed a rejected ring. English prompt translations not separately tested. No long-term stability or calibrated-display claim."
     }
+  },
+  "platformGateway": {
+    "status": "development; unreleased; no real API key or Photoshop gateway acceptance",
+    "protocol": "ps-ai/1",
+    "nodeMinimum": 24,
+    "defaultPort": 8190,
+    "outputDepths": [
+      8
+    ],
+    "progress": "stages",
+    "cancellation": "none; stop future candidates only",
+    "credentials": "server process environment only",
+    "providers": {
+      "bailian": {
+        "execution": "task",
+        "models": [
+          "qwen-image-2.1-pro",
+          "qwen-image-2.1-turbo",
+          "qwen-image-3.0",
+          "qwen-image-3.0-pro"
+        ],
+        "transparentAssets": [
+          "qwen-image-2.1-pro",
+          "qwen-image-2.1-turbo"
+        ],
+        "api": "https://www.alibabacloud.com/help/en/model-studio/qwen-image-generation-and-editing-api-reference",
+        "guide": "BAILIAN.md"
+      },
+      "gemini": {
+        "execution": "inline",
+        "models": [
+          "gemini-nano-banana-2.1",
+          "gemini-3.1-flash-lite-image",
+          "gemini-3.1-flash-image",
+          "gemini-3-pro-image",
+          "gemini-2.5-flash-image"
+        ],
+        "transparentAssets": [],
+        "configurableSeed": false,
+        "modelCanvas": "1024x1024 padded context, inverse crop and resize to requested dimensions; large requests can upscale 1K output",
+        "remoteTaskRecovery": false,
+        "api": "https://ai.google.dev/gemini-api/docs/generate-content/image-generation",
+        "guide": "GEMINI.md"
+      },
+      "openai": {
+        "execution": "inline",
+        "models": [
+          "gpt-image-2.5-sunburst",
+          "gpt-image-2.5-flare",
+          "gpt-image-1.5"
+        ],
+        "transparentAssets": [
+          "gpt-image-2.5-sunburst",
+          "gpt-image-2.5-flare",
+          "gpt-image-1.5"
+        ],
+        "configurableSeed": false,
+        "quality": "medium",
+        "guide": "OPENAI.md",
+        "api": "https://developers.openai.com/api/docs/guides/image-generation",
+        "editPayload": "JSON images contains source then reference; guide becomes native alpha mask, never an image slot",
+        "modelCanvas": "2.5: flexible multiples of16, minimum655360 pixels, request ratio<=3; 1.5: 1024square or1536x1024/1024x1536. Shared source/mask padding and inverse crop to requested canvas.",
+        "remoteTaskRecovery": false
+      }
+    },
+    "validation": {
+      "date": "2026-10-17",
+      "liveApi": false,
+      "nativePhotoshop": false,
+      "installation": false,
+      "notes": "Offline protocol, loopback HTTP, idempotency, restart, geometry and mock panel checks; real model authorization, output color/alpha/effect and native controls remain pending."
+    },
+    "notImplemented": [
+      "Black Forest Labs / FLUX"
+    ]
   }
 }
