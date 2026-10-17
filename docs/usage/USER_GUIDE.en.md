@@ -41,6 +41,12 @@ Select an area and use Preview selection: **amber is editable, blue is manually 
 
 Generate candidates, wait, inspect thumbnails and View at 100%, then Apply as new layer. The result has an editable mask and preserves the source layer. Orange illustrations below are maps made from the actual selection masks; UI captures are shown separately. Comparisons show the original on the left and result on the right.
 
+<a id="background-fix"></a>
+
+**Background correction in the development build:** select the background and exclude the person in both Local edit → Replace background and Portrait → Replace scene. Both modes disable source-transparency preservation and subject alignment. ComfyUI also disables the visual selection guide, which the model can mistake for picture content. Selection feathering and protection still control final application. Only the model input is matted over white; the saved capture and source document keep their real alpha. Ordinary edit preferences return when leaving these modes. Platform adapters retain their provider / native mask path.
+
+Candidates with substantial transparency in the background show a warning and cannot be applied. Export them for inspection and generate another candidate manually; there is no automatic retry. On 2026-10-18, the original Chinese request “少女站在舞台上” produced visible stage lighting, scenery and a floor on this sample. Application to an RGB8 / Adobe RGB copy in Photoshop 27 left pixels outside the selection, additional protection and the source layer unchanged; one undo restored the composite exactly. Other prompts may need more detail about the environment. Screenshots below remain v0.4.0 evidence; new host controls and 16-bit background inference were not accepted in this session. Existing release packages do not contain this correction.
+
 ## Mode index
 
 | Edits and removal | Clothing, reference and scenes | Assets and text to image |
@@ -134,7 +140,7 @@ The charm was removed and replaced by white fabric, with the chain retained. Com
 
 1. Duplicate the transparent sample. Ctrl-click the character layer thumbnail to load its opacity, then Ctrl+Shift+I to select the background across the entire canvas.
 2. Choose Local edit → Replace background, with the selection destination. Enter the prompt.
-3. Enable the guide. Disable transparency preservation, alignment and color matching. Preview: the background should be editable and the opaque character excluded.
+3. The development build disables the guide, transparency preservation and alignment automatically. Disable color matching. Preview: the background should be editable and the opaque character excluded. The old v0.4.0 screenshot enables the guide; see the [background correction](#background-fix) for current behavior.
 4. Generate and apply. Check canvas coverage, foot contact, hair edges and shadows. Selecting the character edits the character; a prompt cannot invert a selection.
 
 Prompt translation:
@@ -251,7 +257,7 @@ The development branch now recognizes an explicit PNG sRGB chunk and static WebP
 
 1. Duplicate the original and clear old references and protection. Ctrl-click the character layer thumbnail, then Ctrl+Shift+I to select the full transparent background.
 2. Choose Portrait → Replace scene, with the selection destination. Enter the prompt.
-3. Enable the guide. Disable transparency preservation, alignment and color matching. Preview and generate.
+3. The development build disables the guide, transparency preservation and alignment automatically. Disable color matching, preview and generate. The old screenshot's guide setting no longer applies; see the [background correction](#background-fix).
 4. Apply and inspect the pergola, path perspective, feet and hair edges. The source character's lighting is retained; finish environmental lighting with adjustment layers if needed.
 
 Prompt translation:
@@ -413,9 +419,9 @@ Works through the ComfyUI edit workflow or a platform model declaring edit suppo
 | Resolution | 768, 992 or 1024; edits retain aspect ratio and align to workflow dimensions. |
 | Steps | Default 25, range 1–100; higher is not necessarily better. |
 | Context margin | Default 15%; surrounding context is not made editable. |
-| Selection guide | Visual guidance. The final Photoshop mask enforces protection. Off by default for reference assistance. |
-| Preserve transparency | Useful for clothing / materials; disable for backgrounds, removal or silhouette expansion. |
-| Subject alignment | Uses alpha bounds to adjust size and position; can change proportions. Off for the background and scene examples. |
+| Selection guide | Visual guidance. The final Photoshop mask enforces protection. Off by default for reference assistance; disabled for ComfyUI background / scene modes in development. |
+| Preserve transparency | Useful for clothing / materials; disabled for background / scene modes in development. Turn off for removal or silhouette expansion too. |
+| Subject alignment | Uses alpha bounds to adjust size and position; can change proportions. Disabled for background / scene modes in development. |
 | Color matching | Limited overall correction. Off in these tests. |
 
 16-bit output can be exported as PNG16, opened as RGB16 or applied to a 16-bit document. Applying to an 8-bit source quantizes to 8-bit without changing its depth. Model inputs, references and masks remain 8-bit. Higher-depth output reduces later quantization; it does not imply full 16-bit model precision, HDR or native wide-gamut generation. Finish color and lighting in Photoshop as needed.
@@ -426,6 +432,7 @@ Works through the ComfyUI edit workflow or a platform model declaring edit suppo
 | --- | --- |
 | No selection / fully protected edit | Select again, inspect the range preview and clear unwanted protection. |
 | Reference fails color checks | Confirm and embed the correct ICC on a copy; see Character reference. |
+| Background becomes black or transparent | Generate again using either background mode in the development build; see the [background correction](#background-fix). Select the background and describe scenery, lighting and the floor if needed. Loading an old candidate does not regenerate it. Do not import a black-and-white mask as a scene reference. |
 | White background | Preserve the outline for materials, disable for backgrounds. Inspect source fringe and alpha; standalone assets may need cleanup. |
 | Result too small or unfilled | Check selection, context and aspect ratio; try alignment off. Select the entire background. Do not bypass size checks by changing workflow dimensions. |
 | Source changed; application blocked | Capture and generate again, or export the old result for manual composition. |

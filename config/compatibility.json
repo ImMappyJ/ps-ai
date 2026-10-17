@@ -137,6 +137,33 @@
     ],
     "pngOutput": "8-bit sRGB. Untagged allowed only for qwen21-local-v2-rgba; incompatible ICC/gamma/HDR metadata rejected."
   },
+  "backgroundReplacement": {
+    "status": "development; not in published v0.4.0",
+    "modes": ["background", "scene"],
+    "modelInput": "sRGB8 over white for background modes only; original capture and source document alpha preserved",
+    "comfyuiGuide": false,
+    "gatewayGuide": "provider/native mask behavior retained; offline coverage only",
+    "preserveAlpha": false,
+    "alignSubject": false,
+    "applyAlphaCoverageMinimum": 0.9,
+    "acceptance": {
+      "date": "2026-10-18",
+      "sample": "3F3F3F.webp",
+      "prompt": "少女站在舞台上",
+      "seed": 749778879,
+      "steps": 25,
+      "outputSize": [800, 1248],
+      "outputDepth": 8,
+      "selectedTransparentPixelFraction": 0,
+      "host": "27.0.0; disposable RGB8 Adobe RGB (1998) copy",
+      "sourceLayerMaxDifference": 0,
+      "outsideMaskMaxDifference": 0,
+      "protectionMaxDifference": 0,
+      "singleUndoMaxDifference": 0,
+      "originalDocumentPreserved": true,
+      "limitations": "One real stage scene with the shared background intent; not general scene quality, new installed panel controls, 16-bit background inference, platform output or long-term stability acceptance. Existing v0.4.0 screenshots use earlier controls."
+    }
+  },
   "output16": {
     "template": "qwen21-local-v3-rgba16",
     "node": "PS_AISavePNG16",

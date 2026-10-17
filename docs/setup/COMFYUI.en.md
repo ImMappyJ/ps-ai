@@ -198,6 +198,7 @@ Input / output rules:
 - Edit input is pre-scaled sRGB 8-bit RGBA PNG. `image_1` is the source. An enabled selection guide uses `image_2`; character reference uses the next slot. `JoinImageWithAlpha` restores alpha from `LoadImage`'s inverted MASK.
 - Editing uses `resolution=0`; output dimensions must equal the first input. The plugin rejects mismatches. Text-to-image uses the selected resolution.
 - The selection guide is a visual prompt, not a latent inpaint mask. Photoshop's final mask enforces selection and protection boundaries.
+- Development background / scene modes omit the visual guide, which Qwen can encode as picture content. A character reference still follows the source. Only the model input is matted over white; the saved source capture stays intact. These modes disable source-transparency preservation and subject alignment while retaining the real selection and protection mask for application. Transparent background candidates warn and block apply while keeping export available. See the [background correction and acceptance scope](../usage/USER_GUIDE.en.md#background-fix). Published v0.4.0 does not contain this change.
 - Results come from node `8`'s `images`. The plugin then applies optional transparency, alignment and color processing; raw browser workflow output can differ.
 
 SD, SDXL, Flux, other Qwen architectures and arbitrary workflow import are unsupported. They need separate templates, node checks, size / mask contracts and Photoshop round-trip validation. Changing a dropdown filename is insufficient.

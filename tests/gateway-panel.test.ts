@@ -1,6 +1,16 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {panelHarness} from './uxp-harness';import {defaultSettings} from '../src/profile';import {uuid} from '../src/client';
 const settings={...defaultSettings(),backend:'gateway',baseUrl:'http://localhost:8190',gatewayModel:'qwen-image-2.1-pro',outputDepth:8};
+test('gateway background modes retain provider guide uploads while disabling source silhouette restoration',async()=>{
+  for(const [tab,mode] of [['tab-local','background'],['tab-cosplay','scene']]){
+    const h=await panelHarness({settings});try{
+      await h.wait();h.click(tab);h.el('mode').value=mode;h.change('mode');assert.equal(h.el('guide').checked,true);assert.equal(h.el('guide').disabled,false);
+      h.el('prompt').value='少女站在舞台上';h.click('generate');await h.wait();assert.equal(h.gatewayPosts.length,1);
+      const request=h.gatewayPosts[0].request;assert.ok(request.guide);assert.ok(h.uploads.some(u=>u.name.endsWith('-guide.png')));assert.doesNotMatch(request.prompt,/<image[123]>/);assert.match(request.prompt,/少女站在舞台上/);
+      const params=h.records()[0].params as any;assert.equal(params.preserveAlpha,false);assert.equal(params.alignSubject,false);assert.equal(params.guide,true);
+    }finally{await h.close();}
+  }
+});
 test('面板读取百炼后端配置，隐藏本机权重，禁用步数和16位输出',async()=>{
   const h=await panelHarness({settings});try{await h.wait();assert.ok(h.el('backend-kind'),'Backend selector must exist');assert.equal(h.el('backend-kind').value,'gateway');assert.equal(h.el('local-model-settings').style.display,'none');assert.equal(h.el('steps').disabled,true);assert.equal(h.el('output-depth').disabled,true);assert.match(h.el('cancel').textContent,/停止后续/);assert.match(h.el('gateway-info').textContent,/上传/);}finally{await h.close();}
 });

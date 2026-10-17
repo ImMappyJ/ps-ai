@@ -14,6 +14,8 @@ PS-AI 将 ComfyUI 接到 Photoshop 中，用于局部修图、人像服装和道
 
 开发版另补充了[原图色彩读取](docs/usage/USER_GUIDE.md#source-color)：没有文档 ICC 时可识别静态 WebP 的默认 sRGB 或 PNG 的显式 sRGB 标记，在工作副本中继续。WebP 8 位工作副本已在 Photoshop 27 完成等值回填与撤销检查；PNG、参考导入和新版面板交互仍待实机验收。现有 v0.4.0 包不包含这项改动。
 
+开发版还修正了[背景生成黑底／透明底](docs/usage/USER_GUIDE.md#background-fix)的问题，已用同一张样图验证舞台背景生成和 Photoshop 回填；现有 v0.4.0 包尚未更新。
+
 ## 文档导航
 
 | 用途 | 文档 |

@@ -14,6 +14,8 @@ The development panel offers ComfyUI, Nano Banana, GPT Image and BaiLian, separa
 
 The development build also adds [saved source color resolution](usage/USER_GUIDE.en.md#source-color): an untagged static WebP can use its default sRGB, and PNG can use an explicit sRGB chunk, through a tagged working copy. A WebP8 working copy passed identity apply/undo in Photoshop 27; native PNG, reference import and new panel interactions remain pending. Existing v0.4.0 packages do not include it.
 
+Development also corrects [black / transparent background generation](usage/USER_GUIDE.en.md#background-fix), with stage generation and Photoshop application tested on the same sample. Existing v0.4.0 packages have not been updated.
+
 ## Documentation
 
 | Purpose | Guide |

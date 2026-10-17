@@ -1,10 +1,11 @@
 import {RelayController} from './relay-controller';import {isPlatform,PLATFORMS} from './platforms';import type {PlatformId} from './platforms';import {connectionId,rememberConnection,switchConnection} from './profile';import type {ConnectionId} from './profile';
 import {ComfyClient,uuid,OutputFile} from './client';import {JobCoordinator,JobRecord,PENDING_STATES} from './jobs';
-import {buildGraph,TEMPLATE_VERSION,templateForDepth} from './workflow';import {intent,Workspace} from './intent';import {BackendSettings,defaultSettings,validateSettings} from './profile';
+import {buildGraph,TEMPLATE_VERSION,templateForDepth} from './workflow';import {intent,Workspace,isBackgroundMode} from './intent';import {BackendSettings,defaultSettings,validateSettings} from './profile';
 import {Raster,encodePng,decodePng,decodeModelPng,resize,maskRaster,makeMapping,convertDepth,rasterDepth} from './image';
 import {PhotoshopAdapter,Capture,Protection,Snapshot} from './photoshop';import {Storage} from './storage';import {runHostProbe} from './p0-host';
 import {prepareEditCandidate} from './composite';
 import {createSourceColorReader} from './source-color';
+import {editBehavior,editModelInput,backgroundCoverage} from './edit-behavior';
 import {t,setLanguage,errorText} from './i18n';
 import {normalizeBaseUrl,DEFAULT_MODELS} from './profile';
 import {rangePreview} from './range-preview';
@@ -39,11 +40,12 @@ const modes={local:[['edit','局部物体 / 材质修改'],['remove','移除杂�
 let workspace:Workspace='local',capture:Capture|undefined,protection:Protection|undefined,reference:Raster|undefined;
 let current:JobRecord|undefined,busy=false,stopBatch=false,zoomed=false;
 let applied:{documentId:number;layerId:number}|undefined;
-interface Candidate {job:JobRecord;image:Raster;bytes:Uint8Array;preview:string;snapshot?:Snapshot}
+interface Candidate {job:JobRecord;image:Raster;bytes:Uint8Array;preview:string;snapshot?:Snapshot;warning?:string}
 let candidates:Candidate[]=[];
 let taskActive=false,taskSucceeded=false,batchPosition='';
 let connectionState='未连接';
 let operationStage:Stage='connection',setupStep=1,checkedSetup='';
+const overriddenChecks=new Map<string,boolean>();
 function outputDepth():8|16{return el('output-depth').value==='16'?16:8;}
 function draftSettings(id:ConnectionId=el('backend-kind').value):BackendSettings{return validateSettings({schemaVersion:1,baseUrl:el('backend-url').value,language:el('language').value,outputDepth:outputDepth(),connections:draftConnections,...(id!=='comfyui'?{backend:'gateway',gatewayModel:el('gateway-model').value}:{}),...(isPlatform(id)?{platform:id}:{}),models:{unet:el('model-unet').value,clip:el('model-clip').value,vae:el('model-vae').value}});}
 async function keyStatus(){const id=el('backend-kind').value,request=++keyRequest;if(!isPlatform(id))return;const saved=await relay.hasKey(id);if(request===keyRequest&&el('backend-kind').value===id)el('key-status').textContent=t(saved?'Key 已保存（加密）':'尚未保存 Key');}
@@ -69,6 +71,14 @@ function option(select:any,value:string,text:string){const node=document.createE
 function inputUi(){
   const standalone=el('destination').value==='document'&&(workspace==='t2i'||['effect','atmosphere'].includes(el('mode').value));el('selection-tools').style.display=standalone?'none':'block';el('prompt').setAttribute('placeholder',workspace==='t2i'?t("描述要生成的画面、主体与风格"):workspace==='cosplay'?t("描述服装道具、光影方向、角色参考或氛围效果"):t("描述选区中要修改的内容，及需要保留的细节"));
   const platform=isPlatform(el('backend-kind').value),cloud=el('backend-kind').value!=='comfyui',model=gatewayCatalogBase===el('backend-url').value?gatewayCatalog?.models.find(m=>m.id===el('gateway-model').value):undefined;
+  const background=isBackgroundMode(el('mode').value);
+  for(const [id,forced] of [['preserve-alpha',background],['align-subject',background],['guide',background&&!cloud]] as const){
+    if(forced){if(!overriddenChecks.has(id))overriddenChecks.set(id,!!el(id).checked);el(id).checked=false;}
+    else if(overriddenChecks.has(id)){el(id).checked=overriddenChecks.get(id);overriddenChecks.delete(id);}
+    el(id).disabled=busy||forced;
+  }
+  el('mode-help').textContent=background?t(cloud?'选中背景、保留人物。此模式允许生成新的不透明背景，不保留原透明轮廓。':'选中背景、保留人物。ComfyUI 通过原图与场景描述生成；选区仍精确控制回填，不作为黑白参考图送入模型。'):'';
+  el('mode-help').style.display=background?'block':'none';
   const kind=workspace==='t2i'?'t2i':['effect','atmosphere'].includes(el('mode').value)?'asset':'edit';
   el('gateway-key-settings').style.display=platform?'block':'none';el('backend-url').disabled=busy||platform;
   el('local-model-settings').style.display=cloud?'none':'block';el('gateway-model-settings').style.display=cloud?'block':'none';
@@ -80,11 +90,12 @@ function inputUi(){
 }
 function candidateUi(){
   const c=candidates[Number(el('candidate-select').value)],mode=c?.snapshot?adapter.applicationMode(c.snapshot):'unavailable';
-  el('apply').disabled=busy||!c?.snapshot||mode==='unavailable';el('apply').textContent=t(mode==='replace'?'替换本轮候选图层':'应用为新图层');
+  el('apply').disabled=busy||!c?.snapshot||!!c.warning||mode==='unavailable';el('apply').textContent=t(mode==='replace'?'替换本轮候选图层':'应用为新图层');
+  el('candidate-warning').textContent=c?.warning?t(c.warning):'';el('candidate-warning').style.display=c?.warning?'block':'none';
   const s=c?.snapshot;el('candidate-target').textContent=s?t('来源文档 {0} · {1} · {2}',s.documentId,s.profile,mode==='unavailable'?t('来源已关闭、改变或会话已结束；候选仍可导出'):mode==='replace'?t('替换同次捕获的插件图层，其他图层保留'):t('新增独立结果，保留来源图层')):c?t('独立生成结果，可另存或新建文档'):'';
   for(const id of ['zoom','export','new-document'])el(id).disabled=busy||!c;el('candidate-select').disabled=busy||!c;el('opacity').disabled=busy||!applied;el('candidate-empty').style.display=candidates.length?'none':'block';el('detail-frame').style.display=c?'block':'none';
 }
-function setWorkspace(value:Workspace){workspace=value;const select=el('mode');select.innerHTML='';for(const [id,label] of modes[value])option(select,id,label);select.value=modes[value][0][0];for(const w of ['local','cosplay','t2i'])el(`tab-${w}`).className=w===value?'active':'';if(value==='t2i')el('destination').value='document';else el('destination').value='selection';inputUi();}
+function setWorkspace(value:Workspace,mode=modes[value][0][0]){workspace=value;const select=el('mode');select.innerHTML='';for(const [id,label] of modes[value])option(select,id,label);select.value=mode;for(const w of ['local','cosplay','t2i'])el(`tab-${w}`).className=w===value?'active':'';if(value==='t2i')el('destination').value='document';else el('destination').value='selection';inputUi();}
 function lock(value:boolean){busy=value;for(const id of ['generate','capture','protect','clear-protection','reference','clear-reference','tab-local','tab-cosplay','tab-t2i','mode','prompt','output-depth','usage','guide','preserve-alpha','align-subject','match-color','destination','count','steps','resolution','seed','lock-seed','margin','p0','recover','load-history','repeat-history','apply','new-document','connect','scan-models','save-settings','import-settings','export-settings','model-unet','model-clip','model-vae','backend-url','backend-kind','gateway-model','api-key','save-key','clear-key','stop-relay','language','open-setup','close-setup','setup-connect','setup-check','setup-example'])el(id).disabled=value;el('cancel').disabled=!value&&!(current&&PENDING_STATES.includes(current.state));candidateUi();renderSetup();inputUi();}
 function showGatewayModels(selected=settings.gatewayModel??DEFAULT_GATEWAY_MODEL){const select=el('gateway-model');select.innerHTML='';for(const id of new Set([selected,...(gatewayCatalogBase===el('backend-url').value?gatewayCatalog?.models.map(m=>m.id)??[]:[])]))option(select,id,id);select.value=selected;}
 function showSettings(available?:Record<'unet'|'clip'|'vae',string[]>,value=settings) {for(const key of ['unet','clip','vae'] as const){const select=el(`model-${key}`);select.innerHTML='';for(const name of new Set([value.models[key],...(available?.[key]??[])]))option(select,name,name);select.value=value.models[key];}displayedConnection=connectionId(value);draftConnections=value.connections;el('backend-kind').value=displayedConnection;el('backend-url').value=value.baseUrl;el('output-depth').value=String(value.outputDepth??8);showGatewayModels(value.gatewayModel??(isPlatform(displayedConnection)?PLATFORMS[displayedConnection].model:DEFAULT_GATEWAY_MODEL));el('api-key').value='';void keyStatus();inputUi();}
@@ -135,18 +146,20 @@ async function restoreSnapshot(record:JobRecord):Promise<Snapshot|undefined> {
 async function addCandidate(record:JobRecord,bytes:Uint8Array){
   await store.trace('candidate.preview',record.id);
   const snapshot=await restoreSnapshot(record),params=record.params as any;
-  let image=decodeModelPng(bytes,String(record.template??""));
+  let image=decodeModelPng(bytes,String(record.template??"")),warning:string|undefined;
   if(params.outputKind==='edit'&&snapshot){
     const expected=params.modelSize;if(!expected||image.width!==expected.width||image.height!==expected.height)throw new DiagnosticError('invalid-output','output',t("候选尺寸与输入工作流不符，已保留原始输出；请检查后端，避免拉伸错位"));
     const source=decodePng(await store.readBinary(`${record.id}-source.png`));
     const maskImage=resize(maskRaster(snapshot.mask,source.width,source.height),image.width,image.height);
     const mask=new Uint8Array(image.width*image.height);for(let i=0;i<mask.length;i++)mask[i]=maskImage.rgba[i*4];
-    image=prepareEditCandidate(image,source,{preserveAlpha:params.preserveAlpha!==false,align:params.alignSubject!==false,matchColor:params.matchColor===true,mask});
+    const behavior=editBehavior(params.mode,params,record.backend??'comfyui');
+    if(isBackgroundMode(params.mode)&&backgroundCoverage(image,mask)<.9)warning='背景区域仍有明显透明部分，未生成完整场景。请重新生成；此候选可另存检查，暂不回填。';
+    image=prepareEditCandidate(image,source,{preserveAlpha:behavior.preserveAlpha,align:behavior.alignSubject,matchColor:params.matchColor===true,mask});
     bytes=encodePng(image);
   }
   // All exported candidates, including standalone assets, declare sRGB explicitly.
   bytes=encodePng(image);
-  const c:Candidate={job:record,bytes,image,preview:await preview(image),snapshot};
+  const c:Candidate={job:record,bytes,image,preview:await preview(image),snapshot,warning};
   if(candidates.length===4)candidates.shift();candidates.push(c);
   const list=el('candidate-select');list.innerHTML='';el('candidates').innerHTML='';
   candidates.forEach((candidate,index)=>{option(list,String(index),t("候选 {0} · {1}×{2}",index+1,candidate.image.width,candidate.image.height));const img=document.createElement('img');img.src=candidate.preview;img.addEventListener('click',()=>{list.value=String(index);void guarded(showSelected);});el('candidates').appendChild(img);});
@@ -208,7 +221,8 @@ async function generate() {
   await store.trace('generate.start');
   const pending=(await store.history()).find(r=>PENDING_STATES.includes(r.state));
   if(pending){current=pending;assertBackend(pending);throw new Error(t("存在尚未确认的任务，请先恢复或取消本任务"));}
-  const mode=el('mode').value,userPrompt=el('prompt').value,guide=!!el('guide').checked,destination=el('destination').value,usage=el('usage').value;
+  const mode=el('mode').value,userPrompt=el('prompt').value,destination=el('destination').value,usage=el('usage').value;
+  const behavior=editBehavior(mode,{guide:!!el('guide').checked,preserveAlpha:!!el('preserve-alpha').checked,alignSubject:!!el('align-subject').checked},settings.backend??'comfyui'),guide=behavior.guide;
   const request=intent(workspace,mode,userPrompt,!!reference,guide,usage,client instanceof GatewayClient?'semantic':'images');
   const depth=outputDepth();const count=Number(el('count').value),steps=Number(el('steps').value),resolution=Number(el('resolution').value),margin=Number(el('margin').value)/100;
   let baseSeed=el('lock-seed').checked?Number(el('seed').value):Math.floor(Math.random()*2**31),seedSupported=true;
@@ -235,14 +249,14 @@ async function generate() {
         const mapping=makeMapping(snapshot!.bounds,resolution);
         modelSize={width:mapping.width,height:mapping.height};
         const image=resize(captured!.image,mapping.width,mapping.height);
-        source=await client.upload(encodePng(convertDepth(image,8)),`${id}-source.png`);
+        source=await client.upload(encodePng(editModelInput(mode,image)),`${id}-source.png`);
         if(guide){const mask=resize(maskRaster(snapshot!.mask,captured!.image.width,captured!.image.height),mapping.width,mapping.height);guideName=await client.upload(encodePng(mask),`${id}-guide.png`);}
         if(ref){const refMap=makeMapping({left:0,top:0,right:ref.width,bottom:ref.height},resolution);referenceName=await client.upload(encodePng(resize(ref,refMap.width,refMap.height)),`${id}-reference.png`);}
       }
       if(stopBatch)break;
       const graph=client instanceof GatewayClient?{}:buildGraph({requestId:id,prompt:request.prompt,seed,steps,resolution,source,guide:guideName,reference:referenceName,models:settings.models,outputDepth:outputDepth()});
       const {mask:ignored,...metadata}=snapshot??{mask:undefined};
-      current={id,clientId,baseUrl:settings.baseUrl,state:'created',createdAt:new Date().toISOString(),graph,...(generationRequest?{backend:'gateway' as const,request:generationRequest}:{}),userPrompt,params:{workspace,mode,steps,resolution,seed,outputDepth:depth,guide,margin,usage,destination,outputKind:request.kind,modelSize,preserveAlpha:!!el('preserve-alpha').checked,alignSubject:!!el('align-subject').checked,matchColor:!!el('match-color').checked},snapshot:snapshot?metadata:undefined,template:generationRequest?GATEWAY_TEMPLATE:templateForDepth(depth),...(generationRequest?{providerModel:generationRequest.model}:{models:{...settings.models}})};
+      current={id,clientId,baseUrl:settings.baseUrl,state:'created',createdAt:new Date().toISOString(),graph,...(generationRequest?{backend:'gateway' as const,request:generationRequest}:{}),userPrompt,params:{workspace,mode,steps,resolution,seed,outputDepth:depth,guide,margin,usage,destination,outputKind:request.kind,modelSize,preserveAlpha:behavior.preserveAlpha,alignSubject:behavior.alignSubject,matchColor:!!el('match-color').checked},snapshot:snapshot?metadata:undefined,template:generationRequest?GATEWAY_TEMPLATE:templateForDepth(depth),...(generationRequest?{providerModel:generationRequest.model}:{models:{...settings.models}})};
       operationStage='inference';await store.trace('task.submit',id);await coordinator.submit(current);await store.trace('task.wait',id);
       if(current.state==='failed')throw new Error(current.detail);
       if(!await waitRecord(current))break;
@@ -256,7 +270,7 @@ async function recover(){
   if(!current)throw new Error(t("没有可恢复的任务"));
   assertBackend(current);if(settings.platform&&client instanceof GatewayClient){const ready=await connectDraft(settings) as GatewayClient;client.token=ready.token;}stopBatch=false;taskSucceeded=await waitRecord(current);}catch(error){status(error instanceof Error?error.message:String(error));throw error;}finally{endTask();lock(false);}
 }
-async function apply(){if(busy)return;lock(true);try{const c=selected();if(!c.snapshot)throw new Error(t("此候选没有来源选区，请使用新文档查看"));const params=c.job.params as any;const source=params.outputKind==='edit'&&params.preserveAlpha!==false?decodePng(await store.readBinary(`${c.job.id}-source.png`)):undefined;const layerId=await adapter.apply(c.snapshot,c.image,`PS-AI ${c.job.id.slice(0,8)}`,source);applied={documentId:c.snapshot.documentId,layerId};el('opacity').value=100;status(t("已应用为独立图层，蒙版可编辑；同次捕获切换候选替换此图层，Ctrl+Z 一次撤销"));}finally{lock(false);}}
+async function apply(){if(busy)return;lock(true);try{const c=selected();if(c.warning)throw new DiagnosticError('invalid-output','output',c.warning);if(!c.snapshot)throw new Error(t("此候选没有来源选区，请使用新文档查看"));const params=c.job.params as any,behavior=editBehavior(params.mode,params,c.job.backend??'comfyui');const source=params.outputKind==='edit'&&behavior.preserveAlpha?decodePng(await store.readBinary(`${c.job.id}-source.png`)):undefined;const layerId=await adapter.apply(c.snapshot,c.image,`PS-AI ${c.job.id.slice(0,8)}`,source);applied={documentId:c.snapshot.documentId,layerId};el('opacity').value=100;status(t("已应用为独立图层，蒙版可编辑；同次捕获切换候选替换此图层，Ctrl+Z 一次撤销"));}finally{lock(false);}}
 function on(id:string,action:()=>Promise<void>){el(id).addEventListener('click',()=>void guarded(async()=>{operationStage=['apply','new-document','opacity'].includes(id)?'apply':['capture','protect','reference'].includes(id)?'capture':['scan-models','setup-check'].includes(id)?'environment':['recover','generate','setup-example','cancel'].includes(id)?'inference':'connection';await action();}));}
 const foldLabels:Record<string,string>={settings:'模型与连接',reference:'参考图（可选）',advanced:'进阶参数',diagnostics:'宿主诊断'};
 function fold(name:string,open:boolean){el(`${name}-body`).style.display=open?'block':'none';el(`toggle-${name}`).textContent=t(foldLabels[name])+(open?' ▾':' ▸');el(`toggle-${name}`).setAttribute('aria-expanded',String(open));}
@@ -301,7 +315,7 @@ on('setup-example',async()=>{
   if(setupStep!==3||checkedSetup!==setupSignature(draftSettings())||checkedSetup!==setupSignature(settings))throw new Error(t('配置已改变，请重新检查环境后运行示例'));
   lock(true);
   const previous=ps.app.documents.length?ps.app.activeDocument:undefined;
-  const oldWorkspace=workspace,oldReference=reference,oldProtection=protection,oldMode=el('mode').value;
+  const oldWorkspace=workspace,oldReference=reference,oldProtection=protection,oldMode=el('mode').value,oldOverrides=new Map(overriddenChecks);
   const fields=['prompt','count','steps','resolution','seed','margin','destination'],checks=['guide','preserve-alpha','align-subject','match-color','lock-seed'];
   const oldValues=fields.map(id=>el(id).value),oldChecks=checks.map(id=>el(id).checked);
   let completed=false;
@@ -317,8 +331,8 @@ on('setup-example',async()=>{
     await apply();completed=true;el('setup-report').textContent=t('示例已生成并应用到独立测试文档；可预览蒙版并用 Ctrl+Z 撤销。');
     await store.json('setup-example.json',{date:new Date().toISOString(),passed:true,taskId:selected().job.id,documentId:id,layerId:applied?.layerId});
   }finally{
-    reference=oldReference;protection=oldProtection;setWorkspace(oldWorkspace);el('mode').value=oldMode;
-    fields.forEach((id,i)=>el(id).value=oldValues[i]);checks.forEach((id,i)=>el(id).checked=oldChecks[i]);capture=undefined;el('selection-previews').style.display='none';el('source-info').textContent=t('范围参数已改变，请重新预览选区');inputUi();lock(false);
+    reference=oldReference;protection=oldProtection;setWorkspace(oldWorkspace,oldMode);
+    fields.forEach((id,i)=>el(id).value=oldValues[i]);checks.forEach((id,i)=>el(id).checked=oldChecks[i]);overriddenChecks.clear();for(const [id,value] of oldOverrides)overriddenChecks.set(id,value);capture=undefined;el('selection-previews').style.display='none';el('source-info').textContent=t('范围参数已改变，请重新预览选区');inputUi();lock(false);
     if(!completed&&previous&&Array.from(ps.app.documents as any[]).some((d:any)=>d.id===previous.id))await ps.core.executeAsModal(async()=>{ps.app.activeDocument=previous;},{commandName:'PS-AI restore document'});
   }
 });
@@ -339,7 +353,7 @@ on('export',async()=>{const c=selected(),file=await uxp.storage.localFileSystem.
 on('new-document',async()=>{const c=selected();await adapter.newDocument(c.image,`ps-ai ${c.job.id.slice(0,8)}`);});
 el('opacity').addEventListener('change',()=>void guarded(async()=>{if(!applied)throw new Error(t("请先应用一个候选"));await adapter.opacity(applied.documentId,applied.layerId,Number(el('opacity').value));}));
 on('load-history',async()=>{const record=(await store.history()).find(r=>r.id===el('history').value);if(!record?.outputFile)throw new Error(t("此记录尚未保存候选，请恢复任务"));await addCandidate(record,await store.readBinary(String(record.outputFile)));});
-on('repeat-history',async()=>{const r=(await store.history()).find(r=>r.id===el('history').value);if(!r)throw new Error(t("请选择历史记录"));const p=r.params as any;if(settings.backend==='gateway'&&p.outputDepth===16)throw new Error(t('此历史为 16 位输出，请切回 ComfyUI 后恢复参数；当前平台配置保留 8 位'));setWorkspace(p.workspace);el('mode').value=p.mode;el('prompt').value=r.userPrompt;for(const name of ['steps','resolution','seed','destination'])el(name).value=p[name];el('output-depth').value=String(p.outputDepth??8);el('usage').value=['服装','道具','材质','场景'].includes(p.usage)?p.usage:'服装';el('guide').checked=p.guide;el('preserve-alpha').checked=p.preserveAlpha!==false;el('align-subject').checked=p.alignSubject!==false;el('match-color').checked=p.matchColor===true;el('margin').value=p.margin*100;el('lock-seed').checked=true;inputUi();status(t("参数已恢复；参考图和保护区请重新指定，提交时重新捕获"));});
+on('repeat-history',async()=>{const r=(await store.history()).find(r=>r.id===el('history').value);if(!r)throw new Error(t("请选择历史记录"));const p=r.params as any;if(settings.backend==='gateway'&&p.outputDepth===16)throw new Error(t('此历史为 16 位输出，请切回 ComfyUI 后恢复参数；当前平台配置保留 8 位'));setWorkspace(p.workspace,p.mode);el('prompt').value=r.userPrompt;for(const name of ['steps','resolution','seed','destination'])el(name).value=p[name];el('output-depth').value=String(p.outputDepth??8);el('usage').value=['服装','道具','材质','场景'].includes(p.usage)?p.usage:'服装';el('guide').checked=p.guide;el('preserve-alpha').checked=p.preserveAlpha!==false;el('align-subject').checked=p.alignSubject!==false;el('match-color').checked=p.matchColor===true;el('margin').value=p.margin*100;el('lock-seed').checked=true;inputUi();status(t("参数已恢复；参考图和保护区请重新指定，提交时重新捕获"));});
 on('p0',async()=>{if(busy)return;lock(true);const trace:string[]=[];try{const report=await runHostProbe(ps,adapter,trace);await store.json('p0-host-report.json',report);status(t("P0 宿主往返通过：选区外/保护区像素、原图层、蒙版、异文档与一次撤销"));}catch(error){await store.json('p0-host-report.json',{passed:false,date:new Date().toISOString(),trace,error:error instanceof Error?error.message:String(error),stack:error instanceof Error?error.stack:undefined});throw error;}finally{lock(false);}});
 on('report',async()=>{const r=await store.readJson('p0-host-report.json',null);if(!r)throw new Error(t("请先运行 P0 图像往返验证"));const f=await uxp.storage.localFileSystem.getFileForSaving('ps-ai-p0-host-report.json',{types:['json']});if(f)await f.write(JSON.stringify(r,null,2));});
 on('export-log',async()=>{const r=await store.readJson('runtime-trace.json',null);if(!r)throw new Error(t("尚无操作阶段日志"));const f=await uxp.storage.localFileSystem.getFileForSaving('ps-ai-runtime-trace.json',{types:['json']});if(f)await f.write(JSON.stringify(r,null,2));});

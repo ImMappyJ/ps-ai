@@ -2,6 +2,56 @@ import test from 'node:test';import assert from 'node:assert/strict';import {pan
 import {defaultSettings} from '../src/profile';
 import {decodePng} from '../src/image';
 
+test('background and Portrait scene generate opaque scenery without a ComfyUI visual-mask reference',async()=>{
+  for(const [tab,mode] of [['tab-local','background'],['tab-cosplay','scene']]){
+    const source={width:2,height:2,rgba:new Uint8Array([60,90,120,0,60,90,120,128,60,90,120,255,60,90,120,255])};
+    const h=await panelHarness({source,output:{width:32,height:32,rgba:Uint8Array.from({length:32*32*4},(_,i)=>[40,110,210,255][i%4])}});try{
+      await h.wait();h.click(tab);h.el('mode').value=mode;h.change('mode');h.el('resolution').value='32';h.el('prompt').value='少女站在舞台上';h.click('generate');await h.wait();
+      assert.equal(h.posts.length,1);assert.equal(h.posts[0].prompt['4'].inputs['images.image_2'],undefined);
+      const p=h.records()[0].params as any;assert.equal(p.preserveAlpha,false);assert.equal(p.alignSubject,false);assert.equal(p.guide,false);
+      const upload=h.uploads.find(u=>u.name.endsWith('-source.png'))!;assert.equal(upload.image.rgba[3],255);assert.deepEqual([...upload.image.rgba.slice(0,4)],[255,255,255,255]);
+      const original=decodePng(h.files[h.records()[0].id+'-source.png'] as Uint8Array);assert.equal(original.rgba[3],0);
+      const candidate=decodePng(new Uint8Array(Buffer.from(h.el('detail-preview').src.split(',')[1],'base64')));assert.deepEqual([...candidate.rgba.slice(0,4)],[40,110,210,255]);
+    }finally{await h.close();}
+  }
+});
+
+test('background controls disable conflicting options and restore local-edit choices when switching back',async()=>{
+  const h=await panelHarness();try{await h.wait();h.el('guide').checked=true;h.el('preserve-alpha').checked=true;h.el('align-subject').checked=false;
+    h.el('mode').value='background';h.change('mode');
+    for(const id of ['guide','preserve-alpha','align-subject']){assert.equal(h.el(id).checked,false);assert.equal(h.el(id).disabled,true);}
+    h.el('mode').value='edit';h.change('mode');assert.equal(h.el('guide').checked,true);assert.equal(h.el('preserve-alpha').checked,true);assert.equal(h.el('align-subject').checked,false);
+  }finally{await h.close();}
+});
+
+test('reusing corrected background history retains the ordinary edit checkbox preferences',async()=>{
+  const h=await panelHarness();try{
+    await h.wait();for(const id of ['guide','preserve-alpha','align-subject'])h.el(id).checked=true;
+    h.el('mode').value='background';h.change('mode');h.el('resolution').value='32';h.click('generate');await h.wait();
+    h.el('history').value=h.records()[0].id;h.click('repeat-history');await h.wait();
+    h.el('mode').value='edit';h.change('mode');
+    for(const id of ['guide','preserve-alpha','align-subject'])assert.equal(h.el(id).checked,true,id+' keeps the choice from ordinary editing');
+  }finally{await h.close();}
+});
+
+test('transparent background failures remain exportable with a warning and cannot be applied',async()=>{
+  const h=await panelHarness({output:{width:32,height:32,rgba:new Uint8Array(32*32*4)}});try{await h.wait();h.el('mode').value='background';h.change('mode');h.el('resolution').value='32';h.click('generate');await h.wait();
+    assert.equal(h.records()[0].state,'ready');assert.equal(h.el('apply').disabled,true);assert.equal(h.el('export').disabled,false);assert.match(h.el('candidate-warning').textContent,/背景.*透明/);
+  }finally{await h.close();}
+});
+
+test('old background history cannot restore conflicting settings or hide a transparent candidate failure',async()=>{
+  const h=await panelHarness({output:{width:32,height:32,rgba:new Uint8Array(32*32*4)}});try{
+    await h.wait();h.el('mode').value='background';h.change('mode');h.el('resolution').value='32';h.click('generate');await h.wait();
+    const records=h.records(),id=records[0].id;Object.assign(records[0].params as Record<string,unknown>,{guide:true,preserveAlpha:true,alignSubject:true});h.files['history.json']=JSON.stringify(records);
+    h.el('history').value=id;h.click('repeat-history');await h.wait();
+    for(const key of ['guide','preserve-alpha','align-subject']){assert.equal(h.el(key).checked,false);assert.equal(h.el(key).disabled,true);}
+    h.click('load-history');await h.wait();assert.equal(h.posts.length,1);assert.equal(h.el('apply').disabled,true);assert.equal(h.el('export').disabled,false);
+    h.el('language').value='en-US';h.change('language');await h.wait();assert.match(h.el('candidate-warning').textContent,/transparent/);assert.match(h.el('mode-help').textContent,/selection controls/);
+    h.click('export');await h.wait();assert.ok(h.files['ps-ai-'+id.slice(0,8)+'.png']);assert.equal(h.records()[0].state,'ready');
+  }finally{await h.close();}
+});
+
 test('saved PNG sRGB declaration creates a working copy and permits a second capture',async()=>{
   const {encodePng}=await import('../src/image');
   const h=await panelHarness({untaggedSource:{bytes:encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)})}});try{

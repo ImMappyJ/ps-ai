@@ -1,6 +1,7 @@
 export type Workspace='local'|'cosplay'|'t2i';
 export type OutputKind='edit'|'asset'|'t2i';
 export interface Intent {kind:OutputKind;prompt:string;referenceSlot?:number}
+export function isBackgroundMode(mode:string):boolean {return mode==='background'||mode==='scene';}
 export function intent(workspace:Workspace,mode:string,prompt:string,hasReference:boolean,guide:boolean,usage:string,bindings:'images'|'semantic'='images'):Intent {
   if(!prompt.trim())throw new Error('请描述希望生成或修改的内容');
   const modes={local:['edit','remove','background'],cosplay:['relight','effect','costume','reference','scene','atmosphere'],t2i:['generate']};
@@ -10,7 +11,8 @@ export function intent(workspace:Workspace,mode:string,prompt:string,hasReferenc
   if(hasReference&&kind!=='edit')throw new Error('参考图用于编辑路径；生成独立素材或文字生图前请清除参考图');
   let text=prompt.trim();
   if(kind==='edit') {
-    text=`编辑 ${bindings==='semantic'?'来源图':'<image1>'} 中指定的局部内容，保持原画布、主体大小、位置、姿态、场景透视和未指定内容。不要缩小主体、重新构图或添加留白。`+text;
+    const source=bindings==='semantic'?'来源图':'<image1>';
+    text=isBackgroundMode(mode)?`把 ${source} 的背景替换为新场景：${text}。背景清晰呈现相应的环境、布景、光线和地面，形成完整、不透明的场景。保持未选中人物的外观、姿态、位置和原画布构图。`:`编辑 ${source} 中指定的局部内容，保持原画布、主体大小、位置、姿态、场景透视和未指定内容。不要缩小主体、重新构图或添加留白。`+text;
     if(mode==='relight')text+=' 按描述重塑选区内的光线方向、软硬、明暗与色温；保持五官、人物身份、姿态和材质结构，未指定区域的光影不变。';
     if(mode==='remove')text+=' 移除选中对象后补齐其背后的材质与结构。';
     if(guide)text+=bindings==='semantic'?' 根据提供的编辑范围修改，不要在结果中画出辅助图或蒙版。':' <image2> 是与原图对齐的范围蒙版，白色允许修改，黑色保留。不要在结果中画出蒙版。';

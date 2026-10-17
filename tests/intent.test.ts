@@ -1,4 +1,16 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {intent} from '../src/intent';
+
+test('background and scene explicitly replace the environment while preserving the foreground and original request',()=>{
+  for(const [workspace,mode] of [['local','background'],['cosplay','scene']] as const)for(const binding of ['images','semantic'] as const){
+    const i=intent(workspace,mode,'少女站在舞台上',false,false,'场景',binding);
+    assert.equal(i.kind,'edit');assert.match(i.prompt,/背景.*完整.*场景|完整.*场景.*背景/);assert.match(i.prompt,/不透明/);assert.match(i.prompt,/少女站在舞台上/);assert.match(i.prompt,/人物/);
+    if(binding==='semantic')assert.doesNotMatch(i.prompt,/<image\d/);
+  }
+});
+test('background reference follows the source when the ComfyUI visual guide is omitted',()=>{
+  const request=intent('local','background','明亮舞台',true,false,'场景');
+  assert.equal(request.referenceSlot,2);assert.match(request.prompt,/<image2> 是场景参考图/);assert.doesNotMatch(request.prompt,/范围蒙版/);
+});
 test('portrait relighting preserves requested lighting and uses the edit source/mask workflow',()=>{
   const raw='左侧暖色柔光，右侧保留冷色阴影';for(const binding of ['images','semantic'] as const){const i=intent('cosplay','relight',raw,false,true,'服装',binding);assert.equal(i.kind,'edit');assert.ok(i.prompt.includes(raw));assert.match(i.prompt,/光线|光影/);assert.match(i.prompt,/姿态/);if(binding==='semantic')assert.doesNotMatch(i.prompt,/<image[123]>/);else assert.match(i.prompt,/<image1>/);}
 });

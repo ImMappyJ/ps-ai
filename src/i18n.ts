@@ -3,6 +3,9 @@ import type {Language} from './profile';
 // Chinese source messages are stable keys. Model prompts and saved parameter values
 // are deliberately independent of the display language.
 export const english:Record<string,string>={
+  '选中背景、保留人物。此模式允许生成新的不透明背景，不保留原透明轮廓。':'Select the background and leave the person outside the selection. This mode creates a new opaque background without preserving the source silhouette.',
+  '选中背景、保留人物。ComfyUI 通过原图与场景描述生成；选区仍精确控制回填，不作为黑白参考图送入模型。':'Select the background and leave the person outside the selection. ComfyUI uses the source and scene description; the selection controls final application without being sent as a black-and-white reference.',
+  '背景区域仍有明显透明部分，未生成完整场景。请重新生成；此候选可另存检查，暂不回填。':'The background is still partly transparent rather than a complete scene. Generate a new candidate. This one can be exported for inspection but cannot be applied.',
   '人像':'Portrait','光影重塑':'Relighting',
   '描述服装道具、光影方向、角色参考或氛围效果':'Describe clothing, props, lighting direction, a reference or atmosphere',
   "手动适配服务（进阶）":"Manual gateway (advanced)",
