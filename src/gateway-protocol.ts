@@ -36,7 +36,7 @@ export function validateGeneration(value:unknown,caps:GatewayCapabilities):Gener
   const v=value as GenerationRequest,m=caps.models.find(m=>m.id===v?.model);
   if(v&&Object.keys(v).some(key=>!['model','kind','mode','prompt','seed','width','height','outputDepth','source','guide','reference'].includes(key)))throw new Error('Unsupported generation parameter');
   if(!v||!m||!m.operations.includes(v.kind))throw new Error('Gateway model does not support this operation');
-  const allowed={t2i:['generate'],edit:['edit','remove','background','costume','reference','scene'],asset:['effect','atmosphere']};
+  const allowed={t2i:['generate'],edit:['edit','remove','background','costume','reference','scene','relight'],asset:['effect','atmosphere']};
   if(!allowed[v.kind]?.includes(v.mode)||typeof v.prompt!=='string'||!v.prompt.trim()||v.prompt.length>20000||v.prompt.includes('\0'))throw new Error('Invalid generation mode or prompt');
   if(!Number.isSafeInteger(v.seed)||v.seed<0||v.seed>m.seedMax)throw new Error(`Seed must be 0–${m.seedMax}`);
   const area=v.width*v.height,ratio=Math.max(v.width/v.height,v.height/v.width);

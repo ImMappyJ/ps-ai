@@ -3,6 +3,8 @@ import type {Language} from './profile';
 // Chinese source messages are stable keys. Model prompts and saved parameter values
 // are deliberately independent of the display language.
 export const english:Record<string,string>={
+  '人像':'Portrait','光影重塑':'Relighting',
+  '描述服装道具、光影方向、角色参考或氛围效果':'Describe clothing, props, lighting direction, a reference or atmosphere',
   "手动适配服务（进阶）":"Manual gateway (advanced)",
   "API Key 无效，请重新输入":"Invalid API key. Enter it again.",
   "平台配置需要对应的本机适配地址":"This platform requires its own local relay address.",

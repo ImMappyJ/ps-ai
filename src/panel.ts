@@ -34,7 +34,7 @@ async function checkBackend(backend:ComfyClient|GatewayClient,value:BackendSetti
   return result;
 }
 const el=(id:string):any=>document.getElementById(id);
-const modes={local:[['edit','局部物体 / 材质修改'],['remove','移除杂物'],['background','换背景（请先反选背景）']],cosplay:[['effect','特效素材'],['costume','服装 / 道具修复'],['reference','角色参考辅助'],['scene','场景替换'],['atmosphere','氛围素材']],t2i:[['generate','文字生图']]};
+const modes={local:[['edit','局部物体 / 材质修改'],['remove','移除杂物'],['background','换背景（请先反选背景）']],cosplay:[['effect','特效素材'],['costume','服装 / 道具修复'],['reference','角色参考辅助'],['scene','场景替换'],['atmosphere','氛围素材'],['relight','光影重塑']],t2i:[['generate','文字生图']]};
 let workspace:Workspace='local',capture:Capture|undefined,protection:Protection|undefined,reference:Raster|undefined;
 let current:JobRecord|undefined,busy=false,stopBatch=false,zoomed=false;
 let applied:{documentId:number;layerId:number}|undefined;
@@ -66,7 +66,7 @@ function startTask(){taskActive=true;taskSucceeded=false;batchPosition='';taskPh
 function endTask(){taskActive=false;taskPhase(taskSucceeded?t("候选已保存"):el('status').textContent,taskSucceeded?100:0);}
 function option(select:any,value:string,text:string){const node=document.createElement('option');node.value=value;node.textContent=t(text);select.appendChild(node);}
 function inputUi(){
-  const standalone=el('destination').value==='document'&&(workspace==='t2i'||['effect','atmosphere'].includes(el('mode').value));el('selection-tools').style.display=standalone?'none':'block';el('prompt').setAttribute('placeholder',workspace==='t2i'?t("描述要生成的画面、主体与风格"):workspace==='cosplay'?t("描述特效、服装道具、角色参考或氛围效果"):t("描述选区中要修改的内容，及需要保留的细节"));
+  const standalone=el('destination').value==='document'&&(workspace==='t2i'||['effect','atmosphere'].includes(el('mode').value));el('selection-tools').style.display=standalone?'none':'block';el('prompt').setAttribute('placeholder',workspace==='t2i'?t("描述要生成的画面、主体与风格"):workspace==='cosplay'?t("描述服装道具、光影方向、角色参考或氛围效果"):t("描述选区中要修改的内容，及需要保留的细节"));
   const platform=isPlatform(el('backend-kind').value),cloud=el('backend-kind').value!=='comfyui',model=gatewayCatalogBase===el('backend-url').value?gatewayCatalog?.models.find(m=>m.id===el('gateway-model').value):undefined;
   const kind=workspace==='t2i'?'t2i':['effect','atmosphere'].includes(el('mode').value)?'asset':'edit';
   el('gateway-key-settings').style.display=platform?'block':'none';el('backend-url').disabled=busy||platform;

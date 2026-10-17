@@ -14,7 +14,7 @@
 <div id="gateway-key-settings" style="display:none"><label>API Key<input id="api-key" type="password" autocomplete="off" placeholder="API Key"></label><p id="key-status" class="hint"></p><div class="row"><button id="save-key" data-i18n="保存 Key">保存 Key</button><button id="clear-key" data-i18n="清除 Key">清除 Key</button><button id="stop-relay" data-i18n="停止本地服务">停止本地服务</button></div><p class="hint" data-i18n="Key 加密保存在本插件中，不随 JSON 导出。平台连接需要 Node.js 24+；首次启动须允许 Photoshop 打开启动器。">Key 加密保存在本插件中，不随 JSON 导出。平台连接需要 Node.js 24+；首次启动须允许 Photoshop 打开启动器。</p></div>
 <div class="row"><button data-i18n="扫描模型" id="scan-models">扫描模型</button><button data-i18n="保存配置" id="save-settings">保存配置</button></div><div class="row"><button data-i18n="导入 JSON" id="import-settings">导入 JSON</button><button data-i18n="导出 JSON" id="export-settings">导出 JSON</button></div>
 </div></section>
-<div class="row tabs"><button data-i18n="局部修图" id="tab-local" class="active">局部修图</button><button id="tab-cosplay">COSPLAY</button><button data-i18n="生图" id="tab-t2i">生图</button></div>
+<div class="row tabs"><button data-i18n="局部修图" id="tab-local" class="active">局部修图</button><button id="tab-cosplay" data-i18n="人像">人像</button><button data-i18n="生图" id="tab-t2i">生图</button></div>
 <label><span data-i18n="任务模式">任务模式</span><select id="mode"></select></label>
 <label><span data-i18n="描述修改或生成内容">描述修改或生成内容</span><sp-textarea id="prompt" placeholder="描述选区中要修改的内容，及需要保留的细节"></sp-textarea></label>
 <div id="selection-tools"><div class="row"><button data-i18n="预览选区" id="capture">预览选区</button><button data-i18n="设为保护区" id="protect">设为保护区</button><button data-i18n="清除保护" id="clear-protection">清除保护</button></div>

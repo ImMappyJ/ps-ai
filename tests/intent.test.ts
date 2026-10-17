@@ -1,4 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {intent} from '../src/intent';
+test('portrait relighting preserves requested lighting and uses the edit source/mask workflow',()=>{
+  const raw='左侧暖色柔光，右侧保留冷色阴影';for(const binding of ['images','semantic'] as const){const i=intent('cosplay','relight',raw,false,true,'服装',binding);assert.equal(i.kind,'edit');assert.ok(i.prompt.includes(raw));assert.match(i.prompt,/光线|光影/);assert.match(i.prompt,/姿态/);if(binding==='semantic')assert.doesNotMatch(i.prompt,/<image[123]>/);else assert.match(i.prompt,/<image1>/);}
+});
 test('角色参考和氛围均为第一版路径，角色参考必须有图',()=>{
   assert.throws(()=>intent('cosplay','reference','红色铠甲',false,true,'服装'),/参考/);
   const role=intent('cosplay','reference','红色铠甲',true,true,'服装');assert.equal(role.kind,'edit');assert.equal(role.referenceSlot,3);assert.match(role.prompt,/<image3>/);

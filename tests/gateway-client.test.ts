@@ -4,6 +4,7 @@ import {validateSettings,defaultSettings} from '../src/profile';
 import {uuid} from '../src/client';
 
 export const capabilities={protocol:'ps-ai/1',provider:'bailian',configured:true,cancellation:'none',progress:'stages',models:[{id:'qwen-image-2.1-pro',label:'Qwen Image 2.1 Pro',operations:['t2i','edit','asset'],maxInputImages:10,outputDepths:[8],seedMax:2147483647,minPixels:262144,maxPixels:4194304,maxAspectRatio:8}]};
+test('relight is an edit-only gateway operation with a source image',async()=>{const {validateCapabilities,validateGeneration}=await import('../src/gateway-protocol');const id=uuid(),request={model:'qwen-image-2.1-pro',kind:'edit',mode:'relight',prompt:'warm soft light',seed:0,width:768,height:768,outputDepth:8,source:id+'-source.png'};assert.equal(validateGeneration(request,validateCapabilities(capabilities)).mode,'relight');assert.throws(()=>validateGeneration({...request,source:undefined},validateCapabilities(capabilities)));assert.throws(()=>validateGeneration({...request,kind:'asset'},validateCapabilities(capabilities)));});
 
 test('网关配置保留服务类型与平台模型，旧配置不改变且不导出密钥',()=>{
   const saved=validateSettings({...defaultSettings(),backend:'gateway',baseUrl:'http://localhost:8190',gatewayModel:'qwen-image-2.1-pro',apiKey:'must-not-be-exported'}) as any;
