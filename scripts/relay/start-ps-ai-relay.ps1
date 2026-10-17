@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 try {
-    $relayNode = (Get-Command node.exe -CommandType Application -ErrorAction Stop).Source
+    $relayNode = (Get-Command node.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
     $relayMajor = [int]((& $relayNode --version) -replace '^v(\d+).*$', '$1')
     if ($relayMajor -lt 24) { throw 'Node.js 24 or later is required.' }
     $relayEntry = Join-Path $PSScriptRoot 'ps-ai-gateway.mjs'
