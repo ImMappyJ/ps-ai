@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import {def
 const models={unet:'qwen/qwen-image-2.1-Q4_K_M.gguf',clip:'qwen/qwen3vl_8b_int8_convrot.safetensors',vae:'qwen/qwen_image_2.1_vae_bf16.safetensors'};
 test('platform profiles preserve custom ComfyUI address/depth and each model without exporting secrets',()=>{
   const local={...defaultSettings(),baseUrl:'http://192.168.1.10:8288',outputDepth:16 as const};
-  const openai=switchConnection(local,'openai');assert.equal(openai.baseUrl,'http://localhost:8193');assert.equal(openai.backend,'gateway');assert.equal(openai.platform,'openai');assert.equal(openai.outputDepth,8);
+  const openai=switchConnection(local,'openai');assert.equal(openai.baseUrl,'http://127.0.0.1:8193');assert.equal(openai.backend,'gateway');assert.equal(openai.platform,'openai');assert.equal(openai.outputDepth,8);
   const saved=rememberConnection({...openai,gatewayModel:'gpt-image-2.5-flare'});const gemini=switchConnection(saved,'gemini');assert.equal(gemini.gatewayModel,'gemini-2.5-flash-image');
   assert.equal(switchConnection(gemini,'openai').gatewayModel,'gpt-image-2.5-flare');const restored=switchConnection(gemini,'comfyui');assert.equal(restored.baseUrl,local.baseUrl);assert.equal(restored.outputDepth,16);
   assert.throws(()=>validateSettings({...openai,baseUrl:'https://evil.example'}));assert.throws(()=>validateSettings({...openai,platform:'other'}));

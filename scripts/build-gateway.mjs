@@ -5,6 +5,6 @@ export async function gatewayBundle(root){
 }
 export async function gatewayNotices(root){
   let notices='PS-AI platform gateway — third-party runtime notices\n\n';
-  for(const [name,file] of [['UPNG.js','node_modules/upng-js/LICENSE'],['pako','node_modules/pako/LICENSE']])notices+=name+'\n'+await fs.readFile(path.join(root,file),'utf8')+'\n\n';
+  for(const [name,file] of [['UPNG.js','node_modules/upng-js/LICENSE'],['pako','node_modules/pako/LICENSE'],['@noble/hashes','node_modules/@noble/hashes/LICENSE']])notices+=name+'\n'+await fs.readFile(path.join(root,file),'utf8')+'\n\n';
   return notices;
 }

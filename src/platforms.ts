@@ -6,5 +6,5 @@ export const PLATFORMS={
   openai:{label:'GPT Image',port:8193,model:'gpt-image-1.5'}
 };
 export function isPlatform(value:unknown):value is PlatformId{return PLATFORM_IDS.includes(value as PlatformId);}
-export function platformUrl(id:PlatformId):string{return `http://localhost:${PLATFORMS[id].port}`;}
+export function platformUrl(id:PlatformId):string{return `http://127.0.0.1:${PLATFORMS[id].port}`;}
 export function validateApiKey(value:string):string{const key=value.trim();if(!key||key.length>512||/[^\x21-\x7e]/.test(key))throw new Error('API Key 无效，请重新输入');return key;}

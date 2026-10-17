@@ -1,3 +1,4 @@
+import {relayProof} from '../src/relay-auth';
 import fs from 'node:fs/promises';import vm from 'node:vm';import {parseHTML} from 'linkedom';import {build} from 'esbuild';
 import {encodePng,decodePng,Raster} from '../src/image';import type {JobRecord} from '../src/jobs';
 export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boolean;delayCheck?:boolean;settings?:unknown;models?:{unet:string;clip:string;vae:string};noDocuments?:boolean;delaySettings?:boolean;nativePreviewUnavailable?:boolean;source?:Raster;output?:Raster;save16Node?:boolean;gateway?:{configured?:boolean;provider?:'bailian'|'gemini'|'openai'}}={}) {
@@ -36,8 +37,9 @@ export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boo
   const fetcher=async(url:string,init:any)=>{
     if(url.startsWith('http://offline.invalid:9999'))throw new TypeError('fetch failed');
     if(url.includes('/psai/v1/')){
-      const managed=url.match(/localhost:(819[123])/);const provider=managed?({'8191':'bailian','8192':'gemini','8193':'openai'} as any)[managed[1]]:options.gateway?.provider??'bailian';
+      const managed=url.match(/(?:localhost|127\.0\.0\.1):(819[123])/);const provider=managed?({'8191':'bailian','8192':'gemini','8193':'openai'} as any)[managed[1]]:options.gateway?.provider??'bailian';
       if(managed&&!relayRunning)throw TypeError('Relay offline');
+      if(managed&&url.endsWith('/handshake'))return Response.json({provider,proof:relayProof('a'.repeat(64),provider,init.headers['X-PSAI-Challenge'])});
       if(managed&&init.headers?.Authorization!=='Bearer '+'a'.repeat(64))return Response.json({message:'unauthorized'},{status:401});
       if(url.endsWith('/configure')){configuredKeys.set(provider,JSON.parse(init.body).apiKey);return Response.json({configured:!!configuredKeys.get(provider)});}
       if(url.endsWith('/shutdown')){relayRunning=false;return Response.json({stopping:true});}

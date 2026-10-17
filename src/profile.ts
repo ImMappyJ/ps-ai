@@ -8,7 +8,7 @@ export const DEFAULT_MODELS:ModelFiles={unet:'qwen-image-2.1-Q4_K_M.gguf',clip:'
 export function defaultSettings():BackendSettings {return {schemaVersion:1,baseUrl:'http://localhost:8188',models:{...DEFAULT_MODELS}};}
 // UXP does not provide the browser URL constructor on every supported host.
 // Accept origins only: a reverse proxy must expose ComfyUI at its root.
-export function normalizeBaseUrl(value:unknown):string {
+export function normalizeBaseUrl(value:unknown,pinIpv4=false):string {
   const text=typeof value==='string'?value.trim():'';
   const match=/^(https?):\/\/(\[[0-9a-f:]+\]|[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?)(?::([0-9]{1,5}))?\/?$/i.exec(text);
   if(!match)throw new Error('请输入 HTTP(S) 服务根地址，例如 http://localhost:8188；不要包含路径、密码或查询参数');
@@ -18,7 +18,8 @@ export function normalizeBaseUrl(value:unknown):string {
     if(!address.includes(':')||groups.some(g=>g.length>4)||address.includes(':::')||address.split('::').length>2||(compressed?groups.length>=8:groups.length!==8)||(!compressed&&(address.startsWith(':')||address.endsWith(':'))))throw new Error('IPv6 地址无效');
   }else if(host.split('.').some(label=>!label||label.length>63||label.startsWith('-')||label.endsWith('-'))||host.length>253||(/^\d+(\.\d+)+$/.test(host)&&(host.split('.').length!==4||host.split('.').some(n=>Number(n)>255))))throw new Error('主机地址无效');
   if(port&&(Number(port)<1||Number(port)>65535))throw new Error('端口须为 1–65535');
-  if(host==='127.0.0.1')host='localhost';
+  if(pinIpv4){if(!['127.0.0.1','localhost'].includes(host)||protocol!=='http')throw new Error('平台配置需要对应的本机适配地址');host='127.0.0.1';}
+  else if(host==='127.0.0.1')host='localhost';
   if(port)port=String(Number(port));
   if((protocol==='http'&&port==='80')||(protocol==='https'&&port==='443'))port='';
   return `${protocol}://${host}${port?':'+port:''}`;
@@ -34,7 +35,7 @@ export function validateModels(value:unknown):ModelFiles {
 export function validateSettings(value:unknown):BackendSettings {
   if(!value||typeof value!=='object')throw new Error('设置无效');const input=value as Record<string,unknown>;
   if(input.schemaVersion!==1)throw new Error('不支持的设置版本，请重新保存配置');
-  const baseUrl=normalizeBaseUrl(input.baseUrl);
+  const baseUrl=normalizeBaseUrl(input.baseUrl,input.platform!==undefined);
   if(input.language!==undefined&&!['zh-CN','en-US'].includes(String(input.language)))throw new Error('不支持的界面语言');
   if(input.outputDepth!==undefined&&input.outputDepth!==8&&input.outputDepth!==16)throw new Error('输出位深须为 8 或 16');
   if(input.backend!==undefined&&input.backend!=='comfyui'&&input.backend!=='gateway')throw new Error('不支持的后端类型');

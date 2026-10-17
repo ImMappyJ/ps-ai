@@ -1,5 +1,6 @@
 import {GatewayClient} from './gateway-client';import {platformUrl,PLATFORMS,validateApiKey} from './platforms';import type {PlatformId} from './platforms';
 import {t} from './i18n';
+import {relayProof} from './relay-auth';import {uuid} from './client';
 const FILES=['ps-ai-gateway.mjs','start-ps-ai-relay.cmd','start-ps-ai-relay.ps1'];
 // UXP entry-based storage and shell only. Never import Node or pass secrets in argv.
 export class RelayController {
@@ -9,8 +10,14 @@ export class RelayController {
   private async readSession(){
     try{const value=JSON.parse(await(await(await this.folder()).getEntry('relay-session.json')).read());if(value.protocol!=='ps-ai-relay/1'||!/^[a-f0-9]{64}$/.test(value.token)||Object.keys(PLATFORMS).some(k=>value.ports?.[k]!==PLATFORMS[k as PlatformId].port))return;this.token=value.token;return value;}catch{return;}
   }
-  private client(id:PlatformId,model:string){return new GatewayClient(platformUrl(id),model,this.transport,30000,this.token);}
-  private async alive(id:PlatformId){if(!await this.readSession())return false;try{const cap=await new GatewayClient(platformUrl(id),PLATFORMS[id].model,this.transport,500,this.token).connect();if(cap.provider!==id)throw Error('identity');return true;}catch{return false;}}
+  private client(id:PlatformId,model:string){return new GatewayClient(platformUrl(id),model,this.transport,30000,this.token,true);}
+  private async alive(id:PlatformId){
+    if(!await this.readSession())return false;
+    const nonce=uuid()+'-'+Date.now().toString(36),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),1000);let response:Response;
+    try{response=await this.transport(platformUrl(id)+'/psai/v1/handshake',{redirect:'error',headers:{'X-PSAI-Challenge':nonce},signal:controller.signal});}catch{return false;}finally{clearTimeout(timer);}
+    try{const body=await response.json();if(response.ok&&body.provider===id&&body.proof===relayProof(this.token!,id,nonce))return true;}catch{}
+    throw new Error(t('本地服务平台身份不匹配'));
+  }
   private async ensure(id:PlatformId){
     if(await this.alive(id))return;
     if(!this.starting)this.starting=(async()=>{

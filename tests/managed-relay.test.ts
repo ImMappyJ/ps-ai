@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import os from 'node:os';import path from 'node:path';
-import {startManagedRelay} from '../server/managed';
+import {startManagedRelay} from '../server/runtime/managed-relay';
 
 test('managed relay authenticates every route, isolates providers and never sends keys upstream on configuration',async()=>{
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'ps-ai-managed-'));const original=globalThis.fetch;let remote=0;
@@ -33,5 +33,7 @@ test('managed credential replacement rejects unfinished jobs and preserves the e
     assert.equal((await configure('first-key')).status,200);
     const id='11111111-1111-4111-8111-111111111111';await fs.writeFile(path.join(root,'openai','jobs',id+'.json'),JSON.stringify({id,clientId:id,state:'unknown'}));
     assert.equal((await configure('second-key')).status,409);assert.equal((await configure('')).status,409);assert.equal((await configure('first-key')).status,200);
+    await relay.close();const restarted=await startManagedRelay({dataDir:root,ports:{bailian:0,gemini:0,openai:0}});
+    try{const target=`http://127.0.0.1:${restarted.session.ports.openai}/psai/v1/configure`;assert.equal((await fetch(target,{method:'POST',headers,body:JSON.stringify({apiKey:''})})).status,409);assert.equal((await fetch(target,{method:'POST',headers,body:JSON.stringify({apiKey:'second-key'})})).status,409);assert.equal((await fetch(target,{method:'POST',headers,body:JSON.stringify({apiKey:'first-key'})})).status,200);}finally{await restarted.close();}
   }finally{await relay.close();await fs.rm(root,{recursive:true,force:true});}
 });

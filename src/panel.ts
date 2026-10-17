@@ -19,7 +19,7 @@ let draftConnections:BackendSettings['connections'],displayedConnection:Connecti
 let gatewayCatalog:GatewayCapabilities|undefined,gatewayCatalogBase:string|undefined;
 function backendClient(value:BackendSettings):ComfyClient|GatewayClient {
   if(value.backend!=='gateway')return new ComfyClient(value.baseUrl,fetch,30000,value.models);
-  const backend=new GatewayClient(value.baseUrl,value.gatewayModel??DEFAULT_GATEWAY_MODEL,fetch,30000,value.platform?relayTokens.get(value.platform):undefined);
+  const backend=new GatewayClient(value.baseUrl,value.gatewayModel??DEFAULT_GATEWAY_MODEL,fetch,30000,value.platform?relayTokens.get(value.platform):undefined,!!value.platform);
   if(gatewayCatalogBase===value.baseUrl)backend.capabilities=gatewayCatalog;return backend;
 }
 async function checkBackend(backend:ComfyClient|GatewayClient,value:BackendSettings){
@@ -89,7 +89,7 @@ function showGatewayModels(selected=settings.gatewayModel??DEFAULT_GATEWAY_MODEL
 function showSettings(available?:Record<'unet'|'clip'|'vae',string[]>,value=settings) {for(const key of ['unet','clip','vae'] as const){const select=el(`model-${key}`);select.innerHTML='';for(const name of new Set([value.models[key],...(available?.[key]??[])]))option(select,name,name);select.value=value.models[key];}displayedConnection=connectionId(value);draftConnections=value.connections;el('backend-kind').value=displayedConnection;el('backend-url').value=value.baseUrl;el('output-depth').value=String(value.outputDepth??8);showGatewayModels(value.gatewayModel??(isPlatform(displayedConnection)?PLATFORMS[displayedConnection].model:DEFAULT_GATEWAY_MODEL));el('api-key').value='';void keyStatus();inputUi();}
 async function saveSettings(value:unknown){const next=rememberConnection(validateSettings(value));await store.json('settings.json',next);settings=next;client=backendClient(settings);coordinator=new JobCoordinator(client,store);settingsReady=true;restoreSettingsLanguage();showSettings();connection('待检查');status(t(settings.backend==='gateway'?'平台配置已保存；请连接检查模型与 Key。':"模型配置已保存，请连接检查；文件名可迁移，模型权重需在后端准备"));}
 async function configure(action:()=>Promise<void>){if(busy)return;lock(true);try{await action();}finally{lock(false);}}
-function assertBackend(record:JobRecord){const origin=normalizeBaseUrl(record.baseUrl??'http://localhost:8188');if(origin!==settings.baseUrl)throw new Error(t('任务属于后端 {0}；请切回该地址后恢复或取消',origin));if((record.backend??'comfyui')!==(settings.backend??'comfyui'))throw new Error(t('任务使用的后端类型不同，请切回原后端类型后恢复或取消'));}
+function assertBackend(record:JobRecord){const origin=normalizeBaseUrl(record.baseUrl??'http://localhost:8188',!!settings.platform);if(origin!==settings.baseUrl)throw new Error(t('任务属于后端 {0}；请切回该地址后恢复或取消',origin));if((record.backend??'comfyui')!==(settings.backend??'comfyui'))throw new Error(t('任务使用的后端类型不同，请切回原后端类型后恢复或取消'));}
 function restoreSettingsLanguage(){el('output-depth').value=String(settings.outputDepth??8);renderLanguage();}
 function renderLanguage(){
   setLanguage(settings.language??'zh-CN');el('language').value=settings.language??'zh-CN';
@@ -247,7 +247,7 @@ async function recover(){
   if(busy)return;startTask();lock(true);
   try {const records=await store.history();current=records.find(r=>r.id===el('history').value)||records.find(r=>PENDING_STATES.includes(r.state));
   if(!current)throw new Error(t("没有可恢复的任务"));
-  assertBackend(current);if(settings.platform)await checkBackend(client,settings);stopBatch=false;taskSucceeded=await waitRecord(current);}catch(error){status(error instanceof Error?error.message:String(error));throw error;}finally{endTask();lock(false);}
+  assertBackend(current);if(settings.platform&&client instanceof GatewayClient){const ready=await connectDraft(settings) as GatewayClient;client.token=ready.token;}stopBatch=false;taskSucceeded=await waitRecord(current);}catch(error){status(error instanceof Error?error.message:String(error));throw error;}finally{endTask();lock(false);}
 }
 async function apply(){if(busy)return;lock(true);try{const c=selected();if(!c.snapshot)throw new Error(t("此候选没有来源选区，请使用新文档查看"));const params=c.job.params as any;const source=params.outputKind==='edit'&&params.preserveAlpha!==false?decodePng(await store.readBinary(`${c.job.id}-source.png`)):undefined;const layerId=await adapter.apply(c.snapshot,c.image,`PS-AI ${c.job.id.slice(0,8)}`,source);applied={documentId:c.snapshot.documentId,layerId};el('opacity').value=100;status(t("已应用为独立图层，蒙版可编辑；同次捕获切换候选替换此图层，Ctrl+Z 一次撤销"));}finally{lock(false);}}
 function on(id:string,action:()=>Promise<void>){el(id).addEventListener('click',()=>void guarded(async()=>{operationStage=['apply','new-document','opacity'].includes(id)?'apply':['capture','protect','reference'].includes(id)?'capture':['scan-models','setup-check'].includes(id)?'environment':['recover','generate','setup-example','cancel'].includes(id)?'inference':'connection';await action();}));}
@@ -265,8 +265,8 @@ el('backend-kind').addEventListener('change',()=>void guarded(async()=>{const ta
 el('gateway-model').addEventListener('change',()=>{checkedSetup='';inputUi();});
 on('scan-models',()=>configure(async()=>{
   if(el('backend-kind').value!=='comfyui'){
-    const selected=el('gateway-model').value,probe=await connectDraft(draftSettings()),catalog=await (probe as GatewayClient).connect();gatewayCatalog=catalog;gatewayCatalogBase=normalizeBaseUrl(el('backend-url').value);showGatewayModels(selected);inputUi();status(t('已读取平台模型能力；账户权限和生成效果仍需 API Key 验证'));
-  }else{const found=await new ComfyClient(el('backend-url').value,fetch,30000,settings.models).inspect();showSettings(found.models);status(t("扫描完成；请选择 Qwen 2.1 对应模型后保存。扫描到文件不代表架构兼容。"));}
+    const selected=el('gateway-model').value,probe=await connectDraft(draftSettings()),catalog=await (probe as GatewayClient).connect();gatewayCatalog=catalog;gatewayCatalogBase=normalizeBaseUrl(el('backend-url').value,isPlatform(el('backend-kind').value));showGatewayModels(selected);inputUi();status(t('已读取平台模型能力；账户权限和生成效果仍需 API Key 验证'));
+  }else{const draft=draftSettings(),found=await new ComfyClient(draft.baseUrl,fetch,30000,draft.models).inspect();showSettings(found.models,draft);status(t("扫描完成；请选择 Qwen 2.1 对应模型后保存。扫描到文件不代表架构兼容。"));}
 }));
 on('save-settings',()=>configure(()=>saveSettings(draftSettings())));
 on('save-key',()=>configure(async()=>{const id=el('backend-kind').value;if(!isPlatform(id))return;const key=el('api-key').value;el('api-key').value='';await relay.saveKey(id,key);const probe=await connectDraft(draftSettings());gatewayCatalog=(probe as GatewayClient).capabilities;gatewayCatalogBase=probe.base;showGatewayModels(el('gateway-model').value);await keyStatus();inputUi();status(t('Key 已保存（加密）'));}));

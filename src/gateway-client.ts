@@ -8,7 +8,7 @@ import type {GatewayCapabilities} from './gateway-protocol';
 export class GatewayClient {
   readonly base:string;
   capabilities?:GatewayCapabilities;
-  constructor(base:string,public model:string,private transport:typeof fetch=fetch,private timeoutMs=30000,public token?:string){this.base=normalizeBaseUrl(base);}
+  constructor(base:string,public model:string,private transport:typeof fetch=fetch,private timeoutMs=30000,public token?:string,pinIpv4=false){this.base=normalizeBaseUrl(base,pinIpv4);}
   private async request(path:string,init?:RequestInit,binary=false):Promise<any>{
     const controller=typeof AbortController==='function'?new AbortController():undefined;
     let timer:ReturnType<typeof setTimeout>|undefined;
