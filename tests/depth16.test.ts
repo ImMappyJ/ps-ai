@@ -13,7 +13,9 @@ test('settings persist output depth while old schema1 remains valid; reject ambi
   assert.equal(validateSettings({...defaultSettings(),outputDepth:16}).outputDepth,16);assert.equal(validateSettings(defaultSettings()).outputDepth,undefined);
   for(const outputDepth of [0,12,32,'16',null])assert.throws(()=>validateSettings({...defaultSettings(),outputDepth}));
 });
-test('panel16 uses dedicated template,8-bit uploads/preview and16-bit stored export; history restores depth',async()=>{
+// Full-size PNG round trips take 16–19s on hosted Windows runners; keep the
+// real 768px fixture and all assertions without making host CPU speed a failure.
+test('panel16 uses dedicated template,8-bit uploads/preview and16-bit stored export; history restores depth',{timeout:60_000},async()=>{
   const output={width:768,height:768,rgba:new Uint16Array(768*768*4)};for(let p=0;p<768*768;p++)output.rgba.set([12345,23456,34567,65535],p*4);
   const h=await panelHarness({settings:{...defaultSettings(),outputDepth:16},output,save16Node:true});try{
     await h.wait();assert.equal(h.el('output-depth').value,'16');h.el('resolution').value='768';h.click('generate');await h.wait();assert.equal(h.posts.length,1);assert.equal(h.posts[0].prompt['8'].class_type,'PS_AISavePNG16');
