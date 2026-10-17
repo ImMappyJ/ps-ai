@@ -135,3 +135,5 @@ See [brand assets and usage](BRAND.en.md). After editing the SVG sources, run `n
 Code: [GNU GPL v3.0](LICENSE), GPL-3.0-only. Distributing modified versions or binaries requires corresponding source, build scripts and the license. Weights have separate terms and are not included. Screenshots do not grant rights to third-party characters or artwork.
 
 Thanks to [Adobe UXP](https://developer.adobe.com/photoshop/uxp/), [ComfyUI](https://github.com/Comfy-Org/ComfyUI), [Qwen](https://huggingface.co/Qwen), [ComfyUI-GGUF](https://github.com/leejet/ComfyUI-GGUF), [UPNG.js](https://github.com/photopea/UPNG.js) and [pako](https://github.com/nodeca/pako). Packages include runtime dependency notices. Architecture and interaction were informed by [OpenLayer](https://github.com/MehranMarxian/OpenLayer) and [Geekatplay ComfyUI-Photoshop](https://github.com/GeekatplayStudio/ComfyUI-Photoshop); their source was not copied. This is not an official Adobe product.
+
+[OpenAI Codex](https://developers.openai.com/codex/) assisted with implementation, testing and documentation.

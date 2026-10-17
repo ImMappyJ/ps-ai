@@ -135,3 +135,5 @@ npm run build
 代码采用 [GNU GPL v3.0](LICENSE)（GPL-3.0-only）。分发修改版或二进制时，应提供对应源码、构建脚本和许可证。权重另行授权，不包含在仓库或插件包中；截图也不授予其中第三方角色或素材的权利。
 
 感谢 [Adobe UXP](https://developer.adobe.com/photoshop/uxp/)、[ComfyUI](https://github.com/Comfy-Org/ComfyUI)、[Qwen](https://huggingface.co/Qwen)、[ComfyUI-GGUF](https://github.com/leejet/ComfyUI-GGUF)、[UPNG.js](https://github.com/photopea/UPNG.js) 和 [pako](https://github.com/nodeca/pako)。构建包包含运行依赖的许可声明。架构与交互参考了 [OpenLayer](https://github.com/MehranMarxian/OpenLayer) 和 [Geekatplay ComfyUI-Photoshop](https://github.com/GeekatplayStudio/ComfyUI-Photoshop)，未复制这两个项目的源码。本项目不是 Adobe 官方产品。
+
+开发、测试和文档整理使用了 [OpenAI Codex](https://developers.openai.com/codex/) 辅助。
