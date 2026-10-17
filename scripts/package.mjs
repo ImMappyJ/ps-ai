@@ -14,6 +14,8 @@ Portable：解压后把整个 PS-AI-FOR-ME 文件夹放入你实际安装的 Pho
 
 启动兼容的 ComfyUI，打开面板的“模型与连接”，填写 HTTP(S) 地址，扫描并选择三个 Qwen 2.1 模型，保存配置、连接。模型、ComfyUI 不含在插件包内。选择 16-bit SDR 输出前，按同版本环境工具的 docs/setup/COMFYUI.md 复制 comfyui/ps_ai_sdr16 节点并重启后端。完整后端指南也可从 GitHub 仓库首页进入。
 
+开发版的平台选择、加密 Key 和按需中转启动见 GitHub 的 docs/setup/PLATFORMS.md。选择平台需要 Node.js 24+ 与 Photoshop 的启动授权；选择 ComfyUI 不启动中转。平台与光影重塑仍待实机验收。
+
 只保留一种安装形式以免打开错面板。CCX 与 Portable 使用不同的数据目录，切换前导出设置和 PNG；历史不会自动迁移。更新时退出 PS，再仅替换本插件目录。卸载 Portable 也只移除该目录。旧会话候选可以导出，但必须重新捕获才能应用。
 
 这是实验版，请在已保存的副本中使用。生成结果可能改变结构和颜色。宿主崩溃需要结合日志及 GPU／网络设置分别排查，换安装形式不保证解决。代码采用 GPL-3.0-only，完整许可见 LICENSE；权重许可另计。匹配源码和说明：https://github.com/ImMappyJ/ps-ai
@@ -28,12 +30,14 @@ Portable: extract the ZIP, then copy the entire PS-AI-FOR-ME folder into your in
 
 Start a compatible ComfyUI. In Backend and models, enter its HTTP(S) address, scan and select the three Qwen 2.1 model files, save and connect. Models and ComfyUI are separate downloads. For 16-bit SDR output, copy comfyui/ps_ai_sdr16 from the environment tools into backend custom_nodes and restart; see docs/setup/COMFYUI.en.md in the matching environment tools. The repository homepage also links to the guide.
 
+Development platform selection, encrypted keys and on-demand launching are documented in docs/setup/PLATFORMS.en.md on GitHub. Platforms require Node.js 24+ and Photoshop launch consent; ComfyUI never starts the relay. Platform and relight host acceptance are pending.
+
 Use one installation method to avoid confusing the panels. CCX and Portable keep separate data. Export settings and PNGs before switching; history is not migrated. Quit Photoshop before replacing or removing only this plugin folder. Candidates from older sessions can be exported; capture again before applying.
 
 Use saved copies. Generated structure and colors need review. Investigate host crashes using logs and separate GPU/network controls; changing installation methods is not a guaranteed fix. Code: GPL-3.0-only, see LICENSE. Model licenses are separate. Matching source: https://github.com/ImMappyJ/ps-ai
 `;
 export async function createEnvironmentPackage(root,target){
-  const names=['LICENSE','scripts/check-environment.ps1','scripts/prepare-environment.ps1','scripts/install-ccx.ps1','config/settings.example.json','config/compatibility.json','README.md','docs/README.en.md','docs/setup/COMFYUI.md','docs/setup/COMFYUI.en.md','assets/1.png','assets/2.png','assets/setup-zh.png','assets/setup-en.png','assets/comfyui-model-library.jpg','src/workflow.ts','src/profile.ts','comfyui/ps_ai_sdr16/__init__.py'];
+  const names=['LICENSE','scripts/check-environment.ps1','scripts/prepare-environment.ps1','scripts/install-ccx.ps1','config/settings.example.json','config/compatibility.json','README.md','docs/README.en.md','docs/setup/COMFYUI.md','docs/setup/COMFYUI.en.md','docs/setup/PLATFORMS.md','docs/setup/PLATFORMS.en.md','assets/1.png','assets/2.png','assets/setup-zh.png','assets/setup-en.png','assets/comfyui-model-library.jpg','src/workflow.ts','src/profile.ts','comfyui/ps_ai_sdr16/__init__.py'];
   const guide=['before.png','after.png','recipes.json','reference-white-socks-icc.png','07-effect-asset-workspace.png',
     ...['01-edit','02-remove','03-background','04-costume','05-reference','06-scene','08-atmosphere','09-generate'].map(name=>name+'-panel.png'),
     ...['01-edit','03-background','06-scene','09-generate'].map(name=>name+'-workspace.png'),

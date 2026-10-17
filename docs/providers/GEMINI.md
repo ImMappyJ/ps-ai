@@ -4,38 +4,24 @@
 
 当前开发分支包含 Google Gemini 适配器，**尚未使用真实 API Key 验证平台出图或 Photoshop 回填**。v0.4.0 发行包不包含这项功能。Nano Banana 是 Gemini 图像模型系列的名称，接入使用 Google 官方 API，不是网页账号或第三方中转。
 
-## 启动本机服务
+## 从面板连接
 
-需要 Node.js 24+。从包含此功能的源码版本运行 `npm ci`，在 PowerShell 设置：
+开发版的完整步骤见 [平台配置](../setup/PLATFORMS.md)。Windows 安装 Node.js 24+，展开“模型与连接”，选择 **Nano Banana**，输入该平台的 API Key，点“保存 Key”，允许 Photoshop 打开随包提供的本地启动器。扫描并选择模型，保存配置后连接。自动管理的地址是 `http://127.0.0.1:8192`。
+
+Key 加密保存在 UXP secureStorage 中，本机中转只在内存使用；不会进入 JSON 导出、历史或日志。连接检查不生成图片，也不验证账号权限。点击生成后才向平台上传图片、参考和提示词，同时在本机私人目录保留。可以从面板停止本地服务，未完成任务仍按原 ID 保留。
+
+## 手动服务（进阶）
+
+需要其他系统、自选设置时，在源码目录运行 `npm ci`，然后用 PowerShell 启动一个平台。请选择自动管理范围 8191–8193 之外的空闲端口：
 
 ```powershell
 $env:PSAI_PROVIDER = 'gemini'
-$geminiSecureKey = Read-Host 'Gemini API Key' -AsSecureString
-$env:GEMINI_API_KEY = [Net.NetworkCredential]::new('', $geminiSecureKey).Password
-npm run gateway -- --port 8191
+$platformSecureKey = Read-Host 'Nano Banana API Key' -AsSecureString
+$env:GEMINI_API_KEY = [Net.NetworkCredential]::new('', $platformSecureKey).Password
+npm run gateway -- --port 8190
 ```
 
-没有 Key 时可以省略输入 Key 的两行；服务仍可启动、读取能力，但不会生成。Key 需要有对应模型的权限和额度，网页订阅不等于 API 访问权限。变量只在当前终端及其子进程中生效，修改后重启本机服务。
-
-后续发行的环境工具 ZIP 会包含独立服务，可把最后一行换成：
-
-```powershell
-node .\backend\ps-ai-gateway.mjs --port 8191
-```
-
-不需要编译插件源码或安装 ComfyUI，但仍需 Node.js 运行服务。也可以使用 8190 等其他空闲端口；同时运行百炼和 Gemini 时须使用不同端口。两者默认分别存储在 `~/.ps-ai/bailian` 与 `~/.ps-ai/gemini`，不要让两个实例共享同一数据目录。
-
-## 在 Photoshop 中连接
-
-开发测试先构建插件，按 [README](../../README.md) 用 UXP Developer Tool 加载。
-
-1. 展开“模型与连接”，选择“平台适配服务（实验）”。
-2. 地址填 `http://localhost:8191`，不要填 Google API 地址或 Key。
-3. 点击“扫描模型”，选择有权限的模型，保存配置，再连接。也可以导入 [配置样例](../../config/settings.gemini.example.json)。
-4. 先做一张文字生图，再在已保存的副本中选择腿部，尝试“给腿部穿上白色过膝袜，保留姿势和其他区域”。
-5. 预览候选后再应用。选区、保护区、保留原透明轮廓、独立图层与一次撤销仍由插件处理。
-
-图片、参考图和提示词会上传 Google，并保存在本机插件及适配服务的数据目录中。不要把 Key 放进插件设置、提示词、截图或 Git。
+构建后可把最后一行换成 `node .\dist\gateway\ps-ai-gateway.mjs --port 8190`；环境工具包使用 `node .\backend\ps-ai-gateway.mjs --port 8190`，无需编译，但仍需要 Node 24。面板选择“手动适配服务（进阶）”，填 `http://localhost:8190`。Key 只从当前终端环境读取，修改后重启；省略 Key 可以读取能力，不能生成。默认目录 `~/.ps-ai/gemini` 与自动服务独立，可用 `--data-dir` 指定。多个手动实例需要不同端口和目录。
 
 ## 已实现的接口范围
 
@@ -51,7 +37,7 @@ node .\backend\ps-ai-gateway.mjs --port 8191
 
 名称依据 [官方模型说明](https://ai.google.dev/gemini-api/docs/image-generation)。这是声明的适配列表，不表示账号已经开通或模型永久可用。
 
-本轮只开放文字生图与六种编辑模式：物体／材质、移除、背景、服装／道具、角色参考、场景。不开放要求透明通道的特效／氛围素材；也不提供对话连续编辑、联网搜索、4K、可设种子或 16 位输出。步数和种子控件禁用，每张候选单独调用平台。
+本轮只开放文字生图与七种编辑模式：物体／材质、移除、背景、服装／道具、角色参考、场景、光影重塑。不开放要求透明通道的特效／氛围素材；也不提供对话连续编辑、联网搜索、4K、可设种子或 16 位输出。步数和种子控件禁用，每张候选单独调用平台。
 
 为保持回填坐标，来源图与范围辅助等比缩放、补边到 1024×1024。收到同尺寸方形 PNG 后，按相同补边坐标裁回原比例，再缩放到请求尺寸；参考图保留其比例。长条选区的有效模型像素较少，较大的请求可能只是放大 1K 结果。主体位置是否保持仍需实际效果验收，不能据此承诺像素级重绘精度。
 
@@ -68,4 +54,4 @@ Gemini 这条接口直接返回图片，没有可用于本适配器重取结果�
 - 没有图片、安全拒绝、非 PNG、尺寸或颜色不符会报错。不要换成宽松解码强行回填。
 - 异常退出遗留 `gateway.lock` 时，先确认记录的进程已结束，再移除锁。数据目录包含私人图片和提示词，不要公开。
 
-拿到 Key 后，需逐项验收七种模式、中英界面、颜色／透明边缘、选区和保护区、回填与撤销、多个候选、断线与服务重启，以及两种插件安装路径。完成这些检查后再更新兼容清单、截图和发布状态。服务端抽象、重写与恢复约定见仓库的 `docs/development/BACKEND.md` 和 `AGENTS.md`。
+拿到 Key 后，需逐项验收八种模式、中英界面、颜色／透明边缘、选区和保护区、回填与撤销、多个候选、断线与服务重启，以及两种插件安装路径。完成这些检查后再更新兼容清单、截图和发布状态。服务端抽象、重写与恢复约定见仓库的 `docs/development/BACKEND.md` 和 `AGENTS.md`。

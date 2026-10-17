@@ -4,44 +4,30 @@
 
 The development branch includes an OpenAI Images adapter. **Live output and Photoshop application have not been validated with a real API key.** Published v0.4.0 packages do not contain it. Existing ComfyUI, Bailian and Gemini paths remain available.
 
-## Start the service
+## Connect from the panel
 
-Install Node.js 24+. Run `npm ci` from a revision containing the adapter, then use PowerShell in the repository directory:
+For the development build, follow [platform setup](../setup/PLATFORMS.en.md). On Windows, install Node.js 24+, select **GPT Image** in **Backend and models**, enter its API key and choose **Save key**. Allow Photoshop to open the bundled local launcher. Scan models, choose one, save and connect. The managed address is `http://127.0.0.1:8193`.
+
+Keys are encrypted in UXP secureStorage and used only in local relay memory. Exports, history and logs exclude them. Connection checks do not call generation or verify account access. Images, references and prompts go to the platform only when generating, and remain in private local data. The relay can be stopped from the panel; pending jobs retain their original identity.
+
+## Manual gateway (advanced)
+
+For other systems or custom settings, run `npm ci` in a source clone, then start one provider from PowerShell. Use an available port outside the managed range 8191–8193:
 
 ```powershell
 $env:PSAI_PROVIDER = 'openai'
-$openaiSecureKey = Read-Host 'OpenAI API Key' -AsSecureString
-$env:OPENAI_API_KEY = [Net.NetworkCredential]::new('', $openaiSecureKey).Password
-npm run gateway -- --port 8192
+$platformSecureKey = Read-Host 'GPT Image API key' -AsSecureString
+$env:OPENAI_API_KEY = [Net.NetworkCredential]::new('', $platformSecureKey).Password
+npm run gateway -- --port 8190
 ```
 
-Without a key, omit the two credential-entry lines. Capability discovery works; generation is blocked locally. Variables apply to this terminal and its child processes. Restart after changing the key. The API project needs model access and available quota.
-
-After building, `node .\dist\gateway\ps-ai-gateway.mjs --port 8192` works too. Future environment-tool archives include a standalone file, without npm or compilation:
-
-```powershell
-node .\backend\ps-ai-gateway.mjs --port 8192
-```
-
-The service binds only 127.0.0.1. Default data is `~/.ps-ai/openai`; override with `--data-dir` or `PSAI_GATEWAY_DATA_DIR`. Concurrent providers need separate ports and data directories. Inference runs on the platform, so ComfyUI is not required; Photoshop's own system requirements still apply.
-
-## Connect the plugin
-
-For development, run `npm run build` and load the built plugin through UXP Developer Tool as described in the [README](../README.en.md).
-
-1. Open **Backend and models**, then select **Platform gateway (experimental)**.
-2. Enter `http://localhost:8192`, not the OpenAI API URL or key.
-3. Scan models, select an authorized model, save and connect. A [settings example](../../config/settings.openai.example.json) is available.
-4. Try one text-to-image result. Then work on a saved copy, select the legs and try: “Add white over-the-knee socks; preserve the pose and other areas.”
-5. Enable edit guidance for a model-side mask. Add a reference image when needed. Preview before applying a separate layer, then inspect edges and color.
-
-Images, guides, references and prompts are uploaded to OpenAI and stored in plugin/service data. Keys belong only in the service environment, outside plugin settings, history and Git.
+After a build, the last command can be `node .\dist\gateway\ps-ai-gateway.mjs --port 8190`; an environment archive uses `node .\backend\ps-ai-gateway.mjs --port 8190`. Both need Node 24, without source compilation for the archive. Choose **Manual gateway (advanced)** and `http://localhost:8190` in the panel. Keys come from this terminal's environment; restart to change them. Omitting the key permits discovery and blocks generation. Data defaults to `~/.ps-ai/openai`, separate from managed plugin data; override with `--data-dir`. Concurrent instances need separate ports and directories.
 
 ## Models and API
 
 | Model ID | Adapter sizing |
 | --- | --- |
-| `gpt-image-2.5-sunburst` (default) | Flexible canvas; align edges to 16, enlarge and pad proportionally when needed |
+| `gpt-image-2.5-sunburst` | Flexible canvas; align edges to 16, enlarge and pad proportionally when needed |
 | `gpt-image-2.5-flare` | Same |
 | `gpt-image-1.5` | Choose 1024×1024, 1536×1024 or 1024×1536, then pad proportionally |
 
@@ -63,7 +49,7 @@ Images returns the image directly; this adapter has no remote task ID for retrie
 
 | Situation | Action |
 | --- | --- |
-| Missing `OPENAI_API_KEY` | Configure it in the service terminal and restart |
+| Missing `OPENAI_API_KEY` | Save it in the panel; for a manual gateway configure the terminal and restart |
 | 401/403 | Check project credentials and model access; raw platform errors and credentials are not echoed |
 | 429 | Check quota/rate limits; resolve existing jobs first |
 | HTTP 408, timeout, disconnect or incomplete response | Keep `unknown`, never automatically resubmit a possibly billable request; reconcile platform records |
@@ -75,6 +61,6 @@ Each original or prepared input PNG is capped at 10 MiB; OpenAI response JSON at
 
 ## Live acceptance
 
-With a key, validate model access/output for all three models, nine modes, guide/reference combinations, transparent assets, color/coordinates, protection, original layers/undo, multiple candidates, stopping/recovery, both UI languages and CCX/Portable installation. Update screenshots, compatibility and release status afterwards. Offline mocks do not establish platform or host acceptance.
+With a key, validate model access/output for all three models, ten modes, guide/reference combinations, transparent assets, color/coordinates, protection, original layers/undo, multiple candidates, stopping/recovery, both UI languages and CCX/Portable installation. Update screenshots, compatibility and release status afterwards. Offline mocks do not establish platform or host acceptance.
 
 The repository’s `docs/development/BACKEND.en.md` and `AGENTS.md` define server and persistence contracts.

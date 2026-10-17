@@ -12,6 +12,8 @@ This page covers the local ComfyUI path. Development gateways for [Bailian](../p
 
 <a id="output-depth"></a>
 
+In the current development panel, choose **ComfyUI** before entering its address. The direct path never launches a platform relay. Switching back restores the saved ComfyUI address, models and depth. See [platform selection](PLATFORMS.en.md) for the other backends.
+
 ## 16-bit output (0.4.0)
 
 8-bit remains the default. To retain higher precision from generation:

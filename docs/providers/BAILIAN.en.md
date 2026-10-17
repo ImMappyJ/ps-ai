@@ -4,46 +4,24 @@
 
 The development branch includes a Bailian gateway. **Live platform and Photoshop acceptance have not been completed with an API key.** Existing v0.4.0 release assets do not contain this work. This guide covers development testing and future release acceptance; existing ComfyUI installations can continue unchanged.
 
-## 1. Start the local gateway
+## Connect from the panel
 
-Use Node.js 24 or later. Photoshop connects to the local gateway, which calls Bailian. Platform generation does not require local GPU inference or ComfyUI.
+For the development build, follow [platform setup](../setup/PLATFORMS.en.md). On Windows, install Node.js 24+, select **BaiLian** in **Backend and models**, enter its API key and choose **Save key**. Allow Photoshop to open the bundled local launcher. Scan models, choose one, save and connect. The managed address is `http://127.0.0.1:8191`.
 
-From source:
+Keys are encrypted in UXP secureStorage and used only in local relay memory. Exports, history and logs exclude them. Connection checks do not call generation or verify account access. Images, references and prompts go to the platform only when generating, and remain in private local data. The relay can be stopped from the panel; pending jobs retain their original identity.
+
+## Manual gateway (advanced)
+
+For other systems or custom settings, run `npm ci` in a source clone, then start one provider from PowerShell. Use an available port outside the managed range 8191–8193:
 
 ```powershell
-git clone https://github.com/ImMappyJ/ps-ai.git
-cd ps-ai
-# Switch to a revision containing the Bailian adapter first.
-npm ci
 $env:PSAI_PROVIDER = 'bailian'
+$platformSecureKey = Read-Host 'BaiLian API key' -AsSecureString
+$env:DASHSCOPE_API_KEY = [Net.NetworkCredential]::new('', $platformSecureKey).Password
 npm run gateway -- --port 8190
 ```
 
-Without a key, startup reports `key configured=false`. Capability discovery works, but generation is blocked before any platform task is created:
-
-```powershell
-Invoke-RestMethod http://localhost:8190/psai/v1/capabilities
-```
-
-When using a future environment-tool archive containing this feature, run the bundled server directly after extraction, without npm or compilation:
-
-```powershell
-node .\backend\ps-ai-gateway.mjs --port 8190
-```
-
-## 2. Configure a server-side key
-
-In the PowerShell terminal that starts the gateway, enter the key. Do not put it in the Photoshop address field, plugin settings JSON or Git files.
-
-```powershell
-$bailianSecureKey = Read-Host 'Bailian API key' -AsSecureString
-$env:DASHSCOPE_API_KEY = [Net.NetworkCredential]::new('', $bailianSecureKey).Password
-$env:DASHSCOPE_BASE_URL = 'https://dashscope.aliyuncs.com/api/v1'
-$env:PSAI_PROVIDER = 'bailian'
-npm run gateway -- --port 8190
-```
-
-For the standalone bundle, replace the last line with the `node` command above. Variables apply to this terminal and child processes only; set them again in a new terminal. Restart the gateway after changing its key or endpoint.
+After a build, the last command can be `node .\dist\gateway\ps-ai-gateway.mjs --port 8190`; an environment archive uses `node .\backend\ps-ai-gateway.mjs --port 8190`. Both need Node 24, without source compilation for the archive. Choose **Manual gateway (advanced)** and `http://localhost:8190` in the panel. Keys come from this terminal's environment; restart to change them. Omitting the key permits discovery and blocks generation. Data defaults to `~/.ps-ai/bailian`, separate from managed plugin data; override with `--data-dir`. Concurrent instances need separate ports and directories.
 
 The key, endpoint region and model access must match. For a workspace-specific endpoint, replace `WORKSPACE_ID` with the real ID:
 
@@ -53,17 +31,7 @@ $env:DASHSCOPE_BASE_URL = 'https://WORKSPACE_ID.cn-beijing.maas.aliyuncs.com/api
 
 Supported workspace regions also include Singapore, US Virginia, China Hong Kong, Germany Frankfurt and Japan Tokyo. Consult the [official endpoint reference](https://www.alibabacloud.com/help/en/model-studio/qwen-image-generation-and-editing-api-reference). The gateway catalog describes its implemented mappings, not models enabled for the account.
 
-## 3. Configure the panel
-
-For development, run `npm run build` and load `dist/plugin/manifest.json` through UXP Developer Tool, following the [README](../README.en.md).
-
-1. Expand **Backend and models**.
-2. Choose **Platform gateway (experimental)**.
-3. Enter `http://localhost:8190`; match the server port if customized.
-4. Choose **Scan models**, select an enabled model, then **Save settings** and **Connect**. Alternatively import the [Bailian settings example](../../config/settings.bailian.example.json).
-5. Start with one text-to-image candidate, then a selected local edit. Example: add white over-knee stockings while preserving the pose and unselected regions.
-
-There are no GGUF, encoder or VAE fields in platform mode. Sampling steps are platform-controlled and output is currently 8-bit. “Connected” confirms the local configuration check; live model access still requires a generation request.
+## Models and API
 
 | Model | Implemented entry points | Validation |
 | --- | --- | --- |
@@ -72,7 +40,7 @@ There are no GGUF, encoder or VAE fields in platform mode. Sampling steps are pl
 
 Source-state checks, selections, protection, original layers and undo rules remain in Photoshop. Guides are visual references rather than strict model masks. Images, references and prompts upload to Bailian and remain in local plugin/gateway storage.
 
-## 4. Tasks and results
+## Tasks and results
 
 - The server persists the local UUID and provider task ID. Use **Recover task** after disconnection rather than repeatedly generating.
 - **Stop remaining candidates** keeps the current platform task running and retains its eventual result. Bailian supports cancelling queued tasks only; this adapter does not claim that unverified cancellation integration. [Official task management](https://help.aliyun.com/zh/model-studio/manage-asynchronous-tasks)
@@ -81,7 +49,7 @@ Source-state checks, selections, protection, original layers and undo rules rema
 - Output is 8-bit. It can be applied to a 16-bit source document, but that does not create true 16-bit generated detail. ComfyUI SDR16 remains a separate path.
 - Platform results expire. Recover and download promptly; the service currently has no background downloader independent of plugin polling.
 
-## 5. Storage, troubleshooting and shutdown
+## Storage, troubleshooting and shutdown
 
 The default directory is the current account's `~/.ps-ai/bailian`. Override it through `PSAI_GATEWAY_DATA_DIR` or `--data-dir`. Stop normally with Ctrl+C; this does not stop ComfyUI.
 
@@ -97,7 +65,7 @@ The default directory is the current account's `~/.ps-ai/bailian`. Override it t
 
 The server listens locally and is not an authenticated public service. For migration, stop it normally and back up the whole directory. It contains private images/prompts and must not be uploaded to Git or Issues. Server rewriting, persistence ordering and fields are documented in `BACKEND.en.md` and `AGENTS.md` in a source clone.
 
-## 6. Acceptance after obtaining a key
+## Acceptance after obtaining a key
 
 - [ ] Verify region, access and model ID with one real text-to-image result.
 - [ ] Use the same demonstration image for local edits, outfits/props, removal, backgrounds, references, scenes, effects and atmosphere; save genuine screenshots for each.

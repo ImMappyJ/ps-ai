@@ -4,38 +4,24 @@
 
 The development branch includes a Google Gemini adapter. **Live API output and Photoshop application have not been tested with a real key.** Published v0.4.0 packages do not contain this feature. Nano Banana names the Gemini image-model family; this adapter calls Google's API directly.
 
-## Start the local service
+## Connect from the panel
 
-Install Node.js 24+. Run `npm ci` from a source revision containing the adapter, then use PowerShell:
+For the development build, follow [platform setup](../setup/PLATFORMS.en.md). On Windows, install Node.js 24+, select **Nano Banana** in **Backend and models**, enter its API key and choose **Save key**. Allow Photoshop to open the bundled local launcher. Scan models, choose one, save and connect. The managed address is `http://127.0.0.1:8192`.
+
+Keys are encrypted in UXP secureStorage and used only in local relay memory. Exports, history and logs exclude them. Connection checks do not call generation or verify account access. Images, references and prompts go to the platform only when generating, and remain in private local data. The relay can be stopped from the panel; pending jobs retain their original identity.
+
+## Manual gateway (advanced)
+
+For other systems or custom settings, run `npm ci` in a source clone, then start one provider from PowerShell. Use an available port outside the managed range 8191–8193:
 
 ```powershell
 $env:PSAI_PROVIDER = 'gemini'
-$geminiSecureKey = Read-Host 'Gemini API Key' -AsSecureString
-$env:GEMINI_API_KEY = [Net.NetworkCredential]::new('', $geminiSecureKey).Password
-npm run gateway -- --port 8191
+$platformSecureKey = Read-Host 'Nano Banana API key' -AsSecureString
+$env:GEMINI_API_KEY = [Net.NetworkCredential]::new('', $platformSecureKey).Password
+npm run gateway -- --port 8190
 ```
 
-Without a key, omit the two key-entry lines. Capability checks work; generation is blocked. The key needs model access and available quota; a web subscription does not establish API access. Variables apply to this terminal and child processes. Restart the local service after changing them.
-
-Future environment-tool archives will include a standalone service. Replace the last line with:
-
-```powershell
-node .\backend\ps-ai-gateway.mjs --port 8191
-```
-
-Node.js is still required; ComfyUI and source compilation are not. Another free port, such as 8190, works too. Concurrent Bailian and Gemini instances need different ports. Default storage is `~/.ps-ai/bailian` and `~/.ps-ai/gemini` respectively; do not share one data directory between instances.
-
-## Connect Photoshop
-
-For development, build the plugin and load it through UXP Developer Tool as described in the [README](../README.en.md).
-
-1. Open **Backend and models**, then choose **Platform gateway (experimental)**.
-2. Enter `http://localhost:8191`, not the Google API URL or an API key.
-3. Scan models, select an authorized model, save settings and connect. A [settings example](../../config/settings.gemini.example.json) is available.
-4. Start with one text-to-image result. Then use a saved image copy, select the legs and try: “Add white over-the-knee socks; preserve the pose and other areas.”
-5. Inspect the candidate before applying it. The plugin still controls selections, protection, source transparency, independent layers and one-step undo.
-
-Images, references and prompts are uploaded to Google and stored in the plugin and local service data directories. Keep keys out of plugin settings, prompts, screenshots and Git.
+After a build, the last command can be `node .\dist\gateway\ps-ai-gateway.mjs --port 8190`; an environment archive uses `node .\backend\ps-ai-gateway.mjs --port 8190`. Both need Node 24, without source compilation for the archive. Choose **Manual gateway (advanced)** and `http://localhost:8190` in the panel. Keys come from this terminal's environment; restart to change them. Omitting the key permits discovery and blocks generation. Data defaults to `~/.ps-ai/gemini`, separate from managed plugin data; override with `--data-dir`. Concurrent instances need separate ports and directories.
 
 ## Implemented API scope
 
@@ -51,7 +37,7 @@ The adapter uses Google's [GenerateContent image API](https://ai.google.dev/gemi
 
 Names follow the [official model guide](https://ai.google.dev/gemini-api/docs/image-generation). This list declares adapter scope, not account access or permanent model availability.
 
-Text-to-image and six edit modes are exposed: objects/materials, removal, background, outfits/props, references and scenes. Transparent effects/atmosphere assets are disabled. Multi-turn conversations, search, 4K, configurable seeds and 16-bit output are not exposed. Steps and seed controls are disabled. Each candidate is a separate platform call.
+Text-to-image and seven edit modes are exposed: objects/materials, removal, background, outfits/props, references, scenes and relighting. Transparent effects/atmosphere assets are disabled. Multi-turn conversations, search, 4K, configurable seeds and 16-bit output are not exposed. Steps and seed controls are disabled. Each candidate is a separate platform call.
 
 Source and guide images are scaled proportionally and padded to 1024×1024. A matching square PNG is cropped using the same padding coordinates, then resized to the requested canvas. References retain their aspect ratio. Narrow selections get fewer effective model pixels; large requests may upscale a 1K result. Actual subject alignment still needs live acceptance; this is not a promise of pixel-perfect model editing.
 
@@ -68,4 +54,4 @@ This Gemini API returns an image directly. The adapter has no remote task ID for
 - Refusals, missing images, non-PNG output and invalid dimensions/color produce errors. Do not bypass validation to force application.
 - After a crash, remove a stale `gateway.lock` only after confirming its recorded process has exited. Data contains private images and prompts; keep it private.
 
-With a key, validate all seven modes, both UI languages, color/alpha edges, selections/protection, apply/undo, multiple candidates, disconnects/restarts and both installation paths. Update compatibility, screenshots and release status only after acceptance. The repository’s `docs/development/BACKEND.en.md` and `AGENTS.md` document adapter and persistence contracts.
+With a key, validate all eight modes, both UI languages, color/alpha edges, selections/protection, apply/undo, multiple candidates, disconnects/restarts and both installation paths. Update compatibility, screenshots and release status only after acceptance. The repository’s `docs/development/BACKEND.en.md` and `AGENTS.md` document adapter and persistence contracts.

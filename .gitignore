@@ -18,6 +18,8 @@ docs/*
 docs/setup/*
 !docs/setup/COMFYUI.md
 !docs/setup/COMFYUI.en.md
+!docs/setup/PLATFORMS.md
+!docs/setup/PLATFORMS.en.md
 !docs/usage/
 docs/usage/*
 !docs/usage/USER_GUIDE.md

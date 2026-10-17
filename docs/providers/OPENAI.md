@@ -4,44 +4,30 @@
 
 开发分支已加入 OpenAI Images 适配器。**尚未使用真实 API Key 验证平台出图或 Photoshop 回填**，已发布的 v0.4.0 包不包含这项功能。现有 ComfyUI、百炼和 Gemini 路径可以继续使用。
 
-## 启动服务
+## 从面板连接
 
-需要 Node.js 24+。在包含此功能的源码版本执行 `npm ci`，然后在仓库目录的 PowerShell 中运行：
+开发版的完整步骤见 [平台配置](../setup/PLATFORMS.md)。Windows 安装 Node.js 24+，展开“模型与连接”，选择 **GPT Image**，输入该平台的 API Key，点“保存 Key”，允许 Photoshop 打开随包提供的本地启动器。扫描并选择模型，保存配置后连接。自动管理的地址是 `http://127.0.0.1:8193`。
+
+Key 加密保存在 UXP secureStorage 中，本机中转只在内存使用；不会进入 JSON 导出、历史或日志。连接检查不生成图片，也不验证账号权限。点击生成后才向平台上传图片、参考和提示词，同时在本机私人目录保留。可以从面板停止本地服务，未完成任务仍按原 ID 保留。
+
+## 手动服务（进阶）
+
+需要其他系统、自选设置时，在源码目录运行 `npm ci`，然后用 PowerShell 启动一个平台。请选择自动管理范围 8191–8193 之外的空闲端口：
 
 ```powershell
 $env:PSAI_PROVIDER = 'openai'
-$openaiSecureKey = Read-Host 'OpenAI API Key' -AsSecureString
-$env:OPENAI_API_KEY = [Net.NetworkCredential]::new('', $openaiSecureKey).Password
-npm run gateway -- --port 8192
+$platformSecureKey = Read-Host 'GPT Image API Key' -AsSecureString
+$env:OPENAI_API_KEY = [Net.NetworkCredential]::new('', $platformSecureKey).Password
+npm run gateway -- --port 8190
 ```
 
-没有 Key 时省略输入凭据的两行即可。服务仍能启动、读取能力，生成会在本机被阻止。变量只对当前终端和子进程生效；修改 Key 后重启服务。需要对应 API 项目的模型权限和可用额度。
-
-构建后也可用 `node .\dist\gateway\ps-ai-gateway.mjs --port 8192` 启动。后续环境工具 ZIP 会包含独立文件，无需编译或 npm：
-
-```powershell
-node .\backend\ps-ai-gateway.mjs --port 8192
-```
-
-服务只监听 127.0.0.1，默认数据在 `~/.ps-ai/openai`。可用 `--data-dir` 或 `PSAI_GATEWAY_DATA_DIR` 修改。若同时运行其他平台，端口和数据目录均需独立。没有本机模型推理，不要求安装 ComfyUI；Photoshop 自身的系统要求仍然适用。
-
-## 连接插件
-
-开发测试先 `npm run build`，按 [README](../../README.md) 使用 UXP Developer Tool 加载构建后的插件。
-
-1. 展开“模型与连接”，后端类型选择“平台适配服务（实验）”。
-2. 地址填 `http://localhost:8192`，不要填 OpenAI API 地址或 Key。
-3. 扫描模型，选择已开通的模型，再保存配置和连接。也可导入 [配置样例](../../config/settings.openai.example.json)。
-4. 先测试一张文字生图，再在已保存的副本上建立腿部选区，尝试“给腿部穿上白色过膝袜，保留姿势和其他区域”。
-5. 需要模型侧范围提示时开启范围辅助；使用角色参考时再选择参考图。预览后应用为独立图层，检查边缘与颜色。
-
-图像、范围辅助、参考和提示词会上传 OpenAI，也会保存在插件及本机服务的数据目录。Key 只在服务环境中配置，不进入插件配置、历史记录或仓库。
+构建后可把最后一行换成 `node .\dist\gateway\ps-ai-gateway.mjs --port 8190`；环境工具包使用 `node .\backend\ps-ai-gateway.mjs --port 8190`，无需编译，但仍需要 Node 24。面板选择“手动适配服务（进阶）”，填 `http://localhost:8190`。Key 只从当前终端环境读取，修改后重启；省略 Key 可以读取能力，不能生成。默认目录 `~/.ps-ai/openai` 与自动服务独立，可用 `--data-dir` 指定。多个手动实例需要不同端口和目录。
 
 ## 模型与接口
 
 | 模型 ID | 本适配器的尺寸处理 |
 | --- | --- |
-| `gpt-image-2.5-sunburst`（默认） | 灵活尺寸；边长对齐 16，像素不足时等比放大补边 |
+| `gpt-image-2.5-sunburst` | 灵活尺寸；边长对齐 16，像素不足时等比放大补边 |
 | `gpt-image-2.5-flare` | 同上 |
 | `gpt-image-1.5` | 选择 1024×1024、1536×1024 或 1024×1536 画布，等比补边 |
 
@@ -75,6 +61,6 @@ Images 请求直接返回图片。本适配器没有可用于重取结果的远�
 
 ## 实际验收
 
-拿到 Key 后需逐项测试：三种模型的权限与返回格式、九种模式、范围辅助／参考组合、透明素材、颜色与坐标、保护区、原图层和一次撤销、多候选、停止与断线恢复、中英面板及 CCX／Portable 安装。完成后再更新截图、兼容清单与发版状态；离线模拟不是平台或宿主验收。
+拿到 Key 后需逐项测试：三种模型的权限与返回格式、十种模式、范围辅助／参考组合、透明素材、颜色与坐标、保护区、原图层和一次撤销、多候选、停止与断线恢复、中英面板及 CCX／Portable 安装。完成后再更新截图、兼容清单与发版状态；离线模拟不是平台或宿主验收。
 
 服务端接口与持久化开发约定见仓库的 `docs/development/BACKEND.md` 和 `AGENTS.md`。

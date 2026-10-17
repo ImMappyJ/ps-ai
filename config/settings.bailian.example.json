@@ -1,8 +1,9 @@
 {
   "schemaVersion": 1,
   "backend": "gateway",
-  "baseUrl": "http://localhost:8190",
+  "baseUrl": "http://127.0.0.1:8191",
   "gatewayModel": "qwen-image-2.1-pro",
   "language": "zh-CN",
-  "outputDepth": 8
+  "outputDepth": 8,
+  "platform": "bailian"
 }

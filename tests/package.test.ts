@@ -41,7 +41,7 @@ test('独立环境工具归档可直接解压运行，包含配置与指南且�
   const {createEnvironmentPackage}=await import('../scripts/package.mjs');const root=await fs.mkdtemp(path.join(os.tmpdir(),'ps-ai-env-package-'));
   try{
     const target=path.join(root,'environment.zip');await createEnvironmentPackage(process.cwd(),target);const entries=unzipSync(await fs.readFile(target));
-    const guides=['docs/README.en.md','docs/setup/COMFYUI.md','docs/setup/COMFYUI.en.md','docs/usage/USER_GUIDE.md','docs/usage/USER_GUIDE.en.md',...['BAILIAN','GEMINI','OPENAI'].flatMap(name=>['docs/providers/'+name+'.md','docs/providers/'+name+'.en.md'])];
+    const guides=['docs/README.en.md','docs/setup/COMFYUI.md','docs/setup/COMFYUI.en.md','docs/setup/PLATFORMS.md','docs/setup/PLATFORMS.en.md','docs/usage/USER_GUIDE.md','docs/usage/USER_GUIDE.en.md',...['BAILIAN','GEMINI','OPENAI'].flatMap(name=>['docs/providers/'+name+'.md','docs/providers/'+name+'.en.md'])];
     for(const name of ['README.md','scripts/check-environment.ps1','scripts/prepare-environment.ps1','scripts/install-ccx.ps1','config/settings.example.json','config/compatibility.json',...guides])assert.ok(entries[name],name);
     assert.deepEqual(Object.keys(entries).filter(name=>name.endsWith('.md')&&!name.includes('/')),['README.md']);
     for(const name of Object.keys(entries))if(name.startsWith('docs/'))assert.ok(guides.includes(name),name);

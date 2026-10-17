@@ -182,7 +182,7 @@
     ],
     "progress": "stages",
     "cancellation": "none; stop future candidates only",
-    "credentials": "server process environment only",
+    "credentials": "managed: UXP secureStorage and authenticated loopback configuration; relay memory only. Manual: process environment.",
     "providers": {
       "bailian": {
         "execution": "task",
@@ -245,6 +245,37 @@
     },
     "notImplemented": [
       "Black Forest Labs / FLUX"
-    ]
+    ],
+    "managedRelay": {
+      "platforms": {
+        "bailian": {
+          "label": "BaiLian",
+          "port": 8191,
+          "defaultModel": "qwen-image-2.1-pro"
+        },
+        "gemini": {
+          "label": "Nano Banana",
+          "port": 8192,
+          "defaultModel": "gemini-2.5-flash-image"
+        },
+        "openai": {
+          "label": "GPT Image",
+          "port": 8193,
+          "defaultModel": "gpt-image-1.5"
+        }
+      },
+      "autoLaunch": "Windows only; Node.js 24+ on PATH; UXP shell.openPath .cmd with host consent",
+      "bundledNode": false,
+      "comfyuiLaunchesRelay": false,
+      "authentication": "provider-bound nonce HMAC before credentials; private bearer on other routes",
+      "guide": "docs/setup/PLATFORMS.md",
+      "acceptance": "offline; native controls and live platform output pending"
+    },
+    "relighting": {
+      "mode": "relight",
+      "workspace": "cosplay (display Portrait)",
+      "kind": "edit",
+      "status": "development; offline intent/protocol/panel checks; native/live result pending"
+    }
   }
 }

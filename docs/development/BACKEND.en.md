@@ -33,6 +33,8 @@ The server is organized by responsibility, with only its entry point at the root
 ```text
 server/
 ├── main.ts                   # Arguments, environment, composition, listen/exit
+├── runtime/
+│   └── managed-relay.ts       # Managed provider listeners and credential identity
 ├── http/
 │   ├── gateway.ts            # Routes, status codes, Host/Origin, connections
 │   └── messages.ts           # Bounded request bodies and JSON responses
@@ -56,6 +58,24 @@ HTTP calls the job service, which depends on persistence and the ImageProvider c
 Jobs own UUIDs, state and background work. HTTP stops accepting work and drains handlers that may still persist a submission. Shutdown follows **handlers → workers → serialized writes → store lock**. Releasing the lock earlier could let a disconnected handler start work afterwards. gateway.store remains the original instance for diagnostics/fault injection; route operations use the job service.
 
 Add a provider implementation and an explicit factory in main.ts, with capability, request and recovery tests. A single file store does not need a database abstraction, dependency injection container or framework. Moving files does not change HTTP, environment variables, on-disk formats or recovery rules.
+
+## Managed relay and credentials
+
+[Platform setup](../setup/PLATFORMS.en.md) covers panel operation. Optional `platform: bailian|gemini|openai` selects managed mode; `connections` retains independent profiles. Existing `backend: gateway` without platform remains manual, and omitted backend remains direct ComfyUI. Managed URLs pin IPv4 127.0.0.1, matching the listener, at ports 8191/8192/8193 respectively. Managed localhost profiles migrate automatically; ComfyUI/manual normalization is unchanged. Model and nonsecret connection fields are exportable; API keys and the relay token are not.
+
+UXP copies the standalone gateway and static launchers from plugin relay/ into its private data folder. On Windows, shell.openPath opens the .cmd under declared launchProcess permissions and user consent; it cannot spawn Node directly or pass arguments. The launcher starts Node 24 with a fixed entry and data path, hidden, without interpolating credentials, prompts or model names. Other systems use the existing manual entry point. Starting/connect/configure sends no generation request. ComfyUI never launches the relay; switching to it does not terminate an existing relay.
+
+[Managed composition](../../server/runtime/managed-relay.ts) owns three providers and stores under relay/provider. A private relay-session.json contains a Node-generated token and ports. Before sending a bearer or key, [RelayController](../../src/relay-controller.ts) verifies a fresh challenge HMAC bound to provider and nonce. [relay-auth.ts](../../src/relay-auth.ts) uses pinned @noble/hashes in UXP; no Node crypto is imported into the plugin. The handshake requires valid Host/Origin but no bearer, and reveals no token. Other routes require the bearer. All requests reject redirects. This is local pairing, not TLS or protection from software already running with the same OS account and private-file access.
+
+| Managed-only route | Contract |
+| --- | --- |
+| GET /psai/v1/handshake | X-PSAI-Challenge nonce; returns provider and HMAC proof, no token/key |
+| POST /psai/v1/configure | Bearer plus JSON containing only apiKey; empty string clears. Body limited to 2 KiB. Never returns/logs the key |
+| POST /psai/v1/shutdown | Bearer; stops all three listeners, drains handlers/workers/writes, then unlocks stores |
+
+Keys are encrypted per platform in UXP secureStorage and held only in relay memory. credential-id.json stores a keyed fingerprint, not a recoverable key; preserve it and the session file with job data. A different/cleared key is rejected for unfinished jobs even after restart. Restoring the original key is allowed. Missing credential identity for an existing unfinished job fails closed. Key storage can disappear; no plaintext fallback. Saved outputs and raw-result conversion remain recoverable without upstream credentials; only further provider queries require them. Shutdown is explicit and can wait for active work. Photoshop exit does not stop this separate process.
+
+Manual mode still reads process environment credentials, uses ~/.ps-ai/provider or --data-dir, and supports the existing explicit endpoint/color options. Managed mode currently uses fixed official defaults and strict tagged output; use manual mode for other regions or an explicit untagged-sRGB policy. A new provider must be registered explicitly in main.ts and runtime/managed-relay.ts, with descriptor, UI and recovery tests.
 
 ## ps-ai/1 routes
 
@@ -90,7 +110,7 @@ Paths are relative to the gateway origin; JSON is UTF-8. The reference server bi
 }
 ```
 
-`kind` is `t2i`, `edit` or `asset`; `mode` uses the plugin's nine modes. Edits require a source. Optional guide and reference follow the source in that order, without empty slots. Platform intents do not assign image numbers; adapters bind roles. Bailian/Gemini use a visual guide. OpenAI converts it to a separate mask (alpha=255-gray), leaving source/reference in images. Photoshop selections and protection enforce the final boundary.
+`kind` is `t2i`, `edit` or `asset`; `mode` uses the plugin's ten modes, including edit mode relight. Edits require a source. Optional guide and reference follow the source in that order, without empty slots. Platform intents do not assign image numbers; adapters bind roles. Bailian/Gemini use a visual guide. OpenAI converts it to a separate mask (alpha=255-gray), leaving source/reference in images. Photoshop selections and protection enforce the final boundary.
 
 Capabilities contain `protocol: ps-ai/1`, `provider`, `configured`, `cancellation: none`, `progress: stages` and `models`. Each model defines `id`, `label`, `operations`, `maxInputImages`, `outputDepths`, `seedMax`, `minPixels`, `maxPixels` and `maxAspectRatio`. `seedMax: 0` means no configurable seed; requests use placeholder 0 without sending a provider seed. Unknown parameters are rejected. This protocol revision supports only 8-bit output, stage progress and no guaranteed interruption. Add client support and version the contract before exposing other parameters, step progress or cancellation guarantees.
 
@@ -121,11 +141,11 @@ Each job keeps its provider identity and endpoint. Do not query an old task thro
 
 ## Implement another provider
 
-Implement [server/providers/contract.ts](../../server/providers/contract.ts): declare `id`, `execution` (`task` or `inline`) and `baseUrl`, then provide `capabilities()` and `submit()`. Task APIs return `{taskId}` and implement `poll()` / `download()`. Inline APIs return `{image}` without inventing a remote ID. Optional `normalizeOutput()` must produce tagged sRGB8 at requested dimensions, with a documented inverse for geometric transforms. See [Bailian](../../server/providers/bailian.ts), [Gemini](../../server/providers/gemini.ts) and [OpenAI](../../server/providers/openai.ts). Register explicitly in [server/main.ts](../../server/main.ts), without dynamic modules or arbitrary provider URLs. Keep keys on the server.
+Implement [server/providers/contract.ts](../../server/providers/contract.ts): declare `id`, `execution` (`task` or `inline`) and `baseUrl`, then provide `capabilities()` and `submit()`. Task APIs return `{taskId}` and implement `poll()` / `download()`. Inline APIs return `{image}` without inventing a remote ID. Optional `normalizeOutput()` must produce tagged sRGB8 at requested dimensions, with a documented inverse for geometric transforms. See [Bailian](../../server/providers/bailian.ts), [Gemini](../../server/providers/gemini.ts) and [OpenAI](../../server/providers/openai.ts). Register explicitly in [server/main.ts](../../server/main.ts), without dynamic modules or arbitrary provider URLs. Keep platform requests and provider SDKs on the server; accept managed keys only through authenticated local configuration.
 
 Errors expose only sanitized `code` and `message`. Never forward raw provider messages, headers, Base64 images, prompts or signed URLs. Distinguish definite rejection from uncertain acceptance; retain unknown outcomes without reposting.
 
-`PSAI_PROVIDER=bailian|gemini|openai` selects one provider per process. Concurrent instances need separate ports and data directories. Bailian uses remote tasks and short polling. Gemini/OpenAI Images run one synchronous call in a local worker, returning the local ID immediately. Disconnects do not stop it; a timeout or crash before raw output persistence can only retain unknown. Results download when the plugin queries the job. Platform records and URLs expire, so reconnect and download promptly. Background polling, cleanup, usage accounting, SDK retries and cross-account routing are not implemented.
+Manual `PSAI_PROVIDER=bailian|gemini|openai` selects one provider per process. Concurrent instances need separate ports and data directories. Bailian uses remote tasks and short polling. Gemini/OpenAI Images run one synchronous call in a local worker, returning the local ID immediately. Disconnects do not stop it; a timeout or crash before raw output persistence can only retain unknown. Results download when the plugin queries the job. Platform records and URLs expire, so reconnect and download promptly. Background polling, cleanup, usage accounting, SDK retries and cross-account routing are not implemented.
 
 ## Image and service boundaries
 

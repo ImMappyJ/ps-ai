@@ -33,6 +33,8 @@
 ```text
 server/
 ├── main.ts                   # 参数、环境配置、组装依赖、监听与退出
+├── runtime/
+│   └── managed-relay.ts       # 自动中转、平台监听与凭据身份
 ├── http/
 │   ├── gateway.ts            # 路由、HTTP 状态、Host/Origin、连接生命周期
 │   └── messages.ts           # 有预算的请求体与 JSON 响应
@@ -56,6 +58,24 @@ HTTP 调用作业服务，作业服务调用持久化与 `ImageProvider` 接口�
 作业服务负责 UUID、状态和后台工作；HTTP 层负责停止接入并等待仍在落盘的 handlers。正常退出严格按 **handlers → workers → 串行写入 → store 锁** 收尾。不能为了目录拆分先释放锁，否则断线请求仍可能启动工作。`gateway.store` 仍指向同一实例，便于原有诊断和故障注入；运行时只通过作业服务读写结果。
 
 新增平台只需在 `providers` 实现统一接口、在 `main.ts` 显式注册并补能力／请求／恢复测试。当前只有一种文件存储，不为目录整齐额外引入数据库接口、依赖注入容器或框架。文件迁移不改变 HTTP 协议、环境变量、持久化格式及任务恢复规则。
+
+## 自动中转与凭据
+
+面板操作见 [平台配置](../setup/PLATFORMS.md)。可选字段 `platform: bailian|gemini|openai` 选择自动管理，`connections` 保存各连接的模型与配置。原有 `backend: gateway` 不带 platform 时仍是手动服务；省略 backend 仍直连 ComfyUI。自动服务固定使用与监听一致的 IPv4 127.0.0.1，避免 localhost 解析到其他地址；旧的自动管理 localhost 配置会迁移，ComfyUI 与手动模式不变。对应端口为 8191／8192／8193。模型和普通连接字段可导出，Key 与本机令牌不能导出。
+
+UXP 把插件 relay/ 中的独立服务及固定启动器复制到插件私人数据目录。Windows 通过声明 launchProcess 的 shell.openPath 打开 .cmd，由 Photoshop 请求授权；UXP 不直接创建 Node 子进程或传命令参数。启动器固定入口和数据路径，以隐藏窗口启动 Node 24，不拼接 Key、提示词或模型名。其他系统保留手动服务入口。启动、连接和保存配置都不创建生图任务；ComfyUI 不启动中转，切回 ComfyUI 也不关闭已运行的中转。
+
+[自动服务组合](../../server/runtime/managed-relay.ts) 管理三个提供方及各自 relay/provider 数据目录。私人 relay-session.json 保存 Node 生成的令牌与端口。发送 Bearer 或 Key 之前，[RelayController](../../src/relay-controller.ts) 先验证绑定平台和本次 nonce 的 HMAC 服务端证明。[relay-auth.ts](../../src/relay-auth.ts) 在 UXP 使用锁定版本的 @noble/hashes，不把 Node crypto 引入插件。握手检查 Host／Origin，不需要 Bearer，也不返回令牌；其余接口要求 Bearer。所有请求拒绝重定向。这是本机配对，不是 TLS，也不隔离有同一系统账户和私人文件访问权的软件。
+
+| 自动服务专用接口 | 契约 |
+| --- | --- |
+| GET /psai/v1/handshake | X-PSAI-Challenge nonce，返回平台与 HMAC 证明，不返回令牌或 Key |
+| POST /psai/v1/configure | Bearer；JSON 只含 apiKey，空字符串清除。最多 2 KiB，不返回／记录 Key |
+| POST /psai/v1/shutdown | Bearer；停止三个监听，等待 handlers、workers、写入后释放目录锁 |
+
+Key 按平台加密保存在 UXP secureStorage，服务只在内存持有。credential-id.json 保存不可还原 Key 的带密钥摘要；迁移任务时连同会话文件一起保留。存在未完成任务时，更换或清除 Key 即使重启服务也会拒绝；允许恢复原 Key。已有未完成任务却缺少凭据身份记录时明确拒绝，不能猜测账户。安全存储丢失时重新输入，不回退到明文。已经保存的输出或原始结果转换不需要上游 Key；进一步查询平台才需要。停止会等待当前工作收尾，关闭 Photoshop 不自动结束独立进程。
+
+手动模式继续从进程环境读 Key，使用 ~/.ps-ai/provider 或 --data-dir，支持现有地域和显式色彩策略。自动模式目前使用固定官方默认端点及严格带标记输出；其他地域或无标记 sRGB 策略走手动模式。新增提供方需要同时在 main.ts 和 runtime/managed-relay.ts 显式注册，并补平台描述、界面和恢复测试。
 
 ## ps-ai/1 接口
 
@@ -90,7 +110,7 @@ HTTP 调用作业服务，作业服务调用持久化与 `ImageProvider` 接口�
 }
 ```
 
-`kind` 为 `t2i`、`edit`、`asset`。`mode` 沿用插件的九种模式。编辑必须提供来源图；范围辅助与参考图按需加入。发给平台的顺序固定为来源、辅助、参考，缺省项不占位置。平台意图不自动写入图片编号，由适配器绑定实际角色。百炼／Gemini 以灰度辅助图提示范围；OpenAI 将它转为独立 mask（alpha=255-gray），images 只保留来源和参考。最终范围仍由 Photoshop 选区与保护区约束。
+`kind` 为 `t2i`、`edit`、`asset`。`mode` 沿用插件的十种模式，新增 `relight` 属于编辑。编辑必须提供来源图；范围辅助与参考图按需加入。发给平台的顺序固定为来源、辅助、参考，缺省项不占位置。平台意图不自动写入图片编号，由适配器绑定实际角色。百炼／Gemini 以灰度辅助图提示范围；OpenAI 将它转为独立 mask（alpha=255-gray），images 只保留来源和参考。最终范围仍由 Photoshop 选区与保护区约束。
 
 能力清单至少包含 `protocol: ps-ai/1`、`provider`、`configured`、`cancellation: none`、`progress: stages` 和 `models`。每个模型给出 `id`、`label`、`operations`、`maxInputImages`、`outputDepths`、`seedMax`、`minPixels`、`maxPixels`、`maxAspectRatio`。`seedMax: 0` 表示没有可设种子，信封只接受占位值 0，不向平台传种子；未知参数会被拒绝。本协议版本只支持 8 位输出、阶段进度和不保证中断的取消语义；需要真实步数、更多参数或其他取消保证时，应先扩展客户端和协议版本，不能伪造字段。
 
@@ -121,11 +141,11 @@ HTTP 调用作业服务，作业服务调用持久化与 `ImageProvider` 接口�
 
 ## 实现新的提供方
 
-实现 [server/providers/contract.ts](../../server/providers/contract.ts) 的 `ImageProvider`：声明 `id`、`execution`（`task` 或 `inline`）、`baseUrl`，提供 `capabilities()` 与 `submit()`。异步适配返回 `{taskId}`，实现 `poll()` 与 `download()`；同步适配返回 `{image}`，不能捏造平台 ID。可选 `normalizeOutput()` 必须产出请求尺寸的 sRGB8 PNG，所有几何变换须有明确的逆映射。参考 [百炼](../../server/providers/bailian.ts)、[Gemini](../../server/providers/gemini.ts) 与 [OpenAI](../../server/providers/openai.ts)，在 [server/main.ts](../../server/main.ts) 的显式注册点选择，不使用任意模块或外部 URL 动态加载。Key 留在服务端。
+实现 [server/providers/contract.ts](../../server/providers/contract.ts) 的 `ImageProvider`：声明 `id`、`execution`（`task` 或 `inline`）、`baseUrl`，提供 `capabilities()` 与 `submit()`。异步适配返回 `{taskId}`，实现 `poll()` 与 `download()`；同步适配返回 `{image}`，不能捏造平台 ID。可选 `normalizeOutput()` 必须产出请求尺寸的 sRGB8 PNG，所有几何变换须有明确的逆映射。参考 [百炼](../../server/providers/bailian.ts)、[Gemini](../../server/providers/gemini.ts) 与 [OpenAI](../../server/providers/openai.ts)，在 [server/main.ts](../../server/main.ts) 的显式注册点选择，不使用任意模块或外部 URL 动态加载。平台请求与 SDK 留在服务端，面板 Key 只通过认证的本机配置入口进入服务内存。
 
 错误返回只包含脱敏的 `code`、`message`。别原样回显平台响应、请求 Header、图片 Base64、提示词或签名 URL。提交是否确定失败必须与“未确认是否已接受”区分；后者保留 unknown，不能自动重发。
 
-服务由 `PSAI_PROVIDER=bailian|gemini|openai` 选择，一个实例对应一个平台；同时运行要用不同端口与数据目录。百炼使用异步任务与短轮询。Gemini／OpenAI Images 的同步请求在本机后台执行，POST 立即返回本地 ID；断线后工作继续，但结果落盘前的进程崩溃或超时只能保留 unknown。当前按插件查询下载结果；平台记录和 URL 有时效，需要及时恢复与下载。没有后台巡检、自动清理、用量统计、SDK 自动重试或跨账户路由。
+手动服务由 `PSAI_PROVIDER=bailian|gemini|openai` 选择，一个实例对应一个平台；同时运行要用不同端口与数据目录。百炼使用异步任务与短轮询。Gemini／OpenAI Images 的同步请求在本机后台执行，POST 立即返回本地 ID；断线后工作继续，但结果落盘前的进程崩溃或超时只能保留 unknown。当前按插件查询下载结果；平台记录和 URL 有时效，需要及时恢复与下载。没有后台巡检、自动清理、用量统计、SDK 自动重试或跨账户路由。
 
 ## 图像与服务边界
 

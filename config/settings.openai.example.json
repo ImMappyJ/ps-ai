@@ -1,8 +1,9 @@
 {
   "schemaVersion": 1,
   "backend": "gateway",
-  "baseUrl": "http://localhost:8192",
-  "gatewayModel": "gpt-image-2.5-sunburst",
+  "baseUrl": "http://127.0.0.1:8193",
+  "gatewayModel": "gpt-image-1.5",
   "outputDepth": 8,
-  "language": "zh-CN"
+  "language": "zh-CN",
+  "platform": "openai"
 }

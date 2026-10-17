@@ -1,8 +1,9 @@
 {
   "schemaVersion": 1,
   "backend": "gateway",
-  "baseUrl": "http://localhost:8191",
-  "gatewayModel": "gemini-nano-banana-2.1",
+  "baseUrl": "http://127.0.0.1:8192",
+  "gatewayModel": "gemini-2.5-flash-image",
   "outputDepth": 8,
-  "language": "zh-CN"
+  "language": "zh-CN",
+  "platform": "gemini"
 }

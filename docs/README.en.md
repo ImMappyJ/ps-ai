@@ -4,22 +4,23 @@
 <h1 align="center">PS-AI</h1>
 <p align="center"><a href="../README.md">简体中文</a> · <strong>English</strong></p>
 
-PS-AI connects ComfyUI to Photoshop for local edits, COSPLAY outfits and props, and text-to-image generation. Select an area, describe the change and preview candidates in the panel, then apply a result as a new layer with an editable mask.
+PS-AI connects ComfyUI to Photoshop for local edits, portrait outfits and props, and text-to-image generation. Select an area, describe the change and preview candidates in the panel, then apply a result as a new layer with an editable mask.
 
-**Current version: 0.4.0 (experimental).** It includes guided setup, color checks, edit-range previews and optional 16-bit SDR output. Use matching plugin and environment packages. Results may need manual cleanup, so work on saved copies. Routine skin smoothing, blemish removal and skin-tone retouching are not included.
+**Published version: 0.4.0 (experimental).** It includes guided setup, color checks, edit-range previews and optional 16-bit SDR output. Use matching plugin and environment packages. Results may need manual cleanup, so work on saved copies. Routine skin smoothing, blemish removal and skin-tone retouching are not included.
 
 Upgrading from 0.3.0 changes the panel name from `PS-AI FOR ME` to `PS-AI` and introduces the Morph Frame identity. Plugin IDs and the `PS-AI-FOR-ME` installation directory stay the same.
 
-The development branch adds [Bailian](providers/BAILIAN.en.md), [Gemini / Nano Banana](providers/GEMINI.en.md) and [OpenAI Images](providers/OPENAI.en.md) gateways. Live API-key and Photoshop acceptance are pending; **published v0.4.0 packages do not contain them**. Screenshots and validated behavior below refer to ComfyUI.
+The development panel offers ComfyUI, Nano Banana, GPT Image and BaiLian, separate model profiles and encrypted keys, and an on-demand local relay. Portrait adds relighting. See [platform setup](setup/PLATFORMS.en.md) and adapter details: [Bailian](providers/BAILIAN.en.md), [Gemini / Nano Banana](providers/GEMINI.en.md) and [OpenAI Images](providers/OPENAI.en.md) gateways. Live API-key and Photoshop acceptance are pending; **published v0.4.0 packages do not contain them**. Screenshots and validated behavior below refer to ComfyUI.
 
 ## Documentation
 
 | Purpose | Guide |
 | --- | --- |
-| First steps and all nine modes | [Illustrated user guide](usage/USER_GUIDE.en.md) |
+| First steps, nine tested modes and new relighting | [Illustrated user guide](usage/USER_GUIDE.en.md) |
 | Local backend, models and troubleshooting | [ComfyUI setup](setup/COMFYUI.en.md) |
-| Platform adapters (development) | [Bailian](providers/BAILIAN.en.md) · [Gemini / Nano Banana](providers/GEMINI.en.md) · [OpenAI Images](providers/OPENAI.en.md) |
-| Contributing and server extensions | [Development entry point](../AGENTS.md#development-en) · [Backend and persistence contract](development/BACKEND.en.md) |
+| Platform selection and API keys | [Platform setup](setup/PLATFORMS.en.md) |
+| Adapter details (development) | [Bailian](providers/BAILIAN.en.md) · [Gemini / Nano Banana](providers/GEMINI.en.md) · [OpenAI Images](providers/OPENAI.en.md) |
+| Contributing and server extensions | [Development entry point](../AGENTS.md) · [Backend and persistence contract](development/BACKEND.en.md) |
 
 ## Example
 
@@ -36,7 +37,7 @@ The [illustrated user guide](usage/USER_GUIDE.en.md) walks through all nine mode
 ## What it does
 
 - **Local editing:** change objects and materials, remove clutter, replace backgrounds. Pixels outside the selection and inside manually protected areas are preserved.
-- **COSPLAY:** repair outfits and props, edit scenes, use one character reference image. Reference guidance is experimental and does not guarantee an exact likeness or outfit.
+- **Portrait:** repair outfits and props, edit scenes, use one character reference image; the development build also adds relighting. Reference guidance is experimental and does not guarantee an exact likeness or outfit.
 - **Images and assets:** text to image, effects and atmosphere assets, PNG export and new documents. Generated transparency can still contain background colors or rough edges.
 - **Candidates:** 1–4 sequential candidates, history and disconnect recovery. ComfyUI provides actual sampling steps and cancellation by task ID; platform adapters show stages and stop remaining candidates. Apply with an editable mask and one-step undo.
 - **Transparency and color:** preserve the source silhouette, optionally align the subject and match small context color shifts. RGB / Grayscale 8/16-bit round trips have been tested in Photoshop; model input remains sRGB 8-bit.
@@ -54,7 +55,7 @@ The ComfyUI path uses a fixed **Qwen-Image 2.1 GGUF workflow**. SD, SDXL and Flu
 | Local model storage | About 14.63 GB for preset weights, plus backend, dependencies, cache and images. |
 | Source builds | Node.js 24.21.0 / npm 11.19.0 tested. ComfyUI plugin packages need no Node.js. The optional platform service requires Node.js 24+. |
 
-ComfyUI can run here or on another reachable machine. Images and prompts go to the configured address. Use a backend you trust. Platform access uses a separate local gateway, with credentials on the server. Do not enter a platform API URL as a ComfyUI address. Other authenticated services or URL subpaths are unverified.
+ComfyUI can run here or on another reachable machine. Images and prompts go to the configured address. Use a backend you trust. Platform access uses a separate local gateway, with keys encrypted in the plugin and used in relay memory. Do not enter a platform API URL as a ComfyUI address. Other authenticated services or URL subpaths are unverified.
 
 ## Install a release package
 
@@ -83,6 +84,10 @@ If double-clicking still fails after associating CCX files with UPIA, use the sc
 Portable needs no CCX installer. Folder loading and image round trips have been tested on Windows PS 27.0. Other versions and loading with developer mode disabled have not been tested. If Photoshop cannot find the folder, use CCX or the source-build method below.
 
 CCX and Portable keep separate data. Export settings and save PNGs before switching; history is not migrated. Quit Photoshop before replacing only this plugin folder or installing a new CCX. Remove the Portable folder to uninstall it; manage CCX through Creative Cloud. Settings, candidates and history stay in Photoshop's data directory rather than moving with program files.
+
+## Choose a platform
+
+ComfyUI connects directly. Other platforms use a bundled launcher to start the local relay after saving a key. This requires Windows, Node.js 24+ and Photoshop launch consent. Addresses and models are retained separately; JSON exports exclude keys. See [platform setup](setup/PLATFORMS.en.md) for steps and limits.
 
 ## Connect ComfyUI
 
@@ -152,6 +157,7 @@ Thanks to these projects for their tools and inspiration:
 | Qwen | <https://huggingface.co/Qwen> |
 | ComfyUI-GGUF | <https://github.com/leejet/ComfyUI-GGUF> |
 | UPNG.js | <https://github.com/photopea/UPNG.js> |
+| @noble/hashes | <https://github.com/paulmillr/noble-hashes> |
 | pako | <https://github.com/nodeca/pako> |
 | OpenLayer | <https://github.com/MehranMarxian/OpenLayer> |
 | Geekatplay ComfyUI-Photoshop | <https://github.com/GeekatplayStudio/ComfyUI-Photoshop> |

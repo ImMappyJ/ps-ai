@@ -47,3 +47,15 @@ test('brand changes preserve Portable storage identity and include header PNG in
     assert.ok(header);assert.ok(entries['PS-AI-FOR-ME/'+header[1]]);
   }finally{await fs.rm(root,{recursive:true,force:true});}
 });
+
+// Runs after the synchronous build above; no dependency on another test file.
+
+test('插件归档包含固定自动启动资源和完整依赖许可，不收录私人中转数据',async()=>{
+  // @ts-expect-error Packaging is plain JS.
+  const {createPackage,createPortablePackage}=await import('../scripts/package.mjs');const root=await fs.mkdtemp(path.join(os.tmpdir(),'ps-ai-relay-package-'));
+  try{for(const portable of [false,true]){const target=path.join(root,portable?'portable.zip':'plugin.ccx');await(portable?createPortablePackage:createPackage)(path.resolve('dist/plugin'),target);const entries=unzipSync(await fs.readFile(target)),prefix=portable?'PS-AI-FOR-ME/':'';
+    for(const file of ['ps-ai-gateway.mjs','start-ps-ai-relay.cmd','start-ps-ai-relay.ps1'])assert.ok(entries[prefix+'relay/'+file],file);
+    assert.match(strFromU8(entries[prefix+'THIRD_PARTY_NOTICES.txt']),/@noble\/hashes/);assert.equal(JSON.parse(strFromU8(entries[prefix+'manifest.json'])).requiredPermissions.launchProcess.extensions[0],'.cmd');
+    assert.equal(Object.keys(entries).some(k=>/credential-id|relay-session|gateway.lock|api-key/.test(k)),false);
+  }}finally{await fs.rm(root,{recursive:true,force:true});}
+});

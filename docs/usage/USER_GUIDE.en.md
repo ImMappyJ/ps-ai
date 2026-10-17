@@ -8,6 +8,8 @@ This walkthrough tests all nine modes on separate copies of **3F3F3F.webp**. Scr
 
 The screenshots and nine-mode acceptance use ComfyUI. See [Bailian](../providers/BAILIAN.en.md), [Gemini / Nano Banana](../providers/GEMINI.en.md) and [OpenAI Images](../providers/OPENAI.en.md) for platform setup and limits; their live results and host behavior are not validated by these examples.
 
+The development build renames the old **COSPLAY** tab to **Portrait** and adds relighting as a tenth mode. The nine illustrated examples below remain v0.4.0 evidence. For the four backend choices and key controls, see [platform setup](../setup/PLATFORMS.en.md).
+
 ## Connect and make a copy
 
 1. Start ComfyUI and confirm its address opens in a browser.
@@ -166,7 +168,7 @@ The full background became a lavender studio with a foot shadow. Opaque characte
 </p>
 
 1. Duplicate the original. Lasso the lower pink coat tail on the right, covering the entire area intended for the material change.
-2. Choose COSPLAY → Repair clothing / props, with the selection destination. Enter the prompt.
+2. Choose Portrait → Repair clothing / props, with the selection destination. Enter the prompt.
 3. Enable the guide and transparency preservation. Disable alignment and color matching. Preview and generate.
 4. Check diamond cutouts, trim, folds and the alpha outline, then apply. The unselected upper area stays pink; select the whole garment to recolor it all.
 
@@ -202,7 +204,7 @@ The selected coat tail became deep violet while retaining trim and cutouts. This
 </p>
 
 1. Duplicate the original and select both legs. Use the white-socks edit of the same sample: [download the tested reference](../../assets/guide/reference-white-socks-icc.png).
-2. Choose COSPLAY → Character reference. Open the reference section, Choose image, import the PNG and set Reference use to clothing. Enter the prompt.
+2. Choose Portrait → Character reference. Open the reference section, Choose image, import the PNG and set Reference use to clothing. Enter the prompt.
 3. Leave the selection guide off, the default for this mode. Enable transparency preservation; disable alignment and color matching. Preview and generate.
 4. Compare sock tops, color and source pose, then apply. Clear reference afterward; standalone assets and text-to-image also require it cleared.
 
@@ -240,7 +242,7 @@ The reference transferred the white-socks feature while preserving pose and shoe
 </p>
 
 1. Duplicate the original and clear old references and protection. Ctrl-click the character layer thumbnail, then Ctrl+Shift+I to select the full transparent background.
-2. Choose COSPLAY → Replace scene, with the selection destination. Enter the prompt.
+2. Choose Portrait → Replace scene, with the selection destination. Enter the prompt.
 3. Enable the guide. Disable transparency preservation, alignment and color matching. Preview and generate.
 4. Apply and inspect the pergola, path perspective, feet and hair edges. The source character's lighting is retained; finish environmental lighting with adjustment layers if needed.
 
@@ -280,7 +282,7 @@ The garden and path fill the background, rather than a small patch around the le
   </tr>
 </table>
 
-1. Choose COSPLAY → Effect asset, set New document and clear the reference. A standalone asset needs no character selection.
+1. Choose Portrait → Effect asset, set New document and clear the reference. A standalone asset needs no character selection.
 2. Enter the prompt and generate. Check the open curve, absence of characters and real transparency. Open as new document; this test created a 992×992 sRGB / 16-bit asset.
 3. Use Layer → Duplicate Layer to copy the generated layer into a fresh sample copy. Ctrl+T: scale proportionally to 900×900 px, top-left X=50, Y=555 px.
 4. Use Normal blending at about 85% opacity. Use a layer mask for front / back occlusion; add glow or other blending only as needed.
@@ -316,7 +318,7 @@ The first prompt asked for smoke around the legs with an empty center and produc
   </tr>
 </table>
 
-1. Choose COSPLAY → Atmosphere asset, set New document and clear the reference.
+1. Choose Portrait → Atmosphere asset, set New document and clear the reference.
 2. Enter the prompt and generate. Check for an empty upper area, bottom mist, no character and no text. Open the 992×992 sRGB / 16-bit asset as a new document.
 3. Duplicate its generated layer into a fresh sample copy. Transform proportionally to 900×900 px, top-left X=50, Y=555 px.
 4. Use Normal blending at about 35% opacity. Check mist density and the face; reduce opacity or mask unwanted coverage.
@@ -371,6 +373,20 @@ The result includes pink hair, a white blouse, a pink / navy coat and complete f
 </p>
 
 </details>
+
+<a id="relight"></a>
+
+## 10 · Relighting (development build)
+
+This is a selection edit with a prompt, not a one-click filter. The request path is tested offline; this guide does not claim a new native result or provide a fabricated screenshot.
+
+1. Open a saved copy and select the area whose lighting should change. Set a protection area first for details that must remain unchanged, then reselect the edit area.
+2. Choose **Portrait → Relighting**, with **New layer at selection** as the destination.
+3. Describe direction, softness and color, for example: “Warm soft key light from the upper left, cool shadows on the right; preserve facial features, clothing structure and background.”
+4. Keep source transparency for a cutout. To avoid compensating for deliberate color changes, start with context color matching off. Use a reference only if it helps specify the intended light.
+5. Generate one candidate, inspect facial structure, edges and unselected areas, then apply as a separate masked layer. Adjust opacity or undo once if needed.
+
+Works through the ComfyUI edit workflow or a platform model declaring edit support. Platforms stay at 8-bit, with platform-controlled steps and their own seed limits. This does not add skin smoothing or routine beauty retouching.
 
 ## Candidates, progress and undo
 

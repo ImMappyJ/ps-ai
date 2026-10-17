@@ -4,22 +4,23 @@
 <h1 align="center">PS-AI</h1>
 <p align="center"><strong>简体中文</strong> · <a href="docs/README.en.md">English</a></p>
 
-PS-AI 将 ComfyUI 接到 Photoshop 中，用于局部修图、COSPLAY 服装和道具处理，以及文字生图。圈选区域、描述修改要求，在面板里生成并预览候选，确认后应用为带蒙版的新图层。
+PS-AI 将 ComfyUI 接到 Photoshop 中，用于局部修图、人像服装和道具处理，以及文字生图。圈选区域、描述修改要求，在面板里生成并预览候选，确认后应用为带蒙版的新图层。
 
-当前版本为 **0.4.0（实验版）**，包含配置向导、色彩检查、编辑范围预览和可选 16 位 SDR 输出。安装时使用同版本的插件包和环境工具。生成结果可能需要手工修整，建议在已保存的副本上使用。不包含常规人像磨皮、去痘和肤色精修功能。
+当前已发布版本为 **0.4.0（实验版）**，包含配置向导、色彩检查、编辑范围预览和可选 16 位 SDR 输出。安装时使用同版本的插件包和环境工具。生成结果可能需要手工修整，建议在已保存的副本上使用。不包含常规人像磨皮、去痘和肤色精修功能。
 
 从 0.3.0 升级后，面板名称由 `PS-AI FOR ME` 改为 `PS-AI`，图标使用 Morph Frame 标识。插件 ID 与 `PS-AI-FOR-ME` 安装目录保持不变。
 
-开发分支新增 [百炼](docs/providers/BAILIAN.md)、[Gemini / Nano Banana](docs/providers/GEMINI.md) 与 [OpenAI Images](docs/providers/OPENAI.md) 的平台适配服务。平台路径仍待真实 API Key 和 Photoshop 验收，**不在已发布的 v0.4.0 包中**。本页下方截图及已测能力对应 ComfyUI 路径。
+开发分支的面板可选择 ComfyUI、Nano Banana、GPT Image 和 BaiLian，支持分别保存模型与加密 Key，并按需启动本机中转；人像工作区新增光影重塑。配置见 [平台选择](docs/setup/PLATFORMS.md)，接口细节见 [百炼](docs/providers/BAILIAN.md)、[Gemini / Nano Banana](docs/providers/GEMINI.md) 与 [OpenAI Images](docs/providers/OPENAI.md) 的平台适配服务。平台路径仍待真实 API Key 和 Photoshop 验收，**不在已发布的 v0.4.0 包中**。本页下方截图及已测能力对应 ComfyUI 路径。
 
 ## 文档导航
 
 | 用途 | 文档 |
 | --- | --- |
-| 入门操作与九种模式示例 | [图文使用指南](docs/usage/USER_GUIDE.md) |
+| 入门操作、已测九种模式与新版光影重塑 | [图文使用指南](docs/usage/USER_GUIDE.md) |
 | 本地后端、模型与排错 | [ComfyUI 配置](docs/setup/COMFYUI.md) |
-| 平台适配（开发中） | [百炼](docs/providers/BAILIAN.md) · [Gemini / Nano Banana](docs/providers/GEMINI.md) · [OpenAI Images](docs/providers/OPENAI.md) |
-| 参与开发与服务端扩展 | [开发入口](AGENTS.md#development-zh) · [后端与持久化契约](docs/development/BACKEND.md) |
+| 平台选择与 Key 配置 | [平台配置](docs/setup/PLATFORMS.md) |
+| 平台接口和限制（开发中） | [百炼](docs/providers/BAILIAN.md) · [Gemini / Nano Banana](docs/providers/GEMINI.md) · [OpenAI Images](docs/providers/OPENAI.md) |
+| 参与开发与服务端扩展 | [开发入口](AGENTS.md) · [后端与持久化契约](docs/development/BACKEND.md) |
 
 ## 看看效果
 
@@ -36,7 +37,7 @@ PS-AI 将 ComfyUI 接到 Photoshop 中，用于局部修图、COSPLAY 服装和�
 ## 能做什么
 
 - **局部修图**：物体和材质修改、移除杂物、替换背景。选区外和手动保护区保留原始像素。
-- **COSPLAY**：服装／道具修复、场景修改、一张角色参考图辅助。参考功能是实验性的，不保证角色和服装细节准确复现。
+- **人像**：服装／道具修复、场景修改、一张角色参考图辅助；开发版另有光影重塑。参考功能是实验性的，不保证角色和服装细节准确复现。
 - **生图与素材**：文字生图，生成特效或氛围素材，在新文档打开或导出 PNG。透明素材仍可能有底色和杂边。
 - **候选与回填**：1–4 张串行候选，历史与断线恢复；ComfyUI 提供实际采样步数和按任务取消，平台适配仅显示阶段并停止后续候选。应用为独立图层和可编辑蒙版，支持一次撤销。
 - **透明与颜色**：默认保留原透明轮廓，可选主体对齐和小幅上下文颜色匹配。RGB／灰度 8/16 位已在 Photoshop 中测试图像往返；模型输入仍是 sRGB 8-bit。
@@ -54,7 +55,7 @@ ComfyUI 路径使用固定的 **Qwen-Image 2.1 GGUF 工作流**，不支持直�
 | 本地模型磁盘 | 预设三个权重约 14.63 GB，另留后端、依赖、缓存和图片空间 |
 | 源码构建 | Node.js 24.21.0、npm 11.19.0 已测试；ComfyUI 插件包无需 Node.js；可选平台适配服务需要 Node.js 24+ |
 
-后端可以在本机，也可以在可访问的另一台机器上。插件会把图像和提示词发给你填写的地址，请使用自己信任的服务。平台接入使用独立本机适配服务，Key 只放服务端；不能把平台 API 地址直接填成 ComfyUI 地址。其他带登录或子路径的服务未验证。
+后端可以在本机，也可以在可访问的另一台机器上。插件会把图像和提示词发给你填写的地址，请使用自己信任的服务。平台接入使用独立本机适配服务，Key 由插件加密保存，仅在本机服务内存使用；不能把平台 API 地址直接填成 ComfyUI 地址。其他带登录或子路径的服务未验证。
 
 ## 安装发行包
 
@@ -83,6 +84,10 @@ CCX 关联到 UPIA 后若仍无法双击安装，可使用上面的脚本传入�
 Portable 不需要 CCX 安装器，已在 Windows PS 27.0 测试文件夹加载和图像往返。其他版本及关闭开发人员模式时的加载情况尚未测试。若 Photoshop 无法识别该目录，可改用 CCX，或按文末的源码构建方式加载。
 
 CCX 与 Portable 的设置和历史各自独立。切换前导出设置、保存需要的 PNG；历史不会自动迁移。更新时退出 PS，只替换本插件文件夹或安装新版 CCX；不要覆盖其他插件。卸载 Portable 时移除该文件夹，CCX 用 Creative Cloud 的插件管理卸载。设置、候选和历史保存在 Photoshop 的数据目录，不随程序文件夹移动。
+
+## 选择平台
+
+ComfyUI 直接连接已有后端。其他平台在面板保存 Key 后由随包启动器启动本地服务，需要 Windows、Node.js 24+ 和 Photoshop 启动授权。地址、模型分别保存，Key 不随配置导出。逐步说明及限制见 [平台配置](docs/setup/PLATFORMS.md)。
 
 ## 连接 ComfyUI
 
@@ -152,6 +157,7 @@ npm run build
 | Qwen | <https://huggingface.co/Qwen> |
 | ComfyUI-GGUF | <https://github.com/leejet/ComfyUI-GGUF> |
 | UPNG.js | <https://github.com/photopea/UPNG.js> |
+| @noble/hashes | <https://github.com/paulmillr/noble-hashes> |
 | pako | <https://github.com/nodeca/pako> |
 | OpenLayer | <https://github.com/MehranMarxian/OpenLayer> |
 | Geekatplay ComfyUI-Photoshop | <https://github.com/GeekatplayStudio/ComfyUI-Photoshop> |
