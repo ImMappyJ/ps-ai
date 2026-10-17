@@ -82,6 +82,7 @@
     "network": {
       "domains": "all"
     },
-    "localFileSystem": "request"
+    "localFileSystem": "request",
+    "launchProcess": {"extensions": [".cmd"]}
   }
 }

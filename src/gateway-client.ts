@@ -8,13 +8,13 @@ import type {GatewayCapabilities} from './gateway-protocol';
 export class GatewayClient {
   readonly base:string;
   capabilities?:GatewayCapabilities;
-  constructor(base:string,public model:string,private transport:typeof fetch=fetch,private timeoutMs=30000){this.base=normalizeBaseUrl(base);}
+  constructor(base:string,public model:string,private transport:typeof fetch=fetch,private timeoutMs=30000,public token?:string){this.base=normalizeBaseUrl(base);}
   private async request(path:string,init?:RequestInit,binary=false):Promise<any>{
     const controller=typeof AbortController==='function'?new AbortController():undefined;
     let timer:ReturnType<typeof setTimeout>|undefined;
     try{
       return await Promise.race([
-        (async()=>{const r=await this.transport(this.base+'/psai/v1'+path,{...init,signal:controller?.signal});
+        (async()=>{const r=await this.transport(this.base+'/psai/v1'+path,{...init,...(this.token?{headers:{...init?.headers,Authorization:`Bearer ${this.token}`}}:{}),redirect:'error',signal:controller?.signal});
           if(!r.ok){const body=await r.text();throw new HttpError(r.status,`PS-AI gateway ${r.status}: ${body.slice(0,1500)}`);}
           return binary?new Uint8Array(await r.arrayBuffer()):await r.json();})(),
         new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller?.abort();reject(new Error('Gateway request timed out; recover the saved task ID'));},this.timeoutMs);})

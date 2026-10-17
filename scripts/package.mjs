@@ -65,8 +65,8 @@ async function packageEntries(directory){
     for(const item of (await fs.readdir(folder,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))){
       if(item.name==='.uxprc'&&item.isFile())continue; // Adobe development-session metadata, never a runtime resource.
       const name=prefix+item.name,absolute=path.join(folder,item.name);
-      if(item.isDirectory()){if(item.name!=='icons')throw new Error(`不允许打包目录：${name}`);await collect(absolute,name+'/');}
-      else {if(!/^(manifest\.json|index\.html|main\.js|style\.css|THIRD_PARTY_NOTICES\.txt|LICENSE|INSTALL\.md|icons\/[\w-]+(?:@[12]x)?\.png)$/.test(name))throw new Error(`不允许打包文件：${name}`);entries[name]=new Uint8Array(await fs.readFile(absolute));}
+      if(item.isDirectory()){if(!['icons','relay'].includes(name))throw new Error(`不允许打包目录：${name}`);await collect(absolute,name+'/');}
+      else {if(!/^(manifest\.json|index\.html|main\.js|style\.css|THIRD_PARTY_NOTICES\.txt|LICENSE|INSTALL\.md|icons\/[\w-]+(?:@[12]x)?\.png|relay\/(ps-ai-gateway\.mjs|start-ps-ai-relay\.(cmd|ps1)))$/.test(name))throw new Error(`不允许打包文件：${name}`);entries[name]=new Uint8Array(await fs.readFile(absolute));}
     }
   }
   await collect(directory);

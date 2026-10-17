@@ -1,4 +1,5 @@
 import {createServer} from 'node:http';
+import {timingSafeEqual} from 'node:crypto';
 import {UUID,UPLOAD} from '../../src/gateway-protocol';
 import {createJobService} from '../application/jobs';
 import type {JobServiceOptions} from '../application/jobs';
@@ -6,7 +7,7 @@ import {ServiceError} from '../shared/errors';
 import {MAX_INPUT_BYTES} from '../shared/images';
 import {readBody,writeJson} from './messages';
 
-export type GatewayOptions=JobServiceOptions;
+export type GatewayOptions=JobServiceOptions & {token?:string;configure?:(apiKey:string)=>Promise<void>;shutdown?:()=>void};
 export async function createGateway(options:GatewayOptions){
   const jobs=await createJobService(options),store=jobs.store;
   const handlers=new Set<Promise<void>>();let closing=false;
@@ -14,7 +15,15 @@ export async function createGateway(options:GatewayOptions){
     if(closing)throw new ServiceError(503,'connection','Gateway is shutting down; recover the original task ID');
     const port=(server.address() as any)?.port;
     if(![`localhost:${port}`,`127.0.0.1:${port}`].includes(req.headers.host??'')||(req.headers.origin&&req.headers.origin!=='null'))throw new ServiceError(403,'forbidden','This gateway accepts local plugin requests only');
+    if(options.token){const received=Buffer.from(req.headers.authorization??''),expected=Buffer.from(`Bearer ${options.token}`);if(received.length!==expected.length||!timingSafeEqual(received,expected))throw new ServiceError(401,'authentication','Local relay authentication required');}
     const route=req.url??'';
+    if(req.method==='POST'&&route==='/psai/v1/configure'&&options.token&&options.configure){
+      if(!/^application\/json(?:;|$)/.test(req.headers['content-type']??''))throw new ServiceError(415,'invalid-input','Expected application/json');
+      let value:any;try{value=JSON.parse(new TextDecoder().decode(await readBody(req,2048)));}catch{throw new ServiceError(400,'invalid-input','Invalid configuration');}
+      if(!value||Object.keys(value).length!==1||typeof value.apiKey!=='string'||value.apiKey.length>512||/[^\x21-\x7e]/.test(value.apiKey))throw new ServiceError(400,'invalid-input','Expected only a printable API key, or an empty key to clear');
+      await options.configure(value.apiKey);writeJson(res,200,{configured:jobs.capabilities().configured});return;
+    }
+    if(req.method==='POST'&&route==='/psai/v1/shutdown'&&options.token&&options.shutdown){await readBody(req,1024);writeJson(res,200,{stopping:true});setTimeout(options.shutdown,0);return;}
     if(req.method==='GET'&&route==='/psai/v1/capabilities'){writeJson(res,200,jobs.capabilities());return;}
     const input=route.match(/^\/psai\/v1\/uploads\/([^/]+)$/);
     if(req.method==='PUT'&&input){

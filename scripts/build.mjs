@@ -23,4 +23,7 @@ await fs.copyFile('LICENSE','dist/plugin/LICENSE');
 console.log('Built dist/plugin (UXP; Photoshop/UXP are the only external modules).');
 await fs.mkdir('dist/gateway',{recursive:true});await fs.writeFile('dist/gateway/ps-ai-gateway.mjs',await gatewayBundle(process.cwd()));
 await fs.writeFile('dist/gateway/THIRD_PARTY_NOTICES.txt',notices);await fs.copyFile('LICENSE','dist/gateway/LICENSE');
+await fs.mkdir('dist/plugin/relay',{recursive:true});
+await fs.copyFile('dist/gateway/ps-ai-gateway.mjs','dist/plugin/relay/ps-ai-gateway.mjs');
+for(const file of ['start-ps-ai-relay.cmd','start-ps-ai-relay.ps1'])await fs.copyFile('scripts/relay/'+file,'dist/plugin/relay/'+file);
 console.log('Built dist/gateway/ps-ai-gateway.mjs (Node.js 24; no local ComfyUI required).');
