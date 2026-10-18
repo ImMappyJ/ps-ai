@@ -13,13 +13,13 @@ import {diagnostic,DiagnosticError} from '../diagnostics/diagnostics';import typ
 import {GatewayClient} from '../infrastructure/backends/gateway-client';
 import {DEFAULT_GATEWAY_MODEL,GATEWAY_TEMPLATE,validateGeneration} from '../infrastructure/backends/gateway-protocol';
 import type {GatewayCapabilities,GenerationRequest} from '../infrastructure/backends/gateway-protocol';
-import {RelightSession,RelightDraftStore,relightTaskMetadata,type FrozenRelightSubmission,type RelightTaskMetadata} from '../features/relight/relight-session';
+import {RelightSession,RelightDraftStore,relightTaskMetadata,type FrozenRelightSubmission,type RelightTaskMetadata,type RelightScope} from '../features/relight/relight-session';
 import {RelightWorkbench,type RelightResult} from '../features/relight/relight-workbench';
 import {compileRelightScene,validateRelightScene,type RelightScene,type RelightCapabilities} from '../features/relight/relight-scene';
 import {decomposeRelightCompensation} from '../features/relight/relight-compensation';
 import {PanelViews,CandidatePreview,SourceCaption,localValidationMessage,createCandidateCard,setCandidateCardState,displayPreview as preview} from './panel-view';
 declare const require:(name:string)=>any;
-const ps=require('photoshop'),uxp=require('uxp'),store=new Storage(uxp),sourceColorReader=createSourceColorReader(uxp),adapter=new PhotoshopAdapter(ps,uuid(),stage=>store.trace(stage),async(doc,file)=>{if(!file)status(t('请选择当前文档的原文件，以读取保存的色彩信息'));return sourceColorReader(doc,file);});
+const ps=require('photoshop'),uxp=require('uxp'),store=new Storage(uxp),sourceColorReader=createSourceColorReader(uxp,{storage:store,onPicker:()=>status(t('请选择当前文档的原文件，以读取保存的色彩信息')),onStatus:sourceAccessStatus}),adapter=new PhotoshopAdapter(ps,uuid(),stage=>store.trace(stage),sourceColorReader);
 let settings:BackendSettings=defaultSettings(),settingsReady=false,client:ComfyClient|GatewayClient=new ComfyClient(),coordinator=new JobCoordinator(client,store);
 const relay=new RelayController(uxp),relayTokens=new Map<PlatformId,string>();
 let draftConnections:BackendSettings['connections'],displayedConnection:ConnectionId='comfyui',keyRequest=0;
@@ -51,6 +51,7 @@ let candidates:Candidate[]=[];
 let taskActive=false,taskSucceeded=false,batchPosition='';
 let connectionState='未连接';
 let operationStage:Stage='connection',setupStep=1,checkedSetup='';
+let sourceAccessMessage='',sourceAccessNotice=0,sourceAccessOperation=0;
 const overriddenChecks=new Map<string,boolean>();
 let promptKind:'ordinary'|'blend'='ordinary';
 const promptDrafts={ordinary:'',blend:''};
@@ -74,6 +75,8 @@ function renderSetup(){
 function showSetup(step=1){setupStep=step;views.show('settings');el('setup-body').style.display='block';renderSetup();}
 function connection(value:string){connectionState=value;el('connection').textContent=t(value);}
 function status(text:string){el('status').textContent=errorText(text);el('status').style.display='block';}
+function sourceAccessStatus(message:string){sourceAccessNotice++;sourceAccessMessage=message;el('source-access-status').textContent=t(message);}
+function relightScope():RelightScope {const scope=el('relight-scope').value;if(scope!=='selection'&&scope!=='document')throw new Error(t('布光范围无效，请重新选择'));return scope;}
 function taskPhase(text:string,percent=0){el('task-progress').style.display='block';el('task-progress').setAttribute('aria-busy',String(taskActive));el('progress-label').textContent=batchPosition+text;el('progress-bar').setAttribute('value',String(percent));relightWorkbench?.progress(batchPosition+text);}
 function startTask(){taskActive=true;taskSucceeded=false;batchPosition='';taskPhase(t("准备任务…"));}
 function endTask(){taskActive=false;taskPhase(taskSucceeded?t("候选已保存"):el('status').textContent,taskSucceeded?100:0);}
@@ -118,7 +121,7 @@ function candidateUi(){
 }
 function invalidateCapture(){capture=undefined;const visible=el('selection-previews').style.display!=='none';el('selection-previews').style.display='none';if(visible)sourceCaption.show('范围参数已改变，请重新预览选区');}
 function setWorkspace(value:Workspace,mode=modes[value][0][0]){if(workspace!==value||el('mode').value!==mode)invalidateCapture();workspace=value;const select=el('mode');select.innerHTML='';for(const [id,label] of modes[value])option(select,id,label);select.value=mode;for(const w of ['local','cosplay','t2i'])el(`tab-${w}`).className=w===value?'active':'';if(value==='t2i')el('destination').value='document';else el('destination').value='selection';inputUi();}
-function lock(value:boolean){busy=value;for(const id of ['generate','capture','protect','clear-protection','reference','clear-reference','tab-local','tab-cosplay','tab-t2i','mode','prompt','output-depth','usage','guide','preserve-alpha','align-subject','match-color','destination','count','steps','resolution','seed','lock-seed','margin','p0','recover','load-history','repeat-history','apply','new-document','connect','scan-models','save-settings','import-settings','export-settings','model-unet','model-clip','model-vae','backend-url','backend-kind','gateway-model','api-key','save-key','clear-key','stop-relay','language','open-setup','close-setup','setup-connect','setup-check','setup-example'])el(id).disabled=value;el('cancel').disabled=!value&&!(current&&PENDING_STATES.includes(current.state));candidateUi();renderSetup();inputUi();relightWorkbench?.refreshAvailability();}
+function lock(value:boolean){busy=value;for(const id of ['generate','capture','protect','clear-protection','reference','clear-reference','tab-local','tab-cosplay','tab-t2i','mode','prompt','output-depth','usage','guide','preserve-alpha','align-subject','match-color','destination','count','steps','resolution','seed','lock-seed','margin','p0','recover','load-history','repeat-history','apply','new-document','connect','scan-models','save-settings','import-settings','export-settings','model-unet','model-clip','model-vae','backend-url','backend-kind','gateway-model','api-key','save-key','clear-key','stop-relay','language','open-setup','close-setup','setup-connect','setup-check','setup-example','relight-scope','remember-source-access','forget-source-access'])el(id).disabled=value;el('cancel').disabled=!value&&!(current&&PENDING_STATES.includes(current.state));candidateUi();renderSetup();inputUi();relightWorkbench?.refreshAvailability();}
 function showGatewayModels(selected=settings.gatewayModel??DEFAULT_GATEWAY_MODEL){const select=el('gateway-model');select.innerHTML='';for(const id of new Set([selected,...(gatewayCatalogBase===el('backend-url').value?gatewayCatalog?.models.map(m=>m.id)??[]:[])]))option(select,id,id);select.value=selected;}
 function showSettings(available?:Record<'unet'|'clip'|'vae',string[]>,value=settings) {for(const key of ['unet','clip','vae'] as const){const select=el(`model-${key}`);select.innerHTML='';for(const name of new Set([value.models[key],...(available?.[key]??[])]))option(select,name,name);select.value=value.models[key];}displayedConnection=connectionId(value);draftConnections=value.connections;el('backend-kind').value=displayedConnection;el('backend-url').value=value.baseUrl;el('output-depth').value=String(value.outputDepth??8);showGatewayModels(value.gatewayModel??(isPlatform(displayedConnection)?PLATFORMS[displayedConnection].model:DEFAULT_GATEWAY_MODEL));el('api-key').value='';void keyStatus();inputUi();}
 async function saveSettings(value:unknown){const next=rememberConnection(validateSettings(value));await store.json('settings.json',next);settings=next;client=backendClient(settings);coordinator=new JobCoordinator(client,store);settingsReady=true;restoreSettingsLanguage();showSettings();connection('待检查');status(t(settings.backend==='gateway'?'平台配置已保存；请连接检查模型与 Key。':"模型配置已保存，请连接检查；文件名可迁移，模型权重需在后端准备"));}
@@ -136,7 +139,8 @@ function renderLanguage(){
   }
   connection(connectionState);sourceCaption.render();
   // UXP keeps the collapsed caption when existing option text is edited.
-  for(const id of ['usage','destination','output-depth','backend-kind']){
+  el('source-access-status').textContent=t(sourceAccessMessage);
+  for(const id of ['usage','destination','output-depth','backend-kind','relight-scope']){
     const select=el(id),value=select.value;
     const items=Array.from(select.querySelectorAll('option')) as HTMLOptionElement[];
     const labels=items.map(node=>[node.getAttribute('value')!,node.getAttribute('data-i18n')!]);
@@ -159,14 +163,14 @@ async function captureArea(expectedDocumentId=activeDocumentId(),showPreview=tru
   if(protection&&capture.workingCopyOf===protection.documentId)protection={...protection,documentId:s.documentId};
   sourceCaption.show({documentId:s.documentId,width:image.width,height:image.height,protectedArea:!!protection,profile:s.profile,colorReason:s.colorReason});el('source-preview').src=await preview(image);el('mask-preview').src=await preview(rangePreview(image,s.mask,capture.protectionMask));if(showPreview)el('selection-previews').style.display='flex';
 }
-async function captureRelight(expectedDocumentId=activeDocumentId()):Promise<Capture>{
+async function captureRelight(expectedDocumentId=activeDocumentId(),scope:RelightScope=relightScope()):Promise<Capture>{
   const previous=activeDocumentId();
   if(expectedDocumentId===undefined)throw new Error(t('请先打开 Photoshop 文档并建立选区'));
   const target=Array.from(ps.app.documents as any[]).find(d=>d.id===expectedDocumentId);
   if(!target)throw new Error(t('来源文档已关闭，候选已保留'));
   if(previous!==expectedDocumentId)await ps.core.executeAsModal(async()=>{ps.app.activeDocument=target;},{commandName:'PS-AI relight source'});
   try {
-    const captured=await adapter.capture(Number(el('margin').value)/100,protection,expectedDocumentId,outputDepth(),{preserveNativeDepth:true});
+    const captured=await adapter.capture(Number(el('margin').value)/100,protection,expectedDocumentId,outputDepth(),{selection:scope==='document'?'document':'edit',preserveNativeDepth:true});
     if(protection&&captured.workingCopyOf===protection.documentId)protection={...protection,documentId:captured.snapshot.documentId};
     return captured;
   }finally{const prior=Array.from(ps.app.documents as any[]).find(d=>d.id===previous);if(prior&&previous!==expectedDocumentId)await ps.core.executeAsModal(async()=>{ps.app.activeDocument=prior;},{commandName:'PS-AI restore document'});}
@@ -178,21 +182,21 @@ function relightResults():RelightResult[]{
 function candidateById(id:string):Candidate {const candidate=candidates.find(c=>c.job.id===id);if(!candidate)throw new Error(t('此 AI 结果已离开内存，请从历史重新读取后应用'));return candidate;}
 async function exportCandidate(id:string):Promise<void>{const c=candidateById(id),file=await uxp.storage.localFileSystem.getFileForSaving(`ps-ai-${c.job.id.slice(0,8)}.png`,{types:['png']});if(file)await file.write(new Uint8Array(c.bytes).buffer,{format:uxp.storage.formats.binary});}
 export async function openRelightWorkbench(reuse?:RelightScene,description?:string):Promise<void>{
-  if(relightWorkbench&&!reuse&&description===undefined){relightWorkbench.setSourceInvalid(!!relightSession&&adapter.applicationMode(relightSession.sourceCapture.snapshot)==='unavailable');relightWorkbench.show();return;}
+  if(relightWorkbench&&!reuse&&description===undefined){relightWorkbench.setSourceInvalid(!!relightSession&&adapter.applicationMode(relightSession.sourceCapture.snapshot)==='unavailable');relightWorkbench.setScopePending(relightScope()!==relightSession?.scope);relightWorkbench.show();return;}
   if(typeof el('relight-dialog')?.uxpShowModal!=='function')throw new Error(t('当前宿主无法打开布光对话框，请使用 Photoshop 27+ 并重新加载开发插件'));
   if(busy)throw new Error(t('请等待当前任务结束后重新读取原图'));
   lock(true);
   try {
-    operationStage='capture';const fresh=await captureRelight();relightMargin=Number(el('margin').value)/100;
-    relightSession=new RelightSession(fresh,uuid(),uuid());capture=relightSession.sourceCapture;
+    operationStage='capture';const scope=relightScope(),fresh=await captureRelight(undefined,scope);relightMargin=Number(el('margin').value)/100;
+    relightSession=new RelightSession(fresh,uuid(),uuid(),scope);capture=relightSession.sourceCapture;
     if(reuse)relightSession.restore(reuse,true);
     if(description!==undefined)relightSession.editor.updateScene({supplement:description});
     const session=relightSession;
     relightWorkbench=new RelightWorkbench(el('relight-dialog'),session,{
       uuid,save:scene=>relightDrafts.save(scene),loadDraft:()=>relightDrafts.load(),busy:()=>busy,reportError:error=>void guarded(async()=>{throw error;}),
-      prepare:async(frozen)=>{if(Number(el('margin').value)/100!==relightMargin)throw new Error(t('范围参数已改变，请重新读取原图'));adapter.assertSourceCurrent(frozen.capture.snapshot);const fresh=await captureRelight(frozen.capture.snapshot.documentId);session.assertCaptureMatches(fresh);},
+      prepare:async(frozen)=>{if(relightScope()!==frozen.scope)throw new Error(t('布光范围已改变，请重新读取原图；原有布光配置已保留'));if(Number(el('margin').value)/100!==relightMargin)throw new Error(t('范围参数已改变，请重新读取原图'));adapter.assertSourceCurrent(frozen.capture.snapshot);const fresh=await captureRelight(frozen.capture.snapshot.documentId,frozen.scope);session.assertCaptureMatches(fresh);},
       generate:(frozen,onJob)=>generate(frozen,onJob),cancel:async()=>{stopBatch=true;},
-      reread:async()=>{const fresh=await captureRelight();session.rebind(fresh,uuid());capture=session.sourceCapture;relightMargin=Number(el('margin').value)/100;},
+      reread:async()=>{const scope=relightScope(),fresh=await captureRelight(undefined,scope);session.rebind(fresh,uuid(),scope);capture=session.sourceCapture;relightMargin=Number(el('margin').value)/100;},
       apply:id=>apply(id),export:exportCandidate,results:relightResults,
       diagnostics:async(id)=>{const c=candidateById(id);try{const source=decodePng(await store.readBinary(`${id}-source.png`)),target=resize(c.image,source.width,source.height),result=decomposeRelightCompensation(source,target,{colorSpace:'encoded-srgb',documentProfile:c.snapshot?.profile??'',blend:{order:'multiply-screen',opacity:1,fillOpacity:1,group:'isolated-with-base',gamma:'encoded-srgb',mask:'none'}});return t('补偿诊断：encoded sRGB，{0} 位，先 Multiply 后 Screen，量化后 RGB 绝对误差（不含 Alpha）：max={1}，mean={2}，RMSE={3}；归一化 max={4}。这不代表仅改变光照，应用仍不可用。',rasterDepth(source),result.error.code.maxAbs,result.error.code.meanAbs,result.error.code.rmse,result.error.normalized.maxAbs);}catch(error){return t('无法可靠计算补偿，请使用完整结果：{0}',error instanceof Error?error.message:String(error));}}
     });
@@ -451,6 +455,9 @@ on('reference',async()=>{const file=await uxp.storage.localFileSystem.getFileFor
 on('clear-reference',async()=>{reference=undefined;el('reference-info').setAttribute('data-i18n','未选择参考图');el('reference-info').textContent=t("未选择参考图");});
 on('open-relight',()=>openRelightWorkbench());
 on('relight-reuse-history',()=>openRelightWorkbench(relightReuse,relightReuseDescription));
+el('relight-scope').addEventListener('change',()=>{if(relightSession)relightWorkbench?.setScopePending(relightScope()!==relightSession.scope);});
+el('remember-source-access').addEventListener('change',()=>void guarded(async()=>{const operation=++sourceAccessOperation,notice=sourceAccessNotice;await sourceColorReader.setRemember(!!el('remember-source-access').checked);if(operation!==sourceAccessOperation)return;el('remember-source-access').checked=sourceColorReader.remember;if(notice===sourceAccessNotice)sourceAccessStatus(sourceColorReader.remember?'已开启记住原图文件授权；仍会重新检查文件内容和颜色声明':'已关闭记住原图文件授权；已移除保存的授权，本次会话访问仍可使用');}));
+on('forget-source-access',async()=>{const operation=++sourceAccessOperation;await sourceColorReader.forget();if(operation===sourceAccessOperation)sourceAccessStatus('已清除保存和本次会话的原图文件授权；需要时请重新选择原图');});
 on('generate',generate);on('apply',apply);on('recover',recover);
 on('cancel',async()=>{stopBatch=true;if(!busy&&current){lock(true);try{assertBackend(current);const result=await coordinator.cancel(current);if(result.state==='ready'){await saveReady(current,result.images!);status(t("任务已完成，候选已保留"));}else status(result.state==='cancelled'?t("取消已确认；生成文件保留"):t(client instanceof GatewayClient?'后续候选已停止；当前平台任务继续，完成后保留结果':"取消尚未确认，请继续恢复或取消原任务"));await refreshHistory();}finally{lock(false);}}});
 el('mode').addEventListener('change',()=>{invalidateCapture();inputUi();if(workspace==='cosplay'&&el('mode').value==='reference'){fold('reference',true);el('guide').checked=false;status(t("角色参考默认使用原图 + 参考图；范围辅助可能影响颜色，请按需试验"));}});
@@ -467,4 +474,4 @@ on('p0',async()=>{if(busy)return;lock(true);const trace:string[]=[];try{const re
 on('report',async()=>{const r=await store.readJson('p0-host-report.json',null);if(!r)throw new Error(t("请先运行 P0 图像往返验证"));const f=await uxp.storage.localFileSystem.getFileForSaving('ps-ai-p0-host-report.json',{types:['json']});if(f)await f.write(JSON.stringify(r,null,2));});
 on('export-log',async()=>{const r=await store.readJson('runtime-trace.json',null);if(!r)throw new Error(t("尚无操作阶段日志"));const f=await uxp.storage.localFileSystem.getFileForSaving('ps-ai-runtime-trace.json',{types:['json']});if(f)await f.write(JSON.stringify(r,null,2));});
 uxp.entrypoints.setup({panels:{psai:{show(){}}}});
-void guarded(async()=>{lock(true);el('cancel').disabled=true;try{const savedSettings=await store.readJson<unknown>('settings.json',null);settings=validateSettings(savedSettings??defaultSettings());client=backendClient(settings);coordinator=new JobCoordinator(client,store);settingsReady=true;el('backend-url').value=settings.baseUrl;restoreSettingsLanguage();showSettings();await refreshHistory();const records=await store.history();const pending=records.find(r=>PENDING_STATES.includes(r.state));if(pending){current=pending;status(t("找到未确认任务 {0}，请选择恢复或取消",pending.id.slice(0,8)));}try{await checkBackend(client,settings);showGatewayModels();connection('已连接');if(!savedSettings)showSetup();}catch(error){connection('未连接');showSetup();throw error;}}catch(error){showSetup();fold('settings',true);throw error;}finally{lock(false);}});
+void guarded(async()=>{lock(true);el('cancel').disabled=true;try{await sourceColorReader.ready();el('remember-source-access').checked=sourceColorReader.remember;const savedSettings=await store.readJson<unknown>('settings.json',null);settings=validateSettings(savedSettings??defaultSettings());client=backendClient(settings);coordinator=new JobCoordinator(client,store);settingsReady=true;el('backend-url').value=settings.baseUrl;restoreSettingsLanguage();showSettings();await refreshHistory();const records=await store.history();const pending=records.find(r=>PENDING_STATES.includes(r.state));if(pending){current=pending;status(t("找到未确认任务 {0}，请选择恢复或取消",pending.id.slice(0,8)));}try{await checkBackend(client,settings);showGatewayModels();connection('已连接');if(!savedSettings)showSetup();}catch(error){connection('未连接');showSetup();throw error;}}catch(error){showSetup();fold('settings',true);throw error;}finally{lock(false);}});

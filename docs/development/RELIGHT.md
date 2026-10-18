@@ -9,8 +9,8 @@
 | 项目 | 范围 |
 | --- | --- |
 | 宿主 | Photoshop 27+，UXP manifest v5、API v2；TypeScript/esbuild，沿用DOM与Spectrum控件 |
-| 原图 | 指定文档的可见合成图，选区外可包含上下文；不是只读活动图层，也没有新增自动分割 |
-| 范围 | 提交时固定的灰度选区 `M*(1-P)`，保护区和文档坐标不由模型决定 |
+| 原图 | 指定文档的可见合成图；当前选区带上下文，或明确选择整张图像；没有新增自动分割 |
+| 范围 | 固定灰度蒙版 `M*(1-P)`；整图布光时全画布 `M=255`，保护区与文档坐标不由模型决定 |
 | 布光控制 | 点光、聚光、平行光和全局环境光；通过语义文本表达，不是供应商的逐灯控制API |
 | 原生窗口 | PS27实测大尺寸UXP dialog、PNG dataURL、绝对定位DOM标记和pointer capture拖动可用 |
 | 原生操作限制 | 打开的dialog内调用既有图层回写会失败；必须关窗后短暂捕获/回写，再恢复工作台 |
@@ -24,6 +24,16 @@
 API依据：[Adobe UXP modal dialogs](https://developer.adobe.com/uxp/guides/how-to/add-modal-dialogs/)、[executeAsModal](https://developer.adobe.com/photoshop/uxp/2022/ps-reference/media/executeasmodal)、[Imaging API](https://developer.adobe.com/photoshop/uxp/2022/ps_reference/media/imaging/)。dialog会阻止宿主交互；生成时可关闭编辑窗口，稍后重开恢复配置。
 
 ## 场景与坐标
+
+入口控件 `relight-scope` 默认 `selection`；`document` 为明确的整图选择。`CaptureOptions.selection='document'` 构建全画布可编辑蒙版，不读写 Photoshop 选区；它与溶图的 `context='document', selection='edit'`、主体背景重建分别处理。整图布光不要求主体选区外存在环境，原生 16 位样本与部分灰度保护仍保留。
+
+捕获先检查必要选区边界及处理像素预算，再允许原文件选择框出现；异步文件访问后，在捕获 modal 内重新检查来源文档和选区。缺选区使用 `selection-required` 诊断码，中英文指引建立选区或明确选择整张图像。授权期间选区或来源变化，会在建立工作副本、读取像素、上传之前停止。当前文档 ICC 始终优先；即使名称为 sRGB，显式 NONE 配置类型也不能放行。
+
+`RelightSession` 与 `FrozenRelightSubmission` 在本地保留所选范围，不增加供应商字段或布光场景 JSON 字段。重开保留此范围、来源及编辑；更改入口控件后，必须明确重新读取／绑定才能生成，读取失败保留原绑定。重读保留已编辑光源，建立新的来源快照。工作台显示实际来源名称／文档 ID、冻结范围；初次产生带 ICC 的工作副本时，也显示原文档 ID。草稿和历史场景复用沿用当前明确选择的捕获策略，旧历史不需要新场景版本。
+
+原文件授权按规范化的精确原生路径复用会话 FileEntry。可选“记住原图文件授权”在私有 `source-file-access.json` 中保存经 schema 检查的偏好与最多 32 组路径／令牌，与可迁移设置分开。令牌只来自用户选择的条目，使用 `createPersistentToken`／`getEntryForPersistentToken` 保存恢复，不使用任意 file URL 或扩大文件系统权限。开启时也保存本次已授权的条目。每次仍重新读取有大小限制的真实字节，并经 reader 和 adapter 核对路径、尺寸、原生位深，不缓存像素或颜色结论。失效授权单次操作最多回退一次选择框。令牌／存储失败保留当前可用读取，并显示不含私密路径或令牌的恢复指引。
+
+取消记住会保留会话访问、移除已保存授权；清除按钮同时移除会话访问。偏好与清除写入排在进行中的令牌写入后，修订号阻止旧读取／旧令牌创建恢复已清除授权。移除失败必须保持可见的失败状态并保留有用的会话访问，不能宣称已删除持久授权。此次捕获／授权／范围修复只有自动 mock 回归，安装面板授权、原生捕获／回填／撤销与当前宿主 ICC 状态仍待单独授权验收。
 
 唯一结构化状态为版本1的 `RelightScene`，参数版本为1。来源绑定包含文档、来源图层ID、会话、历史、像素摘要、快照标识、原生尺寸、处理范围、ICC/模式/位深与蒙版引用。来源图层ID用于描述可见合成的来源，不改变实际捕获方式。图像和二进制蒙版不嵌入场景JSON，密钥不进入场景或任务历史。
 

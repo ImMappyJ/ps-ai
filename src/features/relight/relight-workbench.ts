@@ -3,6 +3,7 @@ import {RELIGHT_LIMITS,createRelightScene,normalizedToViewport,viewportToNormali
 import {prepareRelightPreview,renderRelightPreview,type RelightPreparedPreview} from './relight-preview';
 import {RelightSession,type FrozenRelightSubmission} from './relight-session';
 import {t,errorText} from '../../localization/i18n';
+import {DiagnosticError,diagnostic} from '../../diagnostics/diagnostics';
 
 export interface RelightResult {jobId:string;fingerprint:string;image:Raster;warning?:string}
 export interface RelightWorkbenchHost {
@@ -45,7 +46,7 @@ export class RelightWorkbench {
   private tab:Tab='illustration';private markersVisible=true;private panMode=false;private advanced=false;
   private viewport:RelightViewport={clientRect:{left:0,top:0,width:1,height:1},fitScale:1,zoom:1,panX:0,panY:0};
   private visible=false;private transitioning=false;private pending=false;private nativeBusy=false;private lifecycle=0;
-  private request?:RequestOwner;private selectedResult?:string;private lastStatus='';private parameterStatus=false;private warnings:string[]=[];private acknowledged=false;private sourceInvalid=false;
+  private request?:RequestOwner;private selectedResult?:string;private lastStatus='';private parameterStatus=false;private warnings:string[]=[];private acknowledged=false;private sourceInvalid=false;private scopePending=false;
   private pendingDraft?:RelightScene;private invalid=new Set<string>();private invalidLightId:string|null=null;private afterClose?:()=>Promise<void>;
   private listeners:Array<()=>void>=[];private drag?:Drag;private preview?:RelightPreparedPreview;
   private originalUrl='';private illustrationUrl='';private resultUrl='';private resultUrlId='';
@@ -58,6 +59,7 @@ export class RelightWorkbench {
   get isGenerating():boolean{return this.pending;}
   refreshAvailability():void {if(this.visible)this.refresh();}
   setSourceInvalid(invalid:boolean):void {this.sourceInvalid=invalid;if(invalid)this.message(t('来源已关闭或改变，请重新读取原图；布光配置和已有结果仍保留'));if(this.visible)this.refresh();}
+  setScopePending(pending:boolean):void {const previous=this.scopePending;this.scopePending=pending;if(pending)this.message(t('布光范围已改变，请重新读取原图；原有布光配置已保留'));else if(previous&&!this.sourceInvalid)this.message(t('编辑布光不会发起 AI 请求；主动点击生成'));if(this.visible)this.refresh();}
   private el(id:string):any{return this.dialog.querySelector(`#relight-${id}`);}
   private listen(node:any,name:string,fn:(event:any)=>void):void {node.addEventListener(name,fn);this.listeners.push(()=>node.removeEventListener(name,fn));}
   private click(id:string,fn:()=>void|Promise<void>):void {this.listen(this.el(id),'click',()=>void this.guard(fn));}
@@ -107,7 +109,7 @@ export class RelightWorkbench {
     }catch(error){throw new Error(t('布光工作台打开失败，请关闭后重新加载插件：{0}',error instanceof Error?error.message:String(error)));}
     finally {this.visible=false;this.cleanup();}
     const action=this.afterClose;this.afterClose=undefined;
-    if(action){this.transitioning=true;try{await action();}catch(error){this.message(error instanceof Error?error.message:String(error));}finally{this.transitioning=false;this.show();}}
+    if(action){this.transitioning=true;try{await action();}catch(error){this.message(error instanceof DiagnosticError&&error.code==='selection-required'?diagnostic(error,'capture').action:error instanceof Error?error.message:String(error));}finally{this.transitioning=false;this.show();}}
     else {this.lifecycle++;if(this.request)this.request.cancelled=true;await this.save().catch(error=>this.message(t('布光草稿保存失败，请重新打开后点击保存：{0}',error instanceof Error?error.message:String(error))));}
   }
   private closeForNative(action:()=>Promise<void>):void {
@@ -117,7 +119,7 @@ export class RelightWorkbench {
     this.dialog.close('native-operation');
   }
   private generate():void {
-    if(this.pending||this.nativeBusy||this.sourceInvalid)return;
+    if(this.pending||this.nativeBusy||this.sourceInvalid||this.scopePending)return;
     this.assertHostIdle();
     if(this.invalid.size)throw new ParameterValidationError(t('请先修正标记为无效的参数，再生成'));
     const frozen=this.session.freeze(),owner:RequestOwner={lifecycle:this.lifecycle,fingerprint:frozen.fingerprint,ids:new Set(),cancelled:false};
@@ -172,7 +174,7 @@ export class RelightWorkbench {
     this.click('save',async()=>{await this.save();this.message(t('布光草稿已保存'));});
     this.click('load-draft',async()=>{const scene=await this.host.loadDraft();if(!scene)throw new Error(t('尚无保存的布光草稿'));try{this.session.restore(scene);this.selectedResult=undefined;this.changed();}catch(error){this.pendingDraft=scene;this.refresh();throw error;}});
     this.click('reuse-draft',()=>{if(this.pendingDraft){this.session.restore(this.pendingDraft,true);this.pendingDraft=undefined;this.selectedResult=undefined;this.changed();this.message(t('已明确将保存的布光复用到当前快照，请检查位置后生成'));}});
-    this.click('reread',()=>this.closeForNative(async()=>{await this.host.reread();this.sourceInvalid=false;this.selectedResult=undefined;this.pendingDraft=undefined;this.message(t('原图已重新读取，布光已绑定新快照；请检查位置后生成'));await this.save();}));
+    this.click('reread',()=>this.closeForNative(async()=>{await this.host.reread();this.sourceInvalid=false;this.scopePending=false;this.selectedResult=undefined;this.pendingDraft=undefined;this.message(t('原图已重新读取，布光已绑定新快照；请检查位置后生成'));await this.save();}));
     this.click('generate',()=>this.generate());
     this.click('cancel',async()=>{if(this.request)this.request.cancelled=true;await this.host.cancel();this.message(t('已请求取消或停止后续候选；平台当前任务可能继续并计费，结果保留在历史中'));this.refresh();});
     this.click('apply',()=>{this.assertHostIdle();const r=this.result();if(!r)throw new Error(t('请先选择实际 AI 结果'));if(this.el('output').value!=='full')throw new Error(t('补偿应用尚未通过验收，请使用完整结果层'));this.closeForNative(async()=>{await this.host.apply(r.jobId);this.message(t('完整结果已应用；可编辑蒙版并一次撤销'));});});
@@ -222,7 +224,9 @@ export class RelightWorkbench {
     this.reconcileInvalid(light);
     if(this.parameterStatus&&!this.invalid.size)this.message(t('编辑布光不会发起 AI 请求；主动点击生成'));
     const defaults=createRelightScene(scene.source,'color-default');
-    this.el('source').textContent=t('可见合成 · 文档 {0} · {1}×{2} · {3} · {4} 位',scene.source.documentId,scene.source.bounds.right-scene.source.bounds.left,scene.source.bounds.bottom-scene.source.bounds.top,scene.source.profile,scene.source.documentDepth);
+    const captured=this.session.sourceCapture;
+    this.el('source').textContent=t('可见合成 · 文档 {0} · {1}×{2} · {3} · {4} 位',scene.source.documentId,scene.source.bounds.right-scene.source.bounds.left,scene.source.bounds.bottom-scene.source.bounds.top,scene.source.profile,scene.source.documentDepth)+(captured.documentName?` · ${captured.documentName}`:'')+t(this.session.scope==='document'?' · 整张图像（减去保护区）':' · 当前选区（减去保护区）')+(captured.workingCopyOf===undefined?'':t(' · sRGB 工作副本，原文档 {0}',captured.workingCopyOf));
+    this.el('scope-info').textContent=t(this.session.scope==='document'?'作用范围：捕获时的整张图像减去保护区。位置与 Z 为图像相对意图，并非已恢复的三维结构。':'作用范围：捕获时的选区减去保护区。位置与 Z 为图像相对意图，并非已恢复的三维结构。');
     this.el('lights').innerHTML='';scene.lights.forEach((l,i)=>{const row=doc.createElement('div');row.className='relight-light-row'+(l.id===light?.id?' selected':'');const select=doc.createElement('button');select.className='relight-light-name';select.setAttribute('data-light-id',l.id);const swatch=doc.createElement('span');swatch.className='relight-swatch';swatch.style.backgroundColor=l.color.mode==='custom'?l.color.hex:l.color.kelvin<5000?'#F6C78A':l.color.kelvin>6500?'#A5C7FF':'#FFFFFF';select.appendChild(swatch);const text=doc.createElement('span');text.textContent=`${i+1}. ${l.name}${l.enabled?'':t('（已禁用）')}`;select.appendChild(text);row.appendChild(select);const find=doc.createElement('button');find.className='relight-find';find.textContent=t('找回');find.setAttribute('data-light-id',l.id);find.setAttribute('data-find','true');row.appendChild(find);this.el('lights').appendChild(row);});
     this.el('selected').style.display=light?'block':'none';
     const set=(id:string,value:unknown)=>{if(doc.activeElement!==this.el(id)&&!this.invalid.has(id))this.el(id).value=String(value);};
@@ -244,7 +248,7 @@ export class RelightWorkbench {
     this.el('zoom-label').textContent=`${Math.round(this.viewport.zoom*100)}%`;
     for(const tab of ['original','illustration','result'])this.el(`tab-${tab}`).className=this.tab===tab?'active':'';
     const sharedBusy=!!this.host.busy?.();
-    this.el('generate').disabled=this.pending||this.nativeBusy||this.sourceInvalid||sharedBusy;this.el('cancel').disabled=!this.pending;
+    this.el('generate').disabled=this.pending||this.nativeBusy||this.sourceInvalid||this.scopePending||sharedBusy;this.el('cancel').disabled=!this.pending;
     const result=this.result();this.el('apply').disabled=this.pending||this.nativeBusy||this.sourceInvalid||sharedBusy||!result||!!result.warning;this.el('export').disabled=!result;this.el('compensation').disabled=!result;this.el('reread').disabled=this.pending||this.nativeBusy||sharedBusy;
     this.el('stale').textContent=result&&result.fingerprint!==this.session.fingerprint?t('布光已修改，当前结果尚未更新；应用仍使用该结果提交时的配置'):'';
     this.el('warnings').textContent=[...this.warnings.map(warningText),...(result?.warning?[errorText(result.warning)]:[])].join('\n');this.el('acknowledge').style.display=this.warnings.some(w=>/Resolve this conflict/.test(w))?'block':'none';this.el('acknowledge').checked=this.acknowledged;

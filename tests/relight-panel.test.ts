@@ -1,13 +1,83 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {panelHarness} from './uxp-harness';
-import {decodePng,convertDepth,resize} from '../src/imaging/image';
+import {decodePng,encodePng,convertDepth,resize} from '../src/imaging/image';
 import {defaultSettings} from '../src/infrastructure/config/profile';
 import fs from 'node:fs/promises';
 import {sceneFingerprint} from '../src/features/relight/relight-scene';
 
 async function open(h:Awaited<ReturnType<typeof panelHarness>>){await h.wait();h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');h.el('resolution').value='32';h.click('open-relight');await new Promise(r=>setTimeout(r,80));}
 async function draft(h:Awaited<ReturnType<typeof panelHarness>>){h.click('relight-save');await new Promise(r=>setTimeout(r,15));return JSON.parse(String(h.files['relight-draft.json'])).scene;}
+
+test('relight missing-selection guidance appears before file authorization and points at the explicit whole-image choice',async()=>{
+  const h=await panelHarness({untaggedSource:{bytes:encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)})}});try{
+    await h.wait();h.setSelection({bounds:null as any,mask:new Uint8Array(4)});h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');
+    assert.equal(h.el('relight-scope')?.value,'selection');h.click('open-relight');await h.wait();
+    assert.equal(h.sourceAccessEvents.length,0);assert.match(h.el('diagnostic-summary').textContent,/整张图像/);assert.equal(JSON.parse(h.el('diagnostic-details').value).code,'selection-required');
+    assert.equal(h.uploads.length,0);assert.equal(h.ps.app.documents.length,1);
+  }finally{await h.close();}
+});
+
+test('whole-image relight freezes opaque native16 and protection without reading a Photoshop selection',async()=>{
+  const source={width:2,height:2,rgba:new Uint16Array([12345,23456,34567,65535,21000,31000,41000,65535,1000,3000,5000,65535,60000,50000,40000,65535])};
+  const h=await panelHarness({source});try{
+    await h.wait();h.ps.app.activeDocument.name='Lighting source';h.setSelection({bounds:{left:0,top:0,right:2,bottom:2},mask:new Uint8Array([0,128,0,0])});h.click('protect');await h.wait();const reads=h.captured.length;
+    h.setSelection({bounds:null as any,mask:new Uint8Array(4)});h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');assert.ok(h.el('relight-scope'));
+    h.el('relight-scope').value='document';h.change('relight-scope');h.el('resolution').value='32';h.click('open-relight');await new Promise(r=>setTimeout(r,80));
+    assert.ok(h.el('relight-dialog').hasAttribute('open'));assert.match(h.el('relight-source').textContent,/Lighting source.*整张图像/);
+    h.click('relight-generate');await h.wait();assert.equal(h.posts.length,1);assert.equal(h.captured.length,reads);
+    const job=h.records()[0],saved=decodePng(h.files[`${job.id}-source.png`] as Uint8Array);assert.ok(saved.rgba instanceof Uint16Array);assert.equal(saved.rgba[0],12345);
+    assert.deepEqual([...h.files[`${job.id}-mask.bin`] as Uint8Array],[255,127,255,255]);assert.equal(h.ps.app.activeDocument.selection.bounds,null);
+    assert.equal('scope' in h.posts[0],false);assert.equal('scope' in (job.relight as any).scene,false);
+  }finally{await h.close();}
+});
+
+test('a changed scope keeps the frozen caption on reopen and requires reread before generation, retaining the scene',async()=>{
+  const h=await panelHarness({selection:{bounds:{left:0,top:0,right:1,bottom:2},mask:new Uint8Array([255,0,255,0])}});try{
+    await open(h);h.el('relight-intensity').value='2.5';h.change('relight-intensity');const old=await draft(h);assert.match(h.el('relight-source').textContent,/当前选区/);
+    h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.el('relight-scope').value='document';h.change('relight-scope');h.click('open-relight');await new Promise(r=>setTimeout(r,40));
+    assert.match(h.el('relight-source').textContent,/当前选区/);assert.match(h.el('relight-status').textContent,/范围.*重新读取/);assert.equal(h.el('relight-generate').disabled,true);
+    h.click('relight-generate');await new Promise(r=>setTimeout(r,20));assert.equal(h.posts.length,0);
+    h.click('relight-reread');await new Promise(r=>setTimeout(r,70));assert.match(h.el('relight-source').textContent,/整张图像/);assert.equal(h.el('relight-intensity').value,'2.5');assert.equal(h.el('relight-generate').disabled,false);
+    const next=await draft(h);assert.notEqual(next.source.snapshotId,old.source.snapshotId);h.setSelection({bounds:null as any,mask:new Uint8Array(4)});
+    h.click('relight-generate');await h.wait();assert.equal(h.posts.length,1);assert.deepEqual([...h.files[`${h.records()[0].id}-mask.bin`] as Uint8Array],[255,255,255,255]);
+  }finally{await h.close();}
+});
+
+test('private access controls remember an already approved original, label its working copy, and clear stored grants',async()=>{
+  const h=await panelHarness({untaggedSource:{bytes:encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)})}});try{
+    await open(h);assert.match(h.el('relight-source').textContent,/sRGB 工作副本.*11/);assert.equal(!!h.el('remember-source-access')?.checked,false);
+    h.click('relight-close');await new Promise(r=>setTimeout(r,20));assert.ok(h.el('remember-source-access'));assert.equal(h.el('advanced-body').style.display,'none');
+    h.el('remember-source-access').checked=true;h.change('remember-source-access');await new Promise(r=>setTimeout(r,30));
+    const saved=JSON.parse(String(h.files['source-file-access.json']));assert.equal(saved.remember,true);assert.equal(saved.entries[0].path,'c:/mock/source.webp');assert.equal(saved.entries.length,1);
+    assert.equal(h.sourceAccessEvents.filter(v=>v==='picker').length,1);assert.equal(h.sourceAccessEvents.filter(v=>v==='token').length,1);
+    assert.doesNotMatch(String(h.files['settings.json']??''),/source-token|remember|source.webp/);
+    h.click('forget-source-access');await new Promise(r=>setTimeout(r,30));assert.deepEqual(JSON.parse(String(h.files['source-file-access.json'])).entries,[]);assert.match(h.el('source-access-status').textContent,/已清除/);
+    h.el('remember-source-access').checked=false;h.change('remember-source-access');await new Promise(r=>setTimeout(r,30));assert.equal(JSON.parse(String(h.files['source-file-access.json'])).remember,false);
+  }finally{await h.close();}
+});
+
+test('unavailable token persistence keeps actionable status and translated scope/access controls without losing the scene',async()=>{
+  const h=await panelHarness({settings:{...defaultSettings(),language:'en-US'},untaggedSource:{bytes:encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)}),tokenUnavailable:true}});try{
+    await open(h);h.el('relight-intensity').value='2.5';h.change('relight-intensity');h.click('relight-close');await new Promise(r=>setTimeout(r,20));
+    h.el('remember-source-access').checked=true;h.change('remember-source-access');await new Promise(r=>setTimeout(r,30));
+    assert.match(h.el('source-access-status').textContent,/could not be saved.*session.*continue/i);assert.doesNotMatch(h.el('source-access-status').textContent,/[一-龥]/);
+    assert.match(h.el('remember-source-access').textContent,/Remember/);assert.equal(h.el('relight-scope').displayedCaption,'Current selection');
+    h.el('relight-scope').value='document';h.change('relight-scope');h.click('open-relight');await new Promise(r=>setTimeout(r,35));assert.match(h.el('relight-source').textContent,/Current selection.*sRGB working copy/);assert.equal(h.el('relight-intensity').value,'2.5');
+    assert.match(h.el('relight-status').textContent,/scope changed.*Re-read/i);assert.equal(h.posts.length,0);
+  }finally{await h.close();}
+});
+
+test('a missing selection during reread retains frozen scope and edited lighting with bilingual scope guidance',async()=>{
+  for(const language of ['zh-CN','en-US'] as const){
+    const h=await panelHarness({settings:{...defaultSettings(),language}});try{
+      await open(h);h.el('relight-intensity').value='2.5';h.change('relight-intensity');const old=await draft(h);
+      h.setSelection({bounds:null as any,mask:new Uint8Array(4)});h.click('relight-reread');await new Promise(r=>setTimeout(r,75));
+      assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.equal(h.el('relight-intensity').value,'2.5');
+      assert.match(h.el('relight-status').textContent,language==='en-US'?/Entire image/:/整张图像/);assert.equal((await draft(h)).source.snapshotId,old.source.snapshotId);assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);
+    }finally{await h.close();}
+  }
+});
 
 test('relight opens its workbench without submitting or exposing the ordinary prompt draft',async()=>{
   const h=await panelHarness();try{

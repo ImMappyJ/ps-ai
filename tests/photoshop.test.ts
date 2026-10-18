@@ -18,6 +18,44 @@ function host() {
 }
 function snap():Snapshot {return {documentId:11,width:100,height:80,profile:'sRGB IEC61966-2.1',mode:'rgb',depth:8,historyId:91,sessionId:'session-a',bounds:{left:40,top:30,right:42,bottom:32},mask:new Uint8Array([255,128,0,255]),sourceHash:'fixture'};}
 
+test('capture reports a required selection and oversized scope before requesting source-file access',async()=>{
+  for(const oversized of [false,true]){
+    const h=host();h.doc.colorProfileName='';let reads=0;
+    if(oversized){h.doc.width=5000;h.doc.height=5000;h.doc.selection.bounds={left:0,top:0,right:5000,bottom:5000};}else h.doc.selection.bounds=null;
+    const adapter=new PhotoshopAdapter(h.ps,'session-a',async()=>{},async()=>{reads++;throw Error('picker should not open');});
+    await assert.rejects(adapter.capture(),(e:any)=>oversized?/1600/.test(e.message):e.code==='selection-required'&&e.stage==='capture');
+    assert.equal(reads,0);assert.equal(h.calls.some(c=>c[0]==='getPixels'),false);
+  }
+});
+
+test('picker-time selection removal, scope changes and source switching stop before source mutation',async()=>{
+  for(const change of ['remove','bounds','source']){
+    const h=host();h.doc.colorProfileName='';let duplicates=0;h.doc.duplicate=async()=>{duplicates++;throw Error('must not duplicate');};
+    const adapter=new PhotoshopAdapter(h.ps,'session-a',async()=>{},async()=>{
+      if(change==='remove')h.doc.selection.bounds=null;
+      if(change==='bounds')h.doc.selection.bounds={left:41,top:30,right:43,bottom:32};
+      if(change==='source'){const other={...h.doc,id:22};h.ps.app.documents.push(other);h.ps.app.activeDocument=other;}
+      return {kind:'srgb',format:'webp',width:100,height:80,depth:8,reason:'webp-default'};
+    });
+    await assert.rejects(adapter.capture(),(e:any)=>change==='remove'?e.code==='selection-required':/改变|切换/.test(e.message));
+    assert.equal(duplicates,0);assert.equal(h.calls.some(c=>c[0]==='getPixels'),false);
+  }
+});
+
+test('explicit document scope captures opaque native16 with full editable coverage minus protection without reading or changing selection',async()=>{
+  for(const depth of [8,16] as const){
+    const h=host();h.doc.width=2;h.doc.height=1;h.doc.bitsPerChannel=depth;h.doc.selection.bounds=null;h.doc.colorProfileName='Adobe RGB (1998)';
+    const pixels=depth===16?new Uint16Array([12345,23456,34567,65535,11111,22222,33333,65534]):new Uint8Array([20,30,40,255,50,60,70,255]);
+    h.ps.imaging.getSelection=async()=>{throw Error('whole-image scope must not access Photoshop selection');};
+    h.ps.imaging.getPixels=async(o:any)=>{h.calls.push(['getPixels',o]);return {imageData:{width:2,height:1,components:4,componentSize:depth,getData:async()=>pixels,dispose(){}},sourceBounds:{left:0,top:0,right:2,bottom:1}};};
+    const adapter=new PhotoshopAdapter(h.ps,'session-a',async()=>{},async()=>{throw Error('valid ICC must not request a file');});
+    const protection={documentId:11,width:2,height:1,bounds:{left:0,top:0,right:2,bottom:1},mask:new Uint8Array([0,128]),sessionId:'session-a'};
+    const c=await adapter.capture(0,protection,11,8,{selection:'document',preserveNativeDepth:true} as any);
+    assert.deepEqual(c.snapshot.bounds,{left:0,top:0,right:2,bottom:1});assert.deepEqual([...c.selectionMask],[255,255]);assert.deepEqual([...c.snapshot.mask],[255,127]);
+    assert.deepEqual([...c.image.rgba],[...pixels]);assert.equal(c.snapshot.profile,'Adobe RGB (1998)');assert.equal(h.doc.selection.bounds,null);assert.equal(h.calls.some(c=>c[0]==='batch'),false);
+  }
+});
+
 test('relight can retain native16 capture independently of selected provider output depth',async()=>{
   const h=host();h.doc.bitsPerChannel=16;
   h.ps.imaging.getPixels=async()=>({imageData:{width:1,height:1,components:4,componentSize:16,getData:async()=>new Uint16Array([12345,23456,34567,65534]),dispose(){}},sourceBounds:{left:40,top:30,right:41,bottom:31}});

@@ -15,6 +15,15 @@ test('session freezes native capture and scene independently of caller and edito
   assert.ok(frozen.capture.image.rgba instanceof Uint16Array);
 });
 
+test('relight scope is frozen locally and changes only with explicit rebind while retaining edited lights',async()=>{
+  const module=await api(),s=new module!.RelightSession(sample(),'snapshot-1','light-1');
+  s.editor.updateLight('light-1',{intensity:2.5});const frozen=s.freeze();assert.equal(frozen.scope,'selection');
+  const next=sample();next.snapshot.mask.fill(255);s.rebind(next,'snapshot-2','document');
+  assert.equal(s.scope,'document');assert.equal(s.freeze().scope,'document');assert.equal(frozen.scope,'selection');
+  assert.equal(s.editor.snapshot().lights[0].intensity,2.5);assert.equal(s.editor.snapshot().source.snapshotId,'snapshot-2');
+  assert.equal('scope' in s.editor.snapshot(),false,'scope is local capture policy, not part of provider lighting instructions');
+});
+
 test('source matching includes exact gray mask, profile, history, source pixels and original document id',async()=>{
   const module=await api();assert.ok(module?.RelightSession);
   const s=new module.RelightSession(sample(),'snapshot-1','light-1');

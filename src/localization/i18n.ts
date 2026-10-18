@@ -3,6 +3,20 @@ import type {Language} from '../infrastructure/config/profile';
 // Chinese source messages are stable keys. Model prompts and saved parameter values
 // are deliberately independent of the display language.
 export const english:Record<string,string>={
+  '布光范围':'Lighting scope','当前选区':'Current selection','整张图像':'Entire image','布光范围无效，请重新选择':'Invalid lighting scope. Choose it again.',
+  '先选择布光范围，再打开工作台。选区或整张图像减去保护区决定回填范围；更改范围后请重新读取原图。':'Choose the lighting scope before opening the workbench. The selection or entire image minus protection determines the application mask. Re-read the source after changing scope.',
+  '布光范围已改变，请重新读取原图；原有布光配置已保留':'Lighting scope changed. Re-read the source; your lighting setup is retained.',
+  ' · 整张图像（减去保护区）':' · Entire image (minus protection)',' · 当前选区（减去保护区）':' · Current selection (minus protection)',' · sRGB 工作副本，原文档 {0}':' · sRGB working copy of document {0}',
+  '作用范围：捕获时的整张图像减去保护区。位置与 Z 为图像相对意图，并非已恢复的三维结构。':'Scope: the entire captured image minus protection. Position and Z express image-relative intent, not recovered 3D geometry.',
+  '记住原图文件授权':'Remember original-file access','清除原图文件授权':'Clear original-file access',
+  '默认仅在本次会话复用已授权的原文件。勾选后在插件私有存储中保存最多 32 个文件授权；不随配置、历史或日志导出。每次仍读取实际文件并检查颜色声明。取消勾选移除保存的授权；清除按钮也移除本次会话授权。':'Approved original files are reused for this session by default. Enable this to save up to 32 file grants in private plugin storage, excluded from settings, history and logs. Actual bytes and color declarations are checked every time. Disabling removes saved grants; Clear also removes session access.',
+  '无法保存来源文件授权；本次访问仍可继续，请检查插件存储或重新授权':'Original-file access could not be saved. This session can continue; check plugin storage or authorize the file again.',
+  '未能清除保存的来源文件授权；本次访问仍可继续，请检查插件存储并重试清除':'Saved original-file access could not be cleared. This session can continue; check plugin storage and retry Clear.',
+  '无法读取保存的来源文件授权；请重新选择原图，或检查插件存储后重试':'Saved original-file access could not be read. Choose the original again, or check plugin storage and retry.',
+  '已开启记住原图文件授权；仍会重新检查文件内容和颜色声明':'Remember original-file access is enabled. File contents and color declarations will still be checked.',
+  '已关闭记住原图文件授权；已移除保存的授权，本次会话访问仍可使用':'Remember original-file access is off. Saved grants were removed; current session access remains available.',
+  '已清除保存和本次会话的原图文件授权；需要时请重新选择原图':'Saved and session original-file access was cleared. Choose the original again when needed.',
+  '需要编辑选区':'An edit selection is required','请先在 Photoshop 建立编辑选区；光影重塑也可在“布光范围”中明确选择“整张图像”，再打开工作台或重新读取原图。':'Make an edit selection in Photoshop. For Relighting, you can explicitly choose Entire image under Lighting scope, then open the workbench or re-read the source.',
   '创作':'Create','结果':'Results','设置':'Settings','设置与诊断':'Settings and diagnostics',
   '来源与范围':'Source and scope','生成与输出':'Generation and output','当前候选':'Current candidate',
   '候选 {0}':'Candidate {0}',' · 已选中':' · Selected','候选 {0} / {1} · {2}×{3} · {4}-bit':'Candidate {0} / {1} · {2}×{3} · {4}-bit',

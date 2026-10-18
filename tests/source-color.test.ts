@@ -39,3 +39,115 @@ test('file access errors stay actionable without exposing private source paths',
   const reader=createSourceColorReader({storage:{localFileSystem:{getFileForOpening:async()=>{throw new Error('access denied D:\\private\\image.webp');}}}});
   await assert.rejects(reader({path:'D:\\private\\image.webp',saved:true}),e=>e instanceof Error&&!e.message.includes('private')&&/读取|文件/.test(e.message));
 });
+
+function accessFixture(){
+  let bytes:Uint8Array=webpFixture(),picks=0,reads=0,tokens=0;let saved:any=null;
+  const path='D:\\Pictures\\test.webp',entries=new Map<string,any>();
+  const file:any={nativePath:path,isFile:true,getMetadata:async()=>({size:bytes.length}),read:async()=>{reads++;return bytes.buffer;}};
+  const uxp:any={storage:{formats:{binary:'binary'},localFileSystem:{getFileForOpening:async()=>{picks++;return file;},createPersistentToken:async(entry:any)=>{const token=`opaque-${++tokens}`;entries.set(token,entry);return token;},getEntryForPersistentToken:async(token:string)=>{if(!entries.has(token))throw Error('revoked private-token');return entries.get(token);}}}};
+  const storage:any={readJson:async()=>saved,json:async(_name:string,value:any)=>{saved=JSON.parse(JSON.stringify(value));}};
+  const doc={path,width:100,height:80,bitsPerChannel:8};
+  return {uxp,storage,doc,file,entries,counts:()=>({picks,reads,tokens}),saved:()=>saved,replace:(next:Uint8Array)=>bytes=next};
+}
+
+test('session source access reuses only the exact path and re-inspects changed bytes on every read',async()=>{
+  const h=accessFixture();let notices=0;const reader=createSourceColorReader(h.uxp,{onPicker:()=>notices++} as any);
+  assert.equal((await reader(h.doc))?.kind,'srgb');assert.equal((await reader({...h.doc,path:'d:/pictures/TEST.webp'}))?.kind,'srgb');
+  assert.deepEqual(h.counts(),{picks:1,reads:2,tokens:0});assert.equal(notices,1);
+  h.replace(webpFixture(100,80,true));assert.equal((await reader(h.doc))?.kind,'icc','old sRGB proof must never be cached');
+  h.replace(webpFixture(101,80));await assert.rejects(reader(h.doc),/尺寸|位深/);
+  h.replace(webpFixture().slice(0,-1));await assert.rejects(reader(h.doc),/颜色|结构/);
+  assert.equal(h.counts().picks,1,'invalid bytes are not an access failure that reopens the picker');
+});
+
+test('enabling private remembering persists a previously authorized handle and a fresh reader restores it',async()=>{
+  const h=accessFixture(),reader:any=createSourceColorReader(h.uxp,{storage:h.storage} as any);
+  await reader(h.doc);assert.equal(h.saved(),null);await reader.setRemember(true);
+  assert.equal(h.saved().remember,true);assert.equal(h.saved().entries.length,1);assert.equal(h.counts().tokens,1);
+  const restored:any=createSourceColorReader(h.uxp,{storage:h.storage} as any);await restored.ready();assert.equal(restored.remember,true);
+  assert.equal((await restored(h.doc))?.reason,'webp-default');assert.equal(h.counts().picks,1);assert.equal(h.counts().reads,2);
+  assert.doesNotMatch(JSON.stringify(h.saved()),/rgba|srgb|webp-default|width|height/);
+});
+
+test('revoked, moved and unreadable restored grants fall back to one exact-file picker',async()=>{
+  for(const failure of ['revoked','wrong-path','unreadable']){
+    const h=accessFixture(),first:any=createSourceColorReader(h.uxp,{storage:h.storage} as any);await first.setRemember(true);await first(h.doc);
+    const token=h.saved().entries[0].token;
+    if(failure==='revoked')h.entries.delete(token);
+    if(failure==='wrong-path')h.entries.set(token,{...h.file,nativePath:'D:\\Private\\other.webp',read:async()=>{throw Error('wrong file must not be read');}});
+    if(failure==='unreadable')h.entries.set(token,{...h.file,read:async()=>{throw Error('access denied D:\\Private\\image.webp');}});
+    const next=createSourceColorReader(h.uxp,{storage:h.storage} as any);assert.equal((await next(h.doc))?.kind,'srgb');assert.equal(h.counts().picks,2);
+  }
+});
+
+test('remembering is optional when token APIs or private storage are unavailable, preserving session reads',async()=>{
+  for(const unavailable of ['tokens','storage']){
+    const h=accessFixture(),statuses:string[]=[];
+    if(unavailable==='tokens')delete h.uxp.storage.localFileSystem.createPersistentToken;
+    if(unavailable==='storage')h.storage.json=async()=>{throw Error('private path and token must stay redacted');};
+    const reader:any=createSourceColorReader(h.uxp,{storage:h.storage,onStatus:(value:string)=>statuses.push(value)} as any);
+    await reader.setRemember(true).catch(()=>{});assert.equal((await reader(h.doc))?.kind,'srgb');assert.equal((await reader(h.doc))?.kind,'srgb');
+    assert.equal(h.counts().picks,1);assert.ok(statuses.length>0);assert.doesNotMatch(statuses.join(' '),/private path|opaque-/);
+  }
+});
+
+test('opting out removes private grants while clear also drops session handles',async()=>{
+  const h=accessFixture(),reader:any=createSourceColorReader(h.uxp,{storage:h.storage} as any);
+  await reader.setRemember(true);await reader(h.doc);await reader.setRemember(false);
+  assert.equal(h.saved().remember,false);assert.deepEqual(h.saved().entries,[]);await reader(h.doc);assert.equal(h.counts().picks,1);
+  await reader.forget();await reader(h.doc);assert.equal(h.counts().picks,2);
+});
+
+test('opt-out and clear serialize after an in-flight grant write so stale grants cannot return',async()=>{
+  for(const clear of [false,true]){
+    const h=accessFixture(),reader:any=createSourceColorReader(h.uxp,{storage:h.storage} as any);await reader.setRemember(true);
+    const write=h.storage.json;let release!:()=>void,start!:()=>void;const started=new Promise<void>(r=>start=r),barrier=new Promise<void>(r=>release=r);
+    h.storage.json=async(name:string,value:any)=>{if(value.entries.length){start();await barrier;}await write(name,value);};
+    const reading=reader(h.doc);await started;const removing=clear?reader.forget():reader.setRemember(false);release();await Promise.all([reading,removing]);
+    assert.deepEqual(h.saved().entries,[]);if(!clear)assert.equal(h.saved().remember,false);
+    await reader(h.doc);assert.equal(h.counts().picks,clear?2:1);
+  }
+});
+
+test('a read started while Clear waits for a write needs a fresh picker rather than restoring the grant being cleared',async()=>{
+  const h=accessFixture(),reader:any=createSourceColorReader(h.uxp,{storage:h.storage} as any);await reader.setRemember(true);
+  const write=h.storage.json;let release!:()=>void,start!:()=>void;const started=new Promise<void>(r=>start=r),barrier=new Promise<void>(r=>release=r);
+  h.storage.json=async(name:string,value:any)=>{if(value.entries.length){start();await barrier;}await write(name,value);};
+  const first=reader(h.doc);await started;const clearing=reader.forget(),next=reader(h.doc);
+  try{await new Promise(r=>setTimeout(r,0));assert.equal(h.counts().picks,2,'the old persistent token must disappear immediately');}
+  finally{release();await Promise.all([first,clearing,next]);}
+});
+
+test('failed Clear keeps newly authorized session handles as well as earlier useful access',async()=>{
+  const h=accessFixture(),reader:any=createSourceColorReader(h.uxp,{storage:h.storage} as any);await reader(h.doc);
+  let release!:()=>void,start!:()=>void;const started=new Promise<void>(r=>start=r),barrier=new Promise<void>(r=>release=r);
+  h.storage.json=async()=>{start();await barrier;throw Error('private storage unavailable');};
+  const clearing=reader.forget().catch(()=>{});await started;const path='D:\\Pictures\\new.webp';h.file.nativePath=path;const next=reader({...h.doc,path});
+  await new Promise(r=>setTimeout(r,0));release();await Promise.all([clearing,next]);
+  await reader({...h.doc,path});assert.equal(h.counts().picks,2,'a failed removal must not discard a newly approved handle');
+});
+
+test('failed grant removal is actionable and redacted, retaining useful authorized session access',async()=>{
+  const h=accessFixture(),reader:any=createSourceColorReader(h.uxp,{storage:h.storage} as any);await reader.setRemember(true);await reader(h.doc);
+  h.storage.json=async()=>{throw Error('cannot delete D:\\private\\opaque-1');};
+  await assert.rejects(reader.forget(),(e:any)=>/清除|clear/i.test(e.message)&&!/private|opaque-1/.test(e.message));
+  assert.equal(h.saved().entries.length,1);assert.equal((await reader(h.doc))?.kind,'srgb');assert.equal(h.counts().picks,1);
+});
+
+test('private storage rejects unknown schema, missing/native URL paths and more than 32 grants',async()=>{
+  for(const malformed of [{schemaVersion:2,remember:true,entries:[]},{schemaVersion:1,remember:true,entries:[{token:'secret'}]},{schemaVersion:1,remember:true,entries:[{path:'file:///D:/private.webp',token:'secret'}]},{schemaVersion:1,remember:true,entries:Array.from({length:33},(_,i)=>({path:`d:/pictures/${i}.webp`,token:`opaque-${i}`}))}]){
+    const h=accessFixture();h.storage.readJson=async()=>malformed;
+    const reader:any=createSourceColorReader(h.uxp,{storage:h.storage} as any);await reader.ready();assert.equal(reader.remember,false);await reader(h.doc);assert.equal(h.counts().picks,1);
+  }
+});
+
+test('source entry moved during reading cannot provide color proof for its previous path',async()=>{
+  const h=accessFixture(),reader=createSourceColorReader(h.uxp);h.file.read=async()=>{h.file.nativePath='D:\\Pictures\\other.webp';return webpFixture().buffer;};
+  await assert.rejects(reader(h.doc),/当前文档|原文件/);
+});
+
+test('private remembering remains bounded after approving more than 32 distinct native paths',async()=>{
+  const h=accessFixture(),reader:any=createSourceColorReader(h.uxp,{storage:h.storage} as any);await reader.setRemember(true);
+  for(let i=0;i<33;i++){const path=`D:\\Pictures\\${i}.webp`,entry={...h.file,nativePath:path};await reader({...h.doc,path},entry);}
+  assert.equal(h.saved().entries.length,32);assert.equal(h.saved().entries.some((e:any)=>e.path==='d:/pictures/0.webp'),false);assert.equal(h.saved().entries.some((e:any)=>e.path==='d:/pictures/32.webp'),true);
+});

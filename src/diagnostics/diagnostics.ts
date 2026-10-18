@@ -1,6 +1,6 @@
 import {ColorContractError} from '../imaging/color';
 import {t} from '../localization/i18n';
-export type DiagnosticCode='unreachable'|'missing-node'|'missing-model'|'incompatible-api'|'resource-exhausted'|'timeout'|'invalid-output'|'apply-failed'|'source-profile'|'unknown';
+export type DiagnosticCode='unreachable'|'missing-node'|'missing-model'|'incompatible-api'|'resource-exhausted'|'timeout'|'invalid-output'|'apply-failed'|'source-profile'|'selection-required'|'unknown';
 export type Stage='connection'|'environment'|'capture'|'inference'|'output'|'apply';
 export class DiagnosticError extends Error {
   constructor(public code:DiagnosticCode,public stage:Stage,message:string){super(message);this.name='DiagnosticError';}
@@ -22,6 +22,7 @@ const guidance:Record<DiagnosticCode,[string,string]>={
   'invalid-output':['候选输出不符合约定','检查尺寸、PNG 位深与 sRGB 配置。已下载文件保留；未下载的候选可按原任务 ID 恢复。'],
   'apply-failed':['Photoshop 应用失败','候选仍可另存或新建文档；确认来源文档状态，必要时重新捕获。'],
   'source-profile':['无法确定来源色彩空间','确认选择了当前文档的原文件；无法识别颜色声明时，请在副本中指定正确配置文件，再重新捕获。'],
+  'selection-required':['需要编辑选区','请先在 Photoshop 建立编辑选区；光影重塑也可在“布光范围”中明确选择“整张图像”，再打开工作台或重新读取原图。'],
   'unknown':['操作未完成，原因尚未确认','展开技术详情核对报错；保留任务 ID 和候选，确认状态后再操作。']
 };
 export function diagnostic(error:unknown,stage:Stage,hasPending=false){

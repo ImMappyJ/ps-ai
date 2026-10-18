@@ -1,6 +1,17 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {ComfyClient,uuid} from '../src/infrastructure/backends/client';
-import {diagnostic} from '../src/diagnostics/diagnostics';import {setLanguage} from '../src/localization/i18n';
+import {diagnostic,DiagnosticError} from '../src/diagnostics/diagnostics';import {setLanguage} from '../src/localization/i18n';
+
+test('selection-required diagnostics point to explicit relight scope in both languages',()=>{
+  for(const language of ['zh-CN','en-US'] as const){
+    setLanguage(language);
+    try{const d=diagnostic(new DiagnosticError('selection-required' as any,'capture','selection missing'),'inference');
+      assert.equal(d.code,'selection-required');assert.equal(d.stage,'capture');
+      assert.match(d.action,language==='en-US'?/Entire image|entire image/:/整张图像/);
+      if(language==='en-US')assert.doesNotMatch(d.title+d.action+d.effect,/[一-龥]/);
+    }finally{setLanguage('zh-CN');}
+  }
+});
 
 test('diagnostics identify the failed stage and keep pending-task retry instructions',()=>{
   setLanguage('en-US');try{

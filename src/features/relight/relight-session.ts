@@ -3,7 +3,8 @@ import {sha256} from '@noble/hashes/sha2.js';
 import type {Capture,Snapshot} from '../../infrastructure/photoshop/photoshop';
 import {RelightEditor,createRelightScene,validateRelightScene,sceneFingerprint,compileRelightScene,type RelightScene,type RelightSource,type RelightCapabilities} from './relight-scene';
 
-export interface FrozenRelightSubmission {scene:RelightScene;fingerprint:string;capture:Capture}
+export type RelightScope='selection'|'document';
+export interface FrozenRelightSubmission {scene:RelightScene;fingerprint:string;capture:Capture;scope:RelightScope}
 export interface RelightTaskMetadata {
   schemaVersion:1;requestId:string;provider:string;model:string;
   capabilities:{control:'semantic';edit:boolean;maxInputImages:number;maskMode:RelightCapabilities['maskMode'];seedSupport:boolean};
@@ -32,12 +33,13 @@ function sameBinding(a:RelightSource,b:RelightSource):boolean {
 export class RelightSession {
   editor:RelightEditor;
   private captured:Capture;
-  constructor(capture:Capture,snapshotId:string,lightId:string){
+  constructor(capture:Capture,snapshotId:string,lightId:string,private capturedScope:RelightScope='selection'){
     this.captured=cloneCapture(capture);this.editor=new RelightEditor(createRelightScene(binding(this.captured,snapshotId),lightId));
   }
   get fingerprint():string{return sceneFingerprint(this.editor.snapshot());}
   get sourceCapture():Capture{return this.captured;}
-  freeze():FrozenRelightSubmission{return {scene:this.editor.snapshot(),fingerprint:this.fingerprint,capture:this.captured};}
+  get scope():RelightScope{return this.capturedScope;}
+  freeze():FrozenRelightSubmission{return {scene:this.editor.snapshot(),fingerprint:this.fingerprint,capture:this.captured,scope:this.capturedScope};}
   assertCaptureMatches(current:Capture):void {
     const a=this.captured,b=current;
     const fields=['documentId','width','height','profile','mode','depth','historyId','sessionId','sourceHash','clipBaseLayerId'] as const;
@@ -50,9 +52,9 @@ export class RelightSession {
     if(!sameBinding(source,scene.source)&&!reuseOnCurrentSource)throw new Error('保存的布光与当前来源不一致，请明确复用到当前快照或重新读取原图');
     this.editor=new RelightEditor({...scene,source:reuseOnCurrentSource?source:scene.source});
   }
-  rebind(capture:Capture,snapshotId:string):void {
+  rebind(capture:Capture,snapshotId:string,scope:RelightScope=this.capturedScope):void {
     const old=this.editor.snapshot(),next=cloneCapture(capture),source=binding(next,snapshotId);
-    this.captured=next;this.editor=new RelightEditor({...old,source});
+    this.captured=next;this.capturedScope=scope;this.editor=new RelightEditor({...old,source});
   }
 }
 

@@ -2,9 +2,10 @@ import {Bounds,Raster,checkSize,expandPixels,maskRaster,effectiveMask,resize,con
 import {retainSourceAlpha,backgroundEditMask} from '../../imaging/composite';
 import {requireSourceProfile,hasSourceProfile} from '../../imaging/color';
 import type {SourceColorReader,SourceColorReason,SavedSourceColor} from './source-color';
+import {DiagnosticError} from '../../diagnostics/diagnostics';
 export interface Snapshot {documentId:number;width:number;height:number;profile:string;mode:string;depth:unknown;historyId:number;sessionId:string;bounds:Bounds;mask:Uint8Array;sourceHash:string;sourceLayerIds?:number[];clipBaseLayerId?:number;colorReason?:SourceColorReason;backgroundComposite?:'subject-background-v1'}
-export interface Capture {snapshot:Snapshot;image:Raster;selectionMask:Uint8Array;protectionMask:Uint8Array;subjectMask?:Uint8Array;workingCopyOf?:number}
-export interface CaptureOptions {context?:'selection'|'document';selection?:'edit'|'subject-background';preserveNativeDepth?:boolean}
+export interface Capture {snapshot:Snapshot;image:Raster;selectionMask:Uint8Array;protectionMask:Uint8Array;subjectMask?:Uint8Array;workingCopyOf?:number;documentName?:string}
+export interface CaptureOptions {context?:'selection'|'document';selection?:'edit'|'subject-background'|'document';preserveNativeDepth?:boolean}
 export interface Protection {documentId:number;width:number;height:number;bounds:Bounds;mask:Uint8Array;sessionId:string}
 export class PhotoshopAdapter {
   private applications=new Map<string,{documentId:number;historyId:number;layerId:number}>();
@@ -82,14 +83,21 @@ export class PhotoshopAdapter {
     if(!modes.includes(doc.mode)||!depths.includes(doc.bitsPerChannel))throw new Error('支持 RGB / 灰度 8/16-bit；其他模式请先在副本中转换为 RGB，原文档不会自动转换');
   }
   private bounds(doc:any):Bounds {
-    const b=doc.selection.bounds;if(!b)throw new Error('请先建立编辑选区');
+    const b=doc.selection.bounds;if(!b)throw new DiagnosticError('selection-required','capture','请先建立编辑选区');
     const bounds={left:Math.max(0,Math.floor(b.left)),top:Math.max(0,Math.floor(b.top)),right:Math.min(doc.width,Math.ceil(b.right)),bottom:Math.min(doc.height,Math.ceil(b.bottom))};
+    if(bounds.right<=bounds.left||bounds.bottom<=bounds.top)throw new DiagnosticError('selection-required','capture','选区为空');
+    checkSize(bounds.right-bounds.left,bounds.bottom-bounds.top);return bounds;
+  }
+  private captureBounds(doc:any,margin:number,fullContext:boolean,whole:boolean):Bounds {
+    const selection=whole?{left:0,top:0,right:doc.width,bottom:doc.height}:this.bounds(doc);
+    const pad=Math.max(32,Math.round(Math.min(selection.right-selection.left,selection.bottom-selection.top)*margin));
+    const bounds=fullContext?{left:0,top:0,right:doc.width,bottom:doc.height}:{left:Math.max(0,selection.left-pad),top:Math.max(0,selection.top-pad),right:Math.min(doc.width,selection.right+pad),bottom:Math.min(doc.height,selection.bottom+pad)};
     checkSize(bounds.right-bounds.left,bounds.bottom-bounds.top);return bounds;
   }
   private async mask(documentId:number,bounds:Bounds):Promise<Uint8Array> {
     await this.checkpoint('capture.selection.read');
     const result=await this.ps.imaging.getSelection({documentID:documentId,sourceBounds:bounds});
-    if(!result.imageData)throw new Error('选区为空');
+    if(!result.imageData)throw new DiagnosticError('selection-required','capture','选区为空');
     const data=result.imageData;
     try {
       if(![8,16,32].includes(data.componentSize)||data.components!==1)throw new Error('选区没有返回可用的灰度数据');
@@ -121,21 +129,23 @@ export class PhotoshopAdapter {
   }
   async capture(margin=.15,protection?:Protection,expectedDocumentId=this.activeDocument()?.id,outputDepth:8|16=8,options:CaptureOptions={}):Promise<Capture> {
     if(!Number.isFinite(margin)||margin<0||margin>1)throw new Error('上下文边距无效');
-    if(!options||typeof options!=='object'||Array.isArray(options)||Object.keys(options).some(k=>!['context','selection','preserveNativeDepth'].includes(k))||options.context!==undefined&&!['selection','document'].includes(options.context)||options.selection!==undefined&&!['edit','subject-background'].includes(options.selection)||options.preserveNativeDepth!==undefined&&typeof options.preserveNativeDepth!=='boolean'||![8,16].includes(outputDepth))throw new Error('捕获策略无效');
-    const background=options.selection==='subject-background',fullContext=background||options.context==='document';
+    if(!options||typeof options!=='object'||Array.isArray(options)||Object.keys(options).some(k=>!['context','selection','preserveNativeDepth'].includes(k))||options.context!==undefined&&!['selection','document'].includes(options.context)||options.selection!==undefined&&!['edit','subject-background','document'].includes(options.selection)||options.selection==='document'&&options.context==='selection'||options.preserveNativeDepth!==undefined&&typeof options.preserveNativeDepth!=='boolean'||![8,16].includes(outputDepth))throw new Error('捕获策略无效');
+    const background=options.selection==='subject-background',whole=options.selection==='document',fullContext=background||whole||options.context==='document';
     await this.checkpoint('capture.start');
     const expected=this.document();
     if(expected.id!==expectedDocumentId)throw new Error('活动文档已切换，请在来源文档重新生成');
+    // Selection/scope errors must precede asynchronous request-only file access.
+    this.captureBounds(expected,margin,fullContext,whole);
+    const selectionState=whole?undefined:JSON.stringify(expected.selection.bounds);
     const state=this.sourceState(expected),color=await this.savedColor(expected);
     return this.ps.core.executeAsModal(async(context:any)=>{
-      let doc=this.document();const original=doc,selection=this.bounds(doc);
+      let doc=this.document();const original=doc;
       if(doc.id!==expectedDocumentId)throw new Error('活动文档已切换，请在来源文档重新生成');
+      const bounds=this.captureBounds(doc,margin,fullContext,whole);
       if(state!==this.sourceState(doc))throw new Error('来源文档尺寸、颜色或内容状态已改变，请重新捕获');
-      const pad=Math.max(32,Math.round(Math.min(selection.right-selection.left,selection.bottom-selection.top)*margin));
-      const bounds=fullContext?{left:0,top:0,right:doc.width,bottom:doc.height}:{left:Math.max(0,selection.left-pad),top:Math.max(0,selection.top-pad),right:Math.min(doc.width,selection.right+pad),bottom:Math.min(doc.height,selection.bottom+pad)};
-      checkSize(bounds.right-bounds.left,bounds.bottom-bounds.top);
-      let mask=await this.mask(doc.id,bounds);
-      if(!mask.some(v=>v>0))throw new Error('选区为空');
+      if(!whole&&selectionState!==JSON.stringify(doc.selection.bounds))throw new Error('来源或选区已改变，请重新读取原图；原有布光配置已保留');
+      let mask=whole?new Uint8Array(doc.width*doc.height).fill(255):await this.mask(doc.id,bounds);
+      if(!mask.some(v=>v>0))throw new DiagnosticError('selection-required','capture','选区为空');
       let selectionMask=mask;const subjectMask=background?mask:undefined,protectionMask=new Uint8Array(mask.length);
       if(protection) {
         if(protection.sessionId!==this.sessionId||protection.documentId!==doc.id||protection.width!==doc.width||protection.height!==doc.height)throw new Error('保护区来源文档已改变，请重新指定');
@@ -162,7 +172,7 @@ export class PhotoshopAdapter {
           selectionMask=backgroundEditMask(image,subjectMask!);
           mask=backgroundEditMask(image,subjectMask!,protectionMask);
           if(!mask.some(v=>v>0))throw new Error('编辑范围完全被保护区覆盖或没有可替换背景');
-        }else if(fullContext&&!selectionMask.some((s,p)=>s===0&&image.rgba[p*4+3]>=16*rasterMax(image)/255))throw new Error('主体选区外没有可见环境，请保留可见背景作为溶图参考');
+        }else if(fullContext&&!whole&&!selectionMask.some((s,p)=>s===0&&image.rgba[p*4+3]>=16*rasterMax(image)/255))throw new Error('主体选区外没有可见环境，请保留可见背景作为溶图参考');
         if(options.preserveNativeDepth&&!mask.some((v,p)=>v>0&&image.rgba[p*4+3]>0))throw new Error('作用区域没有可见像素，请选择可见内容后重新读取原图');
         let hash=2166136261;for(const v of image.rgba)hash=Math.imul(hash^v,16777619);
         const clipBaseLayerId=background?undefined:await this.captureClippingBase(doc,bounds,image,mask);
@@ -171,7 +181,7 @@ export class PhotoshopAdapter {
         visible(doc.layers);
         const snapshot:Snapshot={documentId:doc.id,width:doc.width,height:doc.height,profile:doc.colorProfileName,mode:doc.mode,depth:doc.bitsPerChannel,historyId:doc.activeHistoryState.id,sessionId:this.sessionId,bounds,mask,sourceHash:(hash>>>0).toString(16),sourceLayerIds,...(clipBaseLayerId===undefined?{}:{clipBaseLayerId}),...(color?.reason?{colorReason:color.reason}:{}),...(background?{backgroundComposite:'subject-background-v1' as const}:{})};
         if(copy){await context.hostControl.unregisterAutoCloseDocument(copy.id);keepCopy=true;}
-        return {snapshot,image,selectionMask,protectionMask,...(subjectMask?{subjectMask}:{}),...(copy?{workingCopyOf:original.id}:{})};
+        return {snapshot,image,selectionMask,protectionMask,...(typeof doc.name==='string'?{documentName:doc.name}:{}),...(subjectMask?{subjectMask}:{}),...(copy?{workingCopyOf:original.id}:{})};
       }finally{if(copy&&!keepCopy){await copy.closeWithoutSaving();await context.hostControl.unregisterAutoCloseDocument(copy.id);this.ps.app.activeDocument=original;}}
     },{commandName:'ps-ai 捕获选区'});
   }

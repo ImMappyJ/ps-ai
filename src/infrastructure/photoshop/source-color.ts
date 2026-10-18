@@ -1,4 +1,5 @@
 import {ColorContractError,validatePngColor} from '../../imaging/color';
+import {SourceFileAccess,type SourceAccessOptions} from './source-access';
 
 export type SourceColorReason='webp-default'|'png-srgb';
 export interface SavedSourceColor {kind:'srgb'|'icc'|'unknown';format:'webp'|'png';width:number;height:number;depth:number;reason?:SourceColorReason}
@@ -65,25 +66,22 @@ export function inspectSourceColor(bytes:Uint8Array):SavedSourceColor|undefined 
   return undefined;
 }
 
-function samePath(left:string,right:string):boolean {
-  const normalize=(path:string)=>path.replace(/\\/g,'/');
-  const a=normalize(left),b=normalize(right);return /^[A-Za-z]:\//.test(a)?a.toLowerCase()===b.toLowerCase():a===b;
-}
 // Request-only UXP access: a picker grants access to exactly the source entry.
-// No arbitrary file: URL, persistent path grant or file content enters history.
-export function createSourceColorReader(uxp:any):SourceColorReader {
-  return async(doc,file)=>{
+// Optional tokens stay in private storage; every use re-reads actual bytes.
+export function createSourceColorReader(uxp:any,options:SourceAccessOptions={}):SourceColorReader&Pick<SourceFileAccess,'ready'|'remember'|'setRemember'|'forget'> {
+  const access=new SourceFileAccess(uxp,options);
+  const reader:SourceColorReader=async(doc,file)=>{
     try {
       if(typeof doc.path!=='string'||!doc.path)throw invalid('来源没有可核对的原文件；请在副本中指定正确配置文件后重试');
-      file??=await uxp.storage.localFileSystem.getFileForOpening({types:['webp','png','jpg','jpeg','psd','psb','tif','tiff']});
-      if(!file)throw invalid('未选择来源文件；请重试并选择当前文档对应的原图');
-      if(!file.isFile||typeof file.nativePath!=='string'||!samePath(doc.path,file.nativePath))throw invalid('请选择当前文档对应的原文件，不能使用另一张图片的颜色信息');
-      const metadata=await file.getMetadata();
-      if(!Number.isSafeInteger(metadata.size)||metadata.size<0||metadata.size>MAX_SOURCE_FILE_BYTES)throw invalid('来源文件过大；请在副本中指定正确配置文件');
-      const bytes=new Uint8Array(await file.read({format:uxp.storage.formats.binary}));
-      const color=inspectSourceColor(bytes);
-      if(color&&(color.width!==doc.width||color.height!==doc.height))throw invalid('来源文件尺寸或位深与当前文档不同；请在副本中指定正确配置文件');
-      return color;
+      return await access.read(doc.path,file,async entry=>{
+        const metadata=await entry.getMetadata();
+        if(!Number.isSafeInteger(metadata.size)||metadata.size<0||metadata.size>MAX_SOURCE_FILE_BYTES)throw invalid('来源文件过大；请在副本中指定正确配置文件');
+        const bytes=new Uint8Array(await entry.read({format:uxp.storage.formats.binary}));
+        const color=inspectSourceColor(bytes);
+        if(color&&(color.width!==doc.width||color.height!==doc.height))throw invalid('来源文件尺寸或位深与当前文档不同；请在副本中指定正确配置文件');
+        return color;
+      });
     }catch(error){if(error instanceof ColorContractError)throw error;throw invalid('无法读取来源文件；请重新选择原图，或在副本中指定正确配置文件');}
   };
+  return Object.defineProperties(reader,{ready:{value:()=>access.ready()},remember:{get:()=>access.remember},setRemember:{value:(enabled:boolean)=>access.setRemember(enabled)},forget:{value:()=>access.forget()}}) as ReturnType<typeof createSourceColorReader>;
 }

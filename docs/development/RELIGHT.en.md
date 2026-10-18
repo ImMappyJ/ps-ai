@@ -9,8 +9,8 @@ This describes the development upgrade, absent from existing release packages. T
 | Area | Actual scope |
 | --- | --- |
 | Runtime | Photoshop 27+, UXP manifest 5/API 2, existing TypeScript/esbuild and DOM/Spectrum |
-| Source | Visible composite from the bound document, with selection context; not only the active layer |
-| Boundary | Frozen grayscale selection `M*(1-P)`, original coordinates and protection |
+| Source | Visible composite from the bound document; current-selection context or explicitly chosen entire image |
+| Boundary | Frozen grayscale mask `M*(1-P)`, with `M=255` across the canvas for entire-image relight; original coordinates and protection |
 | Lighting | Point, spot, directional and global ambient; semantic control, no provider per-light API |
 | UI | PS 27 native probe confirmed large UXP dialog, PNG data URL, absolute DOM markers and pointer capture |
 | Native writes | Existing application fails inside an open dialog; close for short capture/write, then restore the workbench |
@@ -22,6 +22,16 @@ The initial container probe used a disposable 128×96 synthetic document. Applic
 The final source passed actual point, spot-target and directional dragging, repeated gestures and undo/redo in a PS27 native script. Resizing from 1040×740 to 1160×820 recalculated fit without changing the scene fingerprint; off-image lights could be found again. Draggable markers retain stable DOM nodes and pointer capture. The stationary image-load/resize feedback loop was fixed; closing releases listeners, preview caches and image references. Source-script execution is not installed-panel acceptance.
 
 ## Scene and coordinates
+
+The entry control `relight-scope` defaults to `selection`; `document` is an explicit entire-image choice. `CaptureOptions.selection='document'` supplies a full-canvas editable mask without reading or writing Photoshop's selection. It is distinct from `context='document', selection='edit'` used by blending and from subject-background reconstruction. Whole-image relight must not require an environment outside a subject selection. Native 16-bit source samples and partial grayscale protection stay intact.
+
+Capture checks required selection bounds and the processing pixel budget before any original-file picker, then revalidates the bound document and selection inside the capture modal after asynchronous file access. Missing selection has diagnostic code `selection-required` and bilingual guidance to create a selection or explicitly choose Entire image. Selection/source changes during authorization stop before working-copy creation, pixel reads or upload. Current document ICC remains authoritative; an explicit NONE profile type is never accepted just because its name says sRGB.
+
+`RelightSession` and `FrozenRelightSubmission` retain the chosen scope locally, separate from provider fields and lighting scene JSON. Reopen keeps that scope, source and edits. Changing the entry control requires explicit reread/rebind before generation; a failed reread preserves the prior binding. Reread retains edited lights and creates a new source snapshot. The workbench identifies the actual source document/name, its frozen scope and any initial tagged working copy's original ID. Draft and historical scene reuse retain the current explicitly chosen capture policy; old history remains readable without a new scene schema.
+
+Original-file authorization uses exact normalized native paths and session FileEntry handles. Optional Remember original-file access stores a schema-validated private `source-file-access.json`, separate from portable settings, containing only the preference and at most 32 path/token pairs. Tokens come from user-selected entries through `createPersistentToken` and restore through `getEntryForPersistentToken`; no arbitrary file URL or broad filesystem grant is used. Enabling remembers already authorized session handles too. Every use re-reads bounded bytes and validates path/dimensions/native depth through the reader and adapter; it never caches pixels or color conclusions. Invalid restored access falls back to at most one picker per operation. Token/storage failures preserve current authorized reads and show redacted guidance.
+
+Opt-out preserves session handles but removes saved grants; Clear also drops session handles. Preference/removal writes serialize behind in-flight token writes, and a revision check prevents older reads/token creation from restoring cleared grants. Failed removal must remain visibly failed, retaining useful session access; do not claim persisted grants are gone. These capture/access/scope paths have automated mock regressions only. Native installed-panel authorization, capture/apply/undo and current host ICC diagnosis remain pending and require separate host permission.
 
 API references: [Adobe UXP modal dialogs](https://developer.adobe.com/uxp/guides/how-to/add-modal-dialogs/), [executeAsModal](https://developer.adobe.com/photoshop/uxp/2022/ps-reference/media/executeasmodal), and [Imaging API](https://developer.adobe.com/photoshop/uxp/2022/ps_reference/media/imaging/). A modal dialog blocks host interaction; close the editor during generation when needed, then reopen its retained configuration.
 
