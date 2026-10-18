@@ -203,6 +203,35 @@ test('explicit case-variant UUID records do not create an unreadable journal whe
   await assert.rejects(h.restart().save(record(upper)),/cleared/i);
 });
 
+test('clearing one exact case-variant ID preserves the other record and its shared files through restart and recovery',async()=>{
+  const lower='abcdefab-cdef-4abc-8abc-abcdefabcdef',upper=lower.toUpperCase();
+  for(const [selected,survivor] of [[lower,upper],[upper,lower]]){
+    const live=record(survivor,'unknown',{userPrompt:'keep this prompt',sourceName:'keep this source',outputFile:`${lower}-output.png`,relight:{result:{outputFile:`${lower}-output.png`}}});
+    const h=memoryStorage([record(selected,'unknown'),live]);h.files(lower);h.put(`${lower}-source.png`,new Uint8Array([3,4]).buffer);
+    assert.deepEqual(await h.store.clearHistory([selected]),{...emptyStatus,removedIds:[selected],retainedSharedFiles:5});
+    const restarted=h.restart();assert.deepEqual(await restarted.history(),[live]);
+    assert.deepEqual(await restarted.historyCleanupStatus(),{...emptyStatus,removedIds:[selected],retainedSharedFiles:5});
+    assert.deepEqual([...await restarted.readBinary(`${lower}-source.png`)],[3,4]);
+    const recovered=(await restarted.history())[0];recovered.state='ready';await restarted.save(recovered);
+    assert.deepEqual(await restarted.history(),[{...live,state:'ready'}]);
+    await assert.rejects(restarted.save(record(selected)),/cleared/i);
+    await assert.rejects(restarted.binary(`${selected}-output.png`,new Uint8Array([9])),/cleared/i);
+    await restarted.binary(`${survivor}-output.png`,new Uint8Array([7,8]));
+    assert.deepEqual([...await restarted.readBinary(`${survivor}-output.png`)],[7,8]);
+    await restarted.retryHistoryCleanup();assert.ok(h.entries.has(`${lower}-source.png`));
+    assert.deepEqual(await restarted.clearHistory([survivor]),{...emptyStatus,removedIds:[survivor]});
+    assert.deepEqual(await h.restart().history(),[]);assert.ok([...names(lower),`${survivor}-output.png`].every(name=>!h.entries.has(name)));
+    for(const id of [selected,survivor])await assert.rejects(h.restart().binary(`${id}-source.png`,new Uint8Array([1])),/cleared/i);
+  }
+});
+
+test('an unrecorded case-variant binary owner cannot recreate files after the only record was cleared',async()=>{
+  const lower='abcdefab-cdef-4abc-8abc-abcdefabcdef',upper=lower.toUpperCase();
+  const h=memoryStorage([record(lower)]);h.files(lower);await h.store.clearHistory([lower]);
+  await assert.rejects(h.restart().binary(`${upper}-source.png`,new Uint8Array([1])),/cleared/i);
+  assert.ok([...names(lower),`${upper}-source.png`].every(name=>!h.entries.has(name)));
+});
+
 test('clearing shared output files defers deletion until the last normal or relight pointer is cleared',async()=>{
   const h=memoryStorage([record(),record(B,'ready',{outputFile:`${A}-output.png`}),record(C,'ready',{relight:{result:{outputFile:`${A}-source.png`}}})]);h.files();
   assert.deepEqual(await h.store.clearHistory([A]),{...emptyStatus,removedIds:[A],retainedSharedFiles:2});

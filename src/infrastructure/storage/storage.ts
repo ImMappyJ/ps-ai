@@ -21,7 +21,7 @@ const emptyCleanup=():CleanupJournal=>({schemaVersion:1,removedIds:[],files:[],s
 const taskFiles=(id:string)=>UUID.test(id)?SUFFIXES.map(suffix=>`${id.toLowerCase()}-${suffix}`):[];
 const identity=(id:string)=>UUID.test(id)?id.toLowerCase():id;
 const pointers=(record:JobRecord):unknown[]=>[record.outputFile,(record.relight as any)?.result?.outputFile];
-const cleared=(journal:CleanupJournal,record:JobRecord)=>journal.removedIds.some(id=>identity(id)===identity(record.id));
+const cleared=(journal:CleanupJournal,record:JobRecord)=>journal.removedIds.includes(record.id);
 // UXP entry-based IO only. No Node filesystem at runtime.
 export class Storage {
   private chain:Promise<void>=Promise.resolve();
@@ -32,7 +32,15 @@ export class Storage {
     const write=async()=>{const root=await this.root(),file=await root.createFile(name,{overwrite:true});await file.write(new Uint8Array(bytes).buffer,{format:this.uxp.storage.formats.binary});};
     const task=TASK_FILE.exec(name);
     if(!task)return write();
-    return this.queued(async()=>{this.assertWritable(await this.readCleanup(),task[1]);await write();});
+    return this.queued(async()=>{
+      const journal=await this.readCleanup();this.assertWritable(journal,task[1]);
+      if(journal.removedIds.some(id=>identity(id)===identity(task[1]))){
+        // Case-insensitive files may still belong to an explicitly unselected record.
+        const records=await this.readHistory();
+        if(!records.some(record=>record.id===task[1]&&!cleared(journal,record)))throw new Error('This local history ID was cleared');
+      }
+      await write();
+    });
   }
   async readBinary(name:string):Promise<Uint8Array>{const root=await this.root();return new Uint8Array(await(await root.getEntry(name)).read({format:this.uxp.storage.formats.binary}));}
   async json(name:string,data:unknown):Promise<void> {
@@ -56,7 +64,7 @@ export class Storage {
   clearHistory(ids:readonly string[]):Promise<HistoryCleanupStatus> {
     return this.queued(async()=>{
       const records=await this.readHistory(),journal=await this.readCleanup(),existing=new Set(records.map(record=>record.id));
-      const removedIds=[...new Set(ids)].filter(id=>existing.has(id)&&!journal.removedIds.some(removed=>identity(removed)===identity(id)));
+      const removedIds=[...new Set(ids)].filter(id=>existing.has(id)&&!journal.removedIds.includes(id));
       if(!removedIds.length)return {...await this.cleanupStatus(journal,records),removedIds:[]};
       const selected=new Set(removedIds),authorized=new Set([...journal.removedIds,...removedIds].map(identity)),files=new Set(journal.files),unsafe=new Set<unknown>();
       for(const record of records.filter(record=>selected.has(record.id))){
@@ -80,7 +88,7 @@ export class Storage {
   }
   private assertWritable(journal:CleanupJournal,id:string):void {
     if(typeof id!=='string')throw new Error('Invalid local history ID');
-    if(journal.removedIds.some(removed=>identity(removed)===identity(id)))throw new Error('This local history ID was cleared');
+    if(journal.removedIds.includes(id))throw new Error('This local history ID was cleared');
   }
   private async readHistory():Promise<JobRecord[]> {
     const records=await this.readJson<unknown>('history.json',[]);
