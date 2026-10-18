@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import path from 'node:path';import os from 'node:os';import {createServer} from 'node:http';
-import {startManagedRelay} from '../server/runtime/managed-relay';import {RelayController} from '../src/relay-controller';import {PLATFORMS} from '../src/platforms';
+import {startManagedRelay} from '../server/runtime/managed-relay';import {RelayController} from '../src/infrastructure/backends/relay-controller';import {PLATFORMS} from '../src/infrastructure/backends/platforms';
 
 test('an IPv6 localhost impostor cannot forward a real IPv4 handshake to obtain credentials',async()=>{
   const evidence=path.resolve(os.tmpdir()),root=await fs.mkdtemp(path.join(evidence,'review-dual-stack-'));

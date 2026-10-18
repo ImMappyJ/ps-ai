@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {encodePng,decodePng,decodeModelPng} from '../src/image';
+import {encodePng,decodePng,decodeModelPng} from '../src/imaging/image';
 import {deflateSync} from 'node:zlib';
 import {spawnSync} from 'node:child_process';
 
@@ -19,7 +19,7 @@ function pixelsPng(scan:Uint8Array,ctype=2,interlace=0,extra:Buffer[]=[],width=2
 test('empty iTXt cannot hang a decoder; irrelevant metadata never enters UPNG',()=>{
   const png=encodePng(image),list=chunks(png);
   const malformed=Buffer.concat([Buffer.from(png.subarray(0,8)),...list.slice(0,-1),chunk('iTXt',new Uint8Array()),list[list.length-1]]);
-  const child=spawnSync(process.execPath,['--import','tsx','--input-type=module','-e',"import {decodePng} from './src/image.ts'; process.stdout.write(JSON.stringify([...decodePng(Buffer.from(process.argv[1],'hex')).rgba]));",malformed.toString('hex')],{timeout:3000,encoding:'utf8'});
+  const child=spawnSync(process.execPath,['--import','tsx','--input-type=module','-e',"import {decodePng} from './src/imaging/image.ts'; process.stdout.write(JSON.stringify([...decodePng(Buffer.from(process.argv[1],'hex')).rgba]));",malformed.toString('hex')],{timeout:3000,encoding:'utf8'});
   assert.equal(child.error,undefined);assert.equal(child.status,0,child.stderr);assert.deepEqual(JSON.parse(child.stdout),[...image.rgba]);
 });
 test('pixel inflation must exactly match scanlines, finish its zlib stream and use valid filters',()=>{

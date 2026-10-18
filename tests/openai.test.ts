@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {cloudRequest,cloudPng,untagPng,testId} from './gateway-fixtures';
-import {decodePng,encodePng} from '../src/image';
-import {intent} from '../src/intent';
+import {decodePng,encodePng} from '../src/imaging/image';
+import {intent} from '../src/generation/intent';
 
 const request={...cloudRequest,model:'gpt-image-2.5-sunburst',seed:0,width:992,height:992};
 function response(bytes=cloudPng(992,992)){return Response.json({data:[{b64_json:Buffer.from(bytes).toString('base64')}],output_format:'png'});}

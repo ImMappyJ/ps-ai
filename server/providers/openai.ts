@@ -1,7 +1,7 @@
-import {GATEWAY_PROTOCOL,validateGeneration} from '../../src/gateway-protocol';
-import type {GatewayCapabilities,GenerationRequest} from '../../src/gateway-protocol';
-import {checkSize,decodePng,encodePng,rasterDepth,resize} from '../../src/image';
-import type {Raster} from '../../src/image';
+import {GATEWAY_PROTOCOL,validateGeneration} from '../../src/infrastructure/backends/gateway-protocol';
+import type {GatewayCapabilities,GenerationRequest} from '../../src/infrastructure/backends/gateway-protocol';
+import {checkSize,decodePng,encodePng,rasterDepth,resize} from '../../src/imaging/image';
+import type {Raster} from '../../src/imaging/image';
 import type {ImageProvider} from './contract';
 import {ServiceError} from '../shared/errors';
 import {readBounded} from '../shared/io';

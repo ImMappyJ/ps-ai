@@ -1,4 +1,4 @@
-import fs from 'node:fs/promises';import {ComfyClient,uuid} from '../src/client';import {buildGraph} from '../src/workflow';import {encodePng,decodeModelPng,decodePng} from '../src/image';import {JobCoordinator,JobRecord} from '../src/jobs';
+import fs from 'node:fs/promises';import {ComfyClient,uuid} from '../src/infrastructure/backends/client';import {buildGraph} from '../src/generation/workflow';import {encodePng,decodeModelPng,decodePng} from '../src/imaging/image';import {JobCoordinator,JobRecord} from '../src/generation/jobs';
 const client=new ComfyClient(),id=uuid(),clientId=uuid();await client.check();
 const image={width:32,height:320,rgba:new Uint8Array(32*320*4)};for(let i=0;i<image.rgba.length;i+=4)image.rgba.set([80,110,180,255],i);
 const source=await client.upload(encodePng(image),`${id}-geometry.png`);

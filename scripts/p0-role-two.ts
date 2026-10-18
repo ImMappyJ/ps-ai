@@ -1,4 +1,4 @@
-import fs from 'node:fs/promises';import path from 'node:path';import {ComfyClient,uuid} from '../src/client';import {buildGraph} from '../src/workflow';import {resize,encodePng,decodeModelPng,decodePng} from '../src/image';import {JobCoordinator,JobRecord} from '../src/jobs';
+import fs from 'node:fs/promises';import path from 'node:path';import {ComfyClient,uuid} from '../src/infrastructure/backends/client';import {buildGraph} from '../src/generation/workflow';import {resize,encodePng,decodeModelPng,decodePng} from '../src/imaging/image';import {JobCoordinator,JobRecord} from '../src/generation/jobs';
 const client=new ComfyClient(),id=uuid(),clientId=uuid();await client.check();
 const latest=(await fs.readFile('artifacts/p0/latest.txt','utf8')).trim();
 const names:string[]=[];

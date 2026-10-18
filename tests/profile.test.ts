@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {defaultSettings,validateSettings,validateModels,switchConnection,rememberConnection} from '../src/profile';import {buildGraph} from '../src/workflow';
+import test from 'node:test';import assert from 'node:assert/strict';import {defaultSettings,validateSettings,validateModels,switchConnection,rememberConnection} from '../src/infrastructure/config/profile';import {buildGraph} from '../src/generation/workflow';
 const models={unet:'qwen/qwen-image-2.1-Q4_K_M.gguf',clip:'qwen/qwen3vl_8b_int8_convrot.safetensors',vae:'qwen/qwen_image_2.1_vae_bf16.safetensors'};
 test('platform profiles preserve custom ComfyUI address/depth and each model without exporting secrets',()=>{
   const local={...defaultSettings(),baseUrl:'http://192.168.1.10:8288',outputDepth:16 as const};

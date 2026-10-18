@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {buildGraph} from '../src/workflow';
+import {buildGraph} from '../src/generation/workflow';
 const options={requestId:'abc',prompt:'修复道具',seed:42,steps:25,resolution:992};
 test('原图、范围辅助和角色参考按固定顺序绑定，latent 使用第一图',()=>{
   const g=buildGraph({...options,source:'original.png',guide:'mask.png',reference:'character.png'});

@@ -1,0 +1,202 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing remote vX.Y.Z tag
+        required: true
+        type: string
+      dry_run:
+        description: Build and verify without writing a Release
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ps-ai-release-${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  PSAI_REPOSITORY: ${{ github.repository }}
+  PSAI_WORKFLOW: .github/workflows/release.yml
+  PSAI_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+  PSAI_EVENT_NAME: ${{ github.event_name }}
+  PSAI_EVENT_REF: ${{ github.ref }}
+  PSAI_WORKFLOW_REF: ${{ github.workflow_ref }}
+  PSAI_WORKFLOW_SHA: ${{ github.workflow_sha }}
+  PSAI_AUTOMATION_SHA: ${{ github.workflow_sha }}
+  PSAI_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+  PSAI_RUN_ID: ${{ github.run_id }}
+  PSAI_CONTROL_DIR: ${{ github.workspace }}/automation
+  PSAI_BUNDLE_DIR: ${{ github.workspace }}/release-bundle
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: pwsh
+    outputs:
+      sourceSha: ${{ steps.resolve.outputs.sourceSha }}
+      tagObjectSha: ${{ steps.resolve.outputs.tagObjectSha }}
+      automationSha: ${{ steps.batch.outputs.automationSha }}
+      buildRunId: ${{ steps.batch.outputs.runId }}
+      buildRunAttempt: ${{ steps.batch.outputs.runAttempt }}
+      manifestSha256: ${{ steps.bundle.outputs.manifestSha256 }}
+      artifactId: ${{ steps.upload.outputs.artifact-id }}
+      version: ${{ steps.bundle.outputs.version }}
+      channel: ${{ steps.bundle.outputs.channel }}
+    steps:
+      - name: Guard event identity
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:PSAI_TAG -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Expected a strict vX.Y.Z release tag' }
+          if ($env:PSAI_WORKFLOW_SHA -cnotmatch '^[a-f0-9]{40}$') { throw 'Expected the immutable workflow commit' }
+          if ($env:PSAI_EVENT_NAME -eq 'workflow_dispatch') {
+            $expectedRef = 'refs/heads/' + $env:PSAI_DEFAULT_BRANCH
+            $expectedWorkflow = $env:PSAI_REPOSITORY + '/' + $env:PSAI_WORKFLOW + '@' + $expectedRef
+            if (!$env:PSAI_DEFAULT_BRANCH -or $env:PSAI_EVENT_REF -cne $expectedRef -or $env:PSAI_WORKFLOW_REF -cne $expectedWorkflow) { throw 'Manual release must select the default-branch workflow definition' }
+          } elseif ($env:PSAI_EVENT_NAME -eq 'push') {
+            $expectedRef = 'refs/tags/' + $env:PSAI_TAG
+            $expectedWorkflow = $env:PSAI_REPOSITORY + '/' + $env:PSAI_WORKFLOW + '@' + $expectedRef
+            if ($env:PSAI_EVENT_REF -cne $expectedRef -or $env:PSAI_WORKFLOW_REF -cne $expectedWorkflow) { throw 'Expected the exact tag workflow event' }
+          } else { throw 'Only tag push and workflow_dispatch are release events' }
+      - name: Check out immutable release control
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: automation
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.21.0'
+          package-manager-cache: false
+      - name: Capture original build batch
+        id: batch
+        env:
+          PSAI_BUILD_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $actualSha = & git -C $env:PSAI_CONTROL_DIR rev-parse --verify HEAD
+          if ($LASTEXITCODE -ne 0 -or $actualSha -cne $env:PSAI_WORKFLOW_SHA) { throw 'Control checkout must equal the immutable workflow commit' }
+          if ($env:PSAI_RUN_ID -cnotmatch '^[1-9][0-9]*$' -or $env:PSAI_BUILD_RUN_ATTEMPT -cnotmatch '^[1-9][0-9]*$') { throw 'Invalid original build batch identity' }
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "automationSha=$actualSha"
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "runId=$env:PSAI_RUN_ID"
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "runAttempt=$env:PSAI_BUILD_RUN_ATTEMPT"
+      - name: Resolve existing tag and allowed source
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PSAI_AUTOMATION_SHA: ${{ steps.batch.outputs.automationSha }}
+        run: node automation/scripts/release/resolve.mjs resolve
+      - name: Check out exact tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.resolve.outputs.sourceSha }}
+          path: source
+          persist-credentials: false
+      - name: Prove source checkout and version policy
+        env:
+          PSAI_SOURCE_DIR: ${{ github.workspace }}/source
+          PSAI_SOURCE_SHA: ${{ steps.resolve.outputs.sourceSha }}
+        run: node automation/scripts/release/resolve.mjs checkout
+      - name: Install locked source dependencies
+        working-directory: source
+        run: npm ci
+      - name: Test, build and package once
+        working-directory: source
+        env:
+          PSAI_RELEASE_DIR: ${{ github.workspace }}/release-bundle
+          PSAI_SOURCE_REF: ${{ steps.resolve.outputs.sourceSha }}
+        run: npm run package
+      - name: Verify archives and prepare release manifest
+        id: bundle
+        env:
+          PSAI_SOURCE_DIR: ${{ github.workspace }}/source
+          PSAI_SOURCE_SHA: ${{ steps.resolve.outputs.sourceSha }}
+          PSAI_TAG_OBJECT_SHA: ${{ steps.resolve.outputs.tagObjectSha }}
+          PSAI_AUTOMATION_SHA: ${{ steps.batch.outputs.automationSha }}
+          PSAI_RUN_ATTEMPT: ${{ steps.batch.outputs.runAttempt }}
+        run: node automation/scripts/release/artifacts.mjs
+      - name: Save this verified release batch
+        id: upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ps-ai-release-${{ steps.batch.outputs.runId }}-${{ steps.batch.outputs.runAttempt }}
+          path: release-bundle/
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    needs: build
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dry_run == false)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    concurrency:
+      group: ps-ai-release-publisher
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      PSAI_BUILD_RUN_ID: ${{ needs.build.outputs.buildRunId }}
+      PSAI_RUN_ATTEMPT: ${{ needs.build.outputs.buildRunAttempt }}
+      PSAI_ARTIFACT_ID: ${{ needs.build.outputs.artifactId }}
+      PSAI_SOURCE_SHA: ${{ needs.build.outputs.sourceSha }}
+      PSAI_TAG_OBJECT_SHA: ${{ needs.build.outputs.tagObjectSha }}
+      PSAI_MANIFEST_SHA256: ${{ needs.build.outputs.manifestSha256 }}
+    steps:
+      - name: Guard event identity
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:PSAI_TAG -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Expected a strict vX.Y.Z release tag' }
+          if ($env:PSAI_WORKFLOW_SHA -cnotmatch '^[a-f0-9]{40}$') { throw 'Expected the immutable workflow commit' }
+          if ($env:PSAI_EVENT_NAME -eq 'workflow_dispatch') {
+            $expectedRef = 'refs/heads/' + $env:PSAI_DEFAULT_BRANCH
+            $expectedWorkflow = $env:PSAI_REPOSITORY + '/' + $env:PSAI_WORKFLOW + '@' + $expectedRef
+            if (!$env:PSAI_DEFAULT_BRANCH -or $env:PSAI_EVENT_REF -cne $expectedRef -or $env:PSAI_WORKFLOW_REF -cne $expectedWorkflow) { throw 'Manual release must select the default-branch workflow definition' }
+          } elseif ($env:PSAI_EVENT_NAME -eq 'push') {
+            $expectedRef = 'refs/tags/' + $env:PSAI_TAG
+            $expectedWorkflow = $env:PSAI_REPOSITORY + '/' + $env:PSAI_WORKFLOW + '@' + $expectedRef
+            if ($env:PSAI_EVENT_REF -cne $expectedRef -or $env:PSAI_WORKFLOW_REF -cne $expectedWorkflow) { throw 'Expected the exact tag workflow event' }
+          } else { throw 'Only tag push and workflow_dispatch are release events' }
+      - name: Validate original build evidence
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:PSAI_BUILD_RUN_ID -cne $env:PSAI_RUN_ID -or $env:PSAI_RUN_ID -cnotmatch '^[1-9][0-9]*$') { throw 'Artifact must belong to this original workflow run' }
+          if ($env:PSAI_RUN_ATTEMPT -cnotmatch '^[1-9][0-9]*$') { throw 'Expected the original successful build attempt' }
+          if ($env:PSAI_ARTIFACT_ID -cnotmatch '^[1-9][0-9]*$') { throw 'Expected exactly one original artifact ID; unavailable artifacts cannot be rebuilt for recovery' }
+          if ($env:PSAI_SOURCE_SHA -cnotmatch '^[a-f0-9]{40}$' -or $env:PSAI_TAG_OBJECT_SHA -cnotmatch '^[a-f0-9]{40}$') { throw 'Expected the resolved source and tag object SHA' }
+          if ($env:PSAI_MANIFEST_SHA256 -cnotmatch '^[a-f0-9]{64}$') { throw 'Expected the original verified manifest hash' }
+      - name: Check out immutable release control
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: automation
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.21.0'
+          package-manager-cache: false
+      - name: Restore the exact original build artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifactId }}
+          path: release-bundle/
+      - name: Publish or resume the verified batch
+        id: publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PSAI_DRY_RUN: 'false'
+        run: node automation/scripts/release/publish.mjs

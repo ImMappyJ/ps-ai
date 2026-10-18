@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {Storage} from '../src/storage';
+import test from 'node:test';import assert from 'node:assert/strict';import {Storage} from '../src/infrastructure/storage/storage';
 function traceStorage(initial?:string){
   const files:Record<string,string>={};if(initial!==undefined)files['runtime-trace.json']=initial;
   const folder={getEntries:async()=>Object.keys(files).map(name=>({name})),getEntry:async(name:string)=>({read:async()=>files[name]}),createFile:async(name:string)=>({write:async(text:string)=>{files[name]=text;},moveTo:async(_folder:unknown,o:any)=>{files[o.newName]=files[name];delete files[name];}})};

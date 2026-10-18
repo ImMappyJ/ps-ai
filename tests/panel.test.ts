@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {panelHarness} from './uxp-harness';
-import {defaultSettings} from '../src/profile';
-import {decodePng} from '../src/image';
+import {defaultSettings} from '../src/infrastructure/config/profile';
+import {decodePng} from '../src/imaging/image';
+const subjectSelection={bounds:{left:0,top:0,right:1,bottom:2},mask:new Uint8Array([255,0,255,0])};
 
 test('background and Portrait scene generate opaque scenery without a ComfyUI visual-mask reference',async()=>{
   for(const [tab,mode] of [['tab-local','background'],['tab-cosplay','scene']]){
@@ -24,8 +25,32 @@ test('background controls disable conflicting options and restore local-edit cho
   }finally{await h.close();}
 });
 
+test('background and scene disable context color matching for new jobs and restore the ordinary preference',async()=>{
+  for(const [tab,mode] of [['tab-local','background'],['tab-cosplay','scene']]){
+    const h=await panelHarness({selection:subjectSelection});try{
+      await h.wait();h.el('match-color').checked=true;h.click(tab);h.el('mode').value=mode;h.change('mode');
+      assert.equal(h.el('match-color').checked,false);assert.equal(h.el('match-color').disabled,true);
+      h.el('resolution').value='32';h.click('generate');await h.wait();assert.equal((h.records()[0].params as any).matchColor,false);
+      h.el('history').value=h.records()[0].id;h.click('repeat-history');await h.wait();assert.equal(h.el('match-color').checked,false);
+      h.el('mode').value=tab==='tab-local'?'edit':'costume';h.change('mode');assert.equal(h.el('match-color').checked,true);assert.equal(h.el('match-color').disabled,false);
+    }finally{await h.close();}
+  }
+});
+
+test('legacy background history still applies its saved color correction after the new background UI disables it',async()=>{
+  const width=10,height=10,source={width,height,rgba:Uint8Array.from({length:width*height*4},(_,i)=>i%4===3?255:100)},mask=new Uint8Array(width*height);mask.fill(255,0,80);
+  const h=await panelHarness({source,selection:{bounds:{left:0,top:0,right:10,bottom:8},mask},output:{width:32,height:32,rgba:Uint8Array.from({length:32*32*4},(_,i)=>i%4===3?255:120)}});try{
+    await h.wait();h.el('mode').value='background';h.change('mode');h.el('resolution').value='32';h.click('generate');await h.wait();
+    const records=h.records(),record=records[0],name='ps-ai-'+record.id.slice(0,8)+'.png';h.click('export');await h.wait();
+    assert.deepEqual([...decodePng(h.files[name] as Uint8Array).rgba.slice(0,4)],[120,120,120,255]);
+    delete (record.snapshot as any).backgroundComposite;(record.params as any).matchColor=true;h.files['history.json']=JSON.stringify(records);h.el('history').value=record.id;
+    h.click('load-history');await h.wait();h.click('export');await h.wait();const legacy=decodePng(h.files[name] as Uint8Array);
+    assert.equal(legacy.width,32);assert.deepEqual([...legacy.rgba.slice(0,4)],[100,100,100,255]);assert.equal((h.records()[0].params as any).matchColor,true);assert.equal(h.posts.length,1);
+  }finally{await h.close();}
+});
+
 test('reusing corrected background history retains the ordinary edit checkbox preferences',async()=>{
-  const h=await panelHarness();try{
+  const h=await panelHarness({selection:subjectSelection});try{
     await h.wait();for(const id of ['guide','preserve-alpha','align-subject'])h.el(id).checked=true;
     h.el('mode').value='background';h.change('mode');h.el('resolution').value='32';h.click('generate');await h.wait();
     h.el('history').value=h.records()[0].id;h.click('repeat-history');await h.wait();
@@ -35,15 +60,15 @@ test('reusing corrected background history retains the ordinary edit checkbox pr
 });
 
 test('transparent background failures remain exportable with a warning and cannot be applied',async()=>{
-  const h=await panelHarness({output:{width:32,height:32,rgba:new Uint8Array(32*32*4)}});try{await h.wait();h.el('mode').value='background';h.change('mode');h.el('resolution').value='32';h.click('generate');await h.wait();
+  const h=await panelHarness({selection:subjectSelection,output:{width:32,height:32,rgba:new Uint8Array(32*32*4)}});try{await h.wait();h.el('mode').value='background';h.change('mode');h.el('resolution').value='32';h.click('generate');await h.wait();
     assert.equal(h.records()[0].state,'ready');assert.equal(h.el('apply').disabled,true);assert.equal(h.el('export').disabled,false);assert.match(h.el('candidate-warning').textContent,/背景.*透明/);
   }finally{await h.close();}
 });
 
 test('old background history cannot restore conflicting settings or hide a transparent candidate failure',async()=>{
-  const h=await panelHarness({output:{width:32,height:32,rgba:new Uint8Array(32*32*4)}});try{
+  const h=await panelHarness({selection:subjectSelection,output:{width:32,height:32,rgba:new Uint8Array(32*32*4)}});try{
     await h.wait();h.el('mode').value='background';h.change('mode');h.el('resolution').value='32';h.click('generate');await h.wait();
-    const records=h.records(),id=records[0].id;Object.assign(records[0].params as Record<string,unknown>,{guide:true,preserveAlpha:true,alignSubject:true});h.files['history.json']=JSON.stringify(records);
+    const records=h.records(),id=records[0].id;Object.assign(records[0].params as Record<string,unknown>,{guide:true,preserveAlpha:true,alignSubject:true});delete (records[0].snapshot as any).backgroundComposite;delete h.files[id+'-subject-mask.bin'];delete h.files[id+'-protection-mask.bin'];h.files['history.json']=JSON.stringify(records);
     h.el('history').value=id;h.click('repeat-history');await h.wait();
     for(const key of ['guide','preserve-alpha','align-subject']){assert.equal(h.el(key).checked,false);assert.equal(h.el(key).disabled,true);}
     h.click('load-history');await h.wait();assert.equal(h.posts.length,1);assert.equal(h.el('apply').disabled,true);assert.equal(h.el('export').disabled,false);
@@ -53,7 +78,7 @@ test('old background history cannot restore conflicting settings or hide a trans
 });
 
 test('saved PNG sRGB declaration creates a working copy and permits a second capture',async()=>{
-  const {encodePng}=await import('../src/image');
+  const {encodePng}=await import('../src/imaging/image');
   const h=await panelHarness({untaggedSource:{bytes:encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)})}});try{
     await h.wait();h.click('capture');await h.wait();
     assert.match(h.el('source-info').textContent,/22.*PNG sRGB.*工作副本/);
@@ -62,7 +87,7 @@ test('saved PNG sRGB declaration creates a working copy and permits a second cap
 });
 
 test('a different source file fails color resolution before any upload or inference',async()=>{
-  const {encodePng}=await import('../src/image');
+  const {encodePng}=await import('../src/imaging/image');
   const h=await panelHarness({untaggedSource:{bytes:encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)}),wrongPath:true}});try{
     await h.wait();h.click('generate');await h.wait();assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);assert.match(h.el('diagnostic-box').textContent,/色彩空间|原文件/);
   }finally{await h.close();}

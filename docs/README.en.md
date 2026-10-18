@@ -6,25 +6,25 @@
 
 PS-AI connects ComfyUI to Photoshop for local edits, portrait outfits and props, and text-to-image generation. Select an area, describe the change and preview candidates in the panel, then apply a result as a new layer with an editable mask.
 
-**Published version: 0.4.0 (experimental).** It includes guided setup, color checks, edit-range previews and optional 16-bit SDR output. Use matching plugin and environment packages. Results may need manual cleanup, so work on saved copies. Routine skin smoothing, blemish removal and skin-tone retouching are not included.
+**Source version: 0.5.0 (experimental test build).** The public-package installation instructions and existing screenshots below use **v0.4.0 (experimental)** as their baseline; development changes and native acceptance limits are described below. The v0.4.0 package includes guided setup, color checks, edit-range previews and optional 16-bit SDR output. Use matching plugin and environment packages. Results may need manual cleanup, so work on saved copies. Routine skin smoothing, blemish removal and skin-tone retouching are not included.
 
 Upgrading from 0.3.0 changes the panel name from `PS-AI FOR ME` to `PS-AI` and introduces the Morph Frame identity. Plugin IDs and the `PS-AI-FOR-ME` installation directory stay the same.
 
-The development panel offers ComfyUI, Nano Banana, GPT Image and BaiLian, separate model profiles and encrypted keys, and an on-demand local relay. Portrait adds relighting. See [platform setup](setup/PLATFORMS.en.md) and adapter details: [Bailian](providers/BAILIAN.en.md), [Gemini / Nano Banana](providers/GEMINI.en.md) and [OpenAI Images](providers/OPENAI.en.md) gateways. Live API-key and Photoshop acceptance are pending; **published v0.4.0 packages do not contain them**. Screenshots and validated behavior below refer to ComfyUI.
+The development panel offers ComfyUI, Nano Banana, GPT Image and BaiLian, separate model profiles and encrypted keys, and an on-demand local relay. Portrait has a separate [relighting workbench](usage/USER_GUIDE.en.md#relight): edit multiple lights, explicitly generate, then apply the complete result as a masked layer. See [platform setup](setup/PLATFORMS.en.md) and adapter details: [Bailian](providers/BAILIAN.en.md), [Gemini / Nano Banana](providers/GEMINI.en.md) and [OpenAI Images](providers/OPENAI.en.md) gateways. Live API-key and Photoshop acceptance are pending; **published v0.4.0 packages do not contain them**. Screenshots and validated behavior below refer to ComfyUI. The local lighting illustration is not an AI result; experimental compensation application remains unavailable.
 
 The development build also adds [saved source color resolution](usage/USER_GUIDE.en.md#source-color): an untagged static WebP can use its default sRGB, and PNG can use an explicit sRGB chunk, through a tagged working copy. A WebP8 working copy passed identity apply/undo in Photoshop 27; native PNG, reference import and new panel interactions remain pending. Existing v0.4.0 packages do not include it.
 
-Development also corrects [black / transparent background generation](usage/USER_GUIDE.en.md#background-fix), with stage generation and Photoshop application tested on the same sample. Existing v0.4.0 packages have not been updated.
+Development also corrects [black / transparent background generation](usage/USER_GUIDE.en.md#background-fix), with earlier stage generation and Photoshop application tested on the same sample. Later changes add prompt-free removal, [Image Blending](usage/USER_GUIDE.en.md#blend), full-canvas background replacement from a subject selection, and RGBA edge handling. These later controls and effects have offline coverage; native Photoshop and real inference acceptance remain pending. Existing v0.4.0 packages have not been updated.
 
 ## Documentation
 
 | Purpose | Guide |
 | --- | --- |
-| First steps, nine tested modes and new relighting | [Illustrated user guide](usage/USER_GUIDE.en.md) |
+| First steps, nine tested modes, new relighting and blending | [Illustrated user guide](usage/USER_GUIDE.en.md) |
 | Local backend, models and troubleshooting | [ComfyUI setup](setup/COMFYUI.en.md) |
 | Platform selection and API keys | [Platform setup](setup/PLATFORMS.en.md) |
 | Adapter details (development) | [Bailian](providers/BAILIAN.en.md) · [Gemini / Nano Banana](providers/GEMINI.en.md) · [OpenAI Images](providers/OPENAI.en.md) |
-| Contributing and server extensions | [Development entry point](../AGENTS.md) · [Backend and persistence contract](development/BACKEND.en.md) |
+| Contributing and server extensions | [Source map and development guide](../AGENTS.md#source-map) · [Backend and persistence contract](development/BACKEND.en.md) |
 
 ## Example
 
@@ -40,8 +40,8 @@ The [illustrated user guide](usage/USER_GUIDE.en.md) walks through all nine mode
 
 ## What it does
 
-- **Local editing:** change objects and materials, remove clutter, replace backgrounds. Pixels outside the selection and inside manually protected areas are preserved.
-- **Portrait:** repair outfits and props, edit scenes, use one character reference image; the development build also adds relighting. Reference guidance is experimental and does not guarantee an exact likeness or outfit.
+- **Local editing:** change objects and materials, remove clutter, replace backgrounds. Ordinary edits preserve pixels outside the selection and inside protected areas; development background modes select the subject to keep.
+- **Portrait:** repair outfits and props, edit scenes, use one character reference image; development also adds relighting and blending against the whole scene. Reference guidance is experimental and does not guarantee an exact likeness or outfit.
 - **Images and assets:** text to image, effects and atmosphere assets, PNG export and new documents. Generated transparency can still contain background colors or rough edges.
 - **Candidates:** 1–4 sequential candidates, history and disconnect recovery. ComfyUI provides actual sampling steps and cancellation by task ID; platform adapters show stages and stop remaining candidates. Apply with an editable mask and one-step undo.
 - **Transparency and color:** preserve the source silhouette, optionally align the subject and match small context color shifts. RGB / Grayscale 8/16-bit round trips have been tested in Photoshop; model input remains sRGB 8-bit.
@@ -138,15 +138,15 @@ npm run build
 
 Enable developer mode in Photoshop **Preferences → Plugins**, then restart. Add `dist/plugin/manifest.json` in [Adobe UXP Developer Tool](https://developer.adobe.com/photoshop/uxp/2022/guides/devtool/) and choose **Load**. Backend setup is the same as for release packages.
 
-`npm run package` runs tests and builds, then writes CCX, Portable ZIP, environment-tool ZIP and SHA256 checksums to `release/`. Prepare ComfyUI and weights separately, and publish releases manually.
+`npm run package` runs tests, type checking and builds, then writes CCX, Portable ZIP, environment-tool ZIP and SHA256 checksums to `release/`. Prepare ComfyUI and models separately.
 
-You can also build through **Actions → Build packages → Run workflow**. Download the artifact, unpack its outer ZIP and attach the packages and checksums to a GitHub Release. Before publishing, keep versions in `package.json`, the lockfile and `plugin/manifest.json` aligned, and test installation and generation in Photoshop.
+**Actions → Build packages** retains ordinary CI and manual builds. Once the release workflow is deployed, pushing a strict `vX.Y.Z` tag validates, packages and publishes it. **Actions → Release** can process an existing remote tag from the default branch with `dry_run` enabled by default. The channel defaults to prerelease; local unpushed code is absent from remote builds. See [Build and release](development/RELEASING.en.md) for version preparation, first deployment, permissions and original-batch recovery. Passing CI does not establish Photoshop acceptance.
 
 ## Feedback and contributions
 
 Open an [Issue](https://github.com/ImMappyJ/ps-ai/issues) with OS, Photoshop / plugin / ComfyUI versions, models, GPU, reproduction steps and sanitized errors. Share only comparisons you may publish. Do not upload full crash dumps or private photos.
 
-PRs are welcome; keep each change focused on one problem. After cloning, read `AGENTS.md` at the repository root for the source map and development conventions. The [backend contract](development/BACKEND.en.md) defines server-rewrite and provider contracts. Run `npm ci`, `npm test` and `npm run build` before submitting. Update the compatibility manifest and both language versions when changing workflows. Use a separate branch and discuss changes in Issues / PRs. Keep handoff notes, debugging records and machine reports local.
+PRs are welcome; keep each change focused on one problem. After cloning, read the [source map and development guide](../AGENTS.md#source-map). The [backend contract](development/BACKEND.en.md) defines server-rewrite and provider contracts. Run `npm ci`, `npm test` and `npm run build` before submitting. Update the compatibility manifest and both language versions when changing workflows. Use a separate branch and discuss changes in Issues / PRs. Keep handoff notes, debugging records and machine reports local.
 
 ## License and thanks
 

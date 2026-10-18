@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import path from 'node:path';import os from 'node:os';import {spawnSync} from 'node:child_process';
-import {unzipSync,strFromU8} from 'fflate';import {decodePng} from '../src/image';
+import {unzipSync,strFromU8} from 'fflate';import {decodePng} from '../src/imaging/image';
 
 test('built brand header and native icon references resolve to correctly sized PNGs',async()=>{
   const built=spawnSync(process.execPath,['scripts/build.mjs'],{encoding:'utf8',timeout:10000});assert.equal(built.status,0,built.stderr);

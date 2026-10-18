@@ -12,7 +12,7 @@ for(const [name,source,size] of [['panel-on-dark','sidebar-light',23],['panel-on
 }
 await fs.copyFile('assets/brand/icons/mark-64.png','dist/plugin/icons/brand.png');
 await fs.copyFile('assets/brand/wordmark-on-dark.png','dist/plugin/icons/wordmark.png');
-await build({entryPoints:['src/panel.ts'],bundle:true,outfile:'dist/plugin/main.js',platform:'browser',format:'iife',target:'es2020',external:['photoshop','uxp'],define:{'process.env.NODE_ENV':'"production"'},metafile:true}).then(async(result)=>{await fs.mkdir('artifacts',{recursive:true});await fs.writeFile('artifacts/build-metafile.json',JSON.stringify(result.metafile,null,2));});
+await build({entryPoints:['src/app/panel.ts'],bundle:true,outfile:'dist/plugin/main.js',platform:'browser',format:'iife',target:'es2020',external:['photoshop','uxp'],define:{'process.env.NODE_ENV':'"production"'},metafile:true}).then(async(result)=>{await fs.mkdir('artifacts',{recursive:true});await fs.writeFile('artifacts/build-metafile.json',JSON.stringify(result.metafile,null,2));});
 const libraries=[['UPNG.js','node_modules/upng-js/LICENSE'],['pako','node_modules/pako/LICENSE'],['@noble/hashes','node_modules/@noble/hashes/LICENSE']];
 const manifest=JSON.parse(await fs.readFile('plugin/manifest.json','utf8'));
 let notices=`${manifest.name} ${manifest.version}\nThird-party runtime notices\n\n`;

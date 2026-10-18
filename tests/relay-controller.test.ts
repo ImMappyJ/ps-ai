@@ -1,6 +1,6 @@
-import {relayProof} from '../src/relay-auth';
+import {relayProof} from '../src/infrastructure/backends/relay-auth';
 import test from 'node:test';import assert from 'node:assert/strict';
-import {RelayController} from '../src/relay-controller';
+import {RelayController} from '../src/infrastructure/backends/relay-controller';
 function mock(denied=false){
   const saved=new Map<string,Uint8Array>(),files=new Map<string,string|ArrayBuffer>();let launches=0,alive=false;const calls:any[]=[];
   const session={protocol:'ps-ai-relay/1',token:'a'.repeat(64),ports:{bailian:8191,gemini:8192,openai:8193}};

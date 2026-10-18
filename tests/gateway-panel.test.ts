@@ -1,9 +1,9 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {panelHarness} from './uxp-harness';import {defaultSettings} from '../src/profile';import {uuid} from '../src/client';
+import {panelHarness} from './uxp-harness';import {defaultSettings} from '../src/infrastructure/config/profile';import {uuid} from '../src/infrastructure/backends/client';
 const settings={...defaultSettings(),backend:'gateway',baseUrl:'http://localhost:8190',gatewayModel:'qwen-image-2.1-pro',outputDepth:8};
 test('gateway background modes retain provider guide uploads while disabling source silhouette restoration',async()=>{
   for(const [tab,mode] of [['tab-local','background'],['tab-cosplay','scene']]){
-    const h=await panelHarness({settings});try{
+    const h=await panelHarness({settings,selection:{bounds:{left:0,top:0,right:1,bottom:2},mask:new Uint8Array([255,0,255,0])}});try{
       await h.wait();h.click(tab);h.el('mode').value=mode;h.change('mode');assert.equal(h.el('guide').checked,true);assert.equal(h.el('guide').disabled,false);
       h.el('prompt').value='少女站在舞台上';h.click('generate');await h.wait();assert.equal(h.gatewayPosts.length,1);
       const request=h.gatewayPosts[0].request;assert.ok(request.guide);assert.ok(h.uploads.some(u=>u.name.endsWith('-guide.png')));assert.doesNotMatch(request.prompt,/<image[123]>/);assert.match(request.prompt,/少女站在舞台上/);

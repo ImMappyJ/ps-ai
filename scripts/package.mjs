@@ -1,5 +1,4 @@
-import fs from 'node:fs/promises';import path from 'node:path';import {pathToFileURL} from 'node:url';import {createHash} from 'node:crypto';import {zipSync,unzipSync,strToU8,strFromU8} from 'fflate';
-import {gatewayBundle,gatewayNotices} from './build-gateway.mjs';
+import fs from 'node:fs/promises';import path from 'node:path';import {pathToFileURL} from 'node:url';import {createHash} from 'node:crypto';
 export const INSTALL_GUIDE=`# PS-AI — 安装 / Installation
 
 [简体中文](#中文) · [English](#english)
@@ -36,8 +35,10 @@ Use one installation method to avoid confusing the panels. CCX and Portable keep
 
 Use saved copies. Generated structure and colors need review. Investigate host crashes using logs and separate GPU/network controls; changing installation methods is not a guaranteed fix. Code: GPL-3.0-only, see LICENSE. Model licenses are separate. Matching source: https://github.com/ImMappyJ/ps-ai
 `;
-export async function createEnvironmentPackage(root,target){
-  const names=['LICENSE','scripts/check-environment.ps1','scripts/prepare-environment.ps1','scripts/install-ccx.ps1','config/settings.example.json','config/compatibility.json','README.md','docs/README.en.md','docs/setup/COMFYUI.md','docs/setup/COMFYUI.en.md','docs/setup/PLATFORMS.md','docs/setup/PLATFORMS.en.md','assets/1.png','assets/2.png','assets/setup-zh.png','assets/setup-en.png','assets/comfyui-model-library.jpg','src/workflow.ts','src/profile.ts','comfyui/ps_ai_sdr16/__init__.py'];
+// The verifier imports these lists from the trusted control checkout without npm ci.
+// Dependency imports stay inside the packaging functions.
+export function environmentSourceNames(){
+  const names=['LICENSE','scripts/check-environment.ps1','scripts/prepare-environment.ps1','scripts/install-ccx.ps1','config/settings.example.json','config/compatibility.json','README.md','docs/README.en.md','docs/setup/COMFYUI.md','docs/setup/COMFYUI.en.md','docs/setup/PLATFORMS.md','docs/setup/PLATFORMS.en.md','assets/1.png','assets/2.png','assets/setup-zh.png','assets/setup-en.png','assets/comfyui-model-library.jpg','src/generation/workflow.ts','src/infrastructure/config/profile.ts','comfyui/ps_ai_sdr16/__init__.py'];
   const guide=['before.png','after.png','recipes.json','reference-white-socks-icc.png','07-effect-asset-workspace.png',
     ...['01-edit','02-remove','03-background','04-costume','05-reference','06-scene','08-atmosphere','09-generate'].map(name=>name+'-panel.png'),
     ...['01-edit','03-background','06-scene','09-generate'].map(name=>name+'-workspace.png'),
@@ -48,22 +49,38 @@ export async function createEnvironmentPackage(root,target){
   names.push('docs/usage/USER_GUIDE.md','docs/usage/USER_GUIDE.en.md',...guide.map(name=>'assets/guide/'+name));
   const brand=['mark.svg','wordmark.svg','mark-on-dark.svg','mark-on-light.svg','mark-mono-dark.svg','mark-mono-light.svg','lockup-on-dark.svg','lockup-on-light.svg','lockup-mono-dark.svg','lockup-mono-light.svg','avatar.png','favicon.ico','wordmark-on-dark.png','overview.svg',...[16,23,24,32,46,48,64,96,128,256,512].map(n=>`icons/mark-${n}.png`),...[48,96,512].map(n=>`icons/app-${n}.png`)];
   names.push(...brand.map(name=>'assets/brand/'+name),...[23,46].flatMap(size=>['light','dark'].map(color=>`assets/brand/icons/sidebar-${color}-${size}.png`)));
-  const entries={};for(const name of names)entries[name]=new Uint8Array(await fs.readFile(path.join(root,name)));
-  for(const name of ['docs/providers/BAILIAN.md','docs/providers/BAILIAN.en.md','docs/providers/GEMINI.md','docs/providers/GEMINI.en.md','docs/providers/OPENAI.md','docs/providers/OPENAI.en.md','config/settings.bailian.example.json','config/settings.gemini.example.json','config/settings.openai.example.json'])entries[name]=new Uint8Array(await fs.readFile(path.join(root,name)));
+  return [...names,'docs/providers/BAILIAN.md','docs/providers/BAILIAN.en.md','docs/providers/GEMINI.md','docs/providers/GEMINI.en.md','docs/providers/OPENAI.md','docs/providers/OPENAI.en.md','config/settings.bailian.example.json','config/settings.gemini.example.json','config/settings.openai.example.json'];
+}
+export const ENVIRONMENT_GENERATED_FILES=Object.freeze(['backend/ps-ai-gateway.mjs','backend/THIRD_PARTY_NOTICES.txt','backend/LICENSE']);
+export const PLUGIN_RUNTIME_FILES=Object.freeze(['manifest.json','index.html','main.js','style.css','THIRD_PARTY_NOTICES.txt','LICENSE','INSTALL.md','icons/brand.png','icons/wordmark.png',...['panel-on-dark','panel-on-light','plugin'].flatMap(name=>[`icons/${name}.png`,`icons/${name}@1x.png`,`icons/${name}@2x.png`]),'relay/ps-ai-gateway.mjs','relay/start-ps-ai-relay.cmd','relay/start-ps-ai-relay.ps1']);
+export const SOURCE_ONLY_GUIDES=Object.freeze(['AGENTS.md','docs/development/BACKEND.md','docs/development/BACKEND.en.md','docs/development/RELEASING.md','docs/development/RELEASING.en.md']);
+export function sourceGuideReference(sourceRef='main'){
+  if(sourceRef!=='main'&&(typeof sourceRef!=='string'||!/^[a-f0-9]{40}$/.test(sourceRef)))throw new Error('sourceRef must be main or a full lowercase source commit SHA');
+  return sourceRef;
+}
+export function rewriteSourceGuideLinks(name,text,sourceRef='main'){
+  const ref=sourceGuideReference(sourceRef),sourceOnly=new Set(SOURCE_ONLY_GUIDES);
+  return text.replace(/\]\(([^\s)]+)\)/g,(match,target)=>{
+    const [file,anchor]=target.split('#'),resolved=path.posix.normalize(path.posix.join(path.posix.dirname(name),file));
+    return sourceOnly.has(resolved)?`](https://github.com/ImMappyJ/ps-ai/blob/${ref}/${resolved}${anchor?'#'+anchor:''})`:match;
+  });
+}
+export async function createEnvironmentPackage(root,target,{sourceRef='main'}={}){
+  sourceGuideReference(sourceRef);
+  const {zipSync,strToU8,strFromU8}=await import('fflate');
+  const {gatewayBundle,gatewayNotices}=await import('./build-gateway.mjs');
+  const entries={};for(const name of environmentSourceNames())entries[name]=new Uint8Array(await fs.readFile(path.join(root,name)));
   // These development entry points belong to the source repository. Keep
   // shipped guides navigable without copying private notes or server sources.
-  const sourceOnly=new Set(['AGENTS.md','docs/development/BACKEND.md','docs/development/BACKEND.en.md']);
   for(const [name,bytes] of Object.entries(entries))if(name.endsWith('.md')){
-    entries[name]=strToU8(strFromU8(bytes).replace(/\]\(([^\s)]+)\)/g,(match,target)=>{
-      const [file,anchor]=target.split('#'),resolved=path.posix.normalize(path.posix.join(path.posix.dirname(name),file));
-      return sourceOnly.has(resolved)?`](https://github.com/ImMappyJ/ps-ai/blob/main/${resolved}${anchor?'#'+anchor:''})`:match;
-    }));
+    entries[name]=strToU8(rewriteSourceGuideLinks(name,strFromU8(bytes),sourceRef));
   }
   entries['backend/ps-ai-gateway.mjs']=await gatewayBundle(root);
   entries['backend/THIRD_PARTY_NOTICES.txt']=strToU8(await gatewayNotices(root));entries['backend/LICENSE']=entries.LICENSE;
   await fs.writeFile(target,zipSync(entries,{level:9}));return Object.keys(entries);
 }
 async function packageEntries(directory){
+  const {strToU8,strFromU8}=await import('fflate');
   const entries={};
   async function collect(folder,prefix=''){
     for(const item of (await fs.readdir(folder,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))){
@@ -82,12 +99,14 @@ async function packageEntries(directory){
   return entries;
 }
 export async function createPackage(directory,target){
+  const {zipSync,unzipSync}=await import('fflate');
   const entries=await packageEntries(directory);
   const bytes=zipSync(entries,{level:9});
   const inspected=unzipSync(bytes);if(!inspected['manifest.json']||!inspected['main.js'])throw new Error('包校验失败');
   await fs.writeFile(target,bytes);return Object.keys(inspected);
 }
 export async function createPortablePackage(directory,target){
+  const {zipSync,strToU8,strFromU8}=await import('fflate');
   const entries=await packageEntries(directory),manifest=JSON.parse(strFromU8(entries['manifest.json']));
   if(manifest.id!=='local.ps-ai')throw new Error('文件夹版必须从 PS-AI 正式构建生成');
   manifest.id='local.ps-ai.portable';manifest.name='PS-AI (Portable)';
@@ -100,10 +119,16 @@ export async function createPortablePackage(directory,target){
   await fs.writeFile(target,zipSync(archive,{level:9}));return Object.keys(archive);
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href){
+  const explicit=process.env.PSAI_RELEASE_DIR;
+  if(explicit!==undefined&&!explicit.trim())throw new Error('Explicit package output directory must not be empty');
+  const output=path.resolve(explicit??'release');
+  await fs.mkdir(output,{recursive:true});
+  if(explicit!==undefined&&(await fs.readdir(output)).length)throw new Error('Explicit package output directory is nonempty; choose a new empty directory');
+  const sourceRef=sourceGuideReference(process.env.PSAI_SOURCE_REF??'main');
   const manifest=JSON.parse(await fs.readFile('dist/plugin/manifest.json','utf8'));
-  await fs.mkdir('release',{recursive:true});const target=path.resolve(`release/ps-ai-${manifest.version}-experimental.ccx`);
+  const target=path.join(output,`ps-ai-${manifest.version}-experimental.ccx`);
   await createPackage(path.resolve('dist/plugin'),target);console.log('Experimental package:',target);
-  const environment=path.resolve(`release/ps-ai-${manifest.version}-environment-experimental.zip`);await createEnvironmentPackage(process.cwd(),environment);console.log('Environment tools:',environment);
-  const portable=path.resolve(`release/ps-ai-${manifest.version}-portable-experimental.zip`);await createPortablePackage(path.resolve('dist/plugin'),portable);console.log('Portable folder:',portable);
+  const environment=path.join(output,`ps-ai-${manifest.version}-environment-experimental.zip`);await createEnvironmentPackage(process.cwd(),environment,{sourceRef});console.log('Environment tools:',environment);
+  const portable=path.join(output,`ps-ai-${manifest.version}-portable-experimental.zip`);await createPortablePackage(path.resolve('dist/plugin'),portable);console.log('Portable folder:',portable);
   for(const file of [target,environment,portable]){const hash=createHash('sha256').update(await fs.readFile(file)).digest('hex');await fs.writeFile(file+'.sha256',`${hash}  ${path.basename(file)}\n`);}
 }

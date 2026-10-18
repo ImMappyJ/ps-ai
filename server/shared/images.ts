@@ -1,5 +1,5 @@
-import {decodePng,encodePng,rasterDepth} from '../../src/image';
-import type {GenerationRequest} from '../../src/gateway-protocol';
+import {decodePng,encodePng,rasterDepth} from '../../src/imaging/image';
+import type {GenerationRequest} from '../../src/infrastructure/backends/gateway-protocol';
 import {ServiceError} from './errors';
 export const MAX_INPUT_BYTES=10*1024*1024;
 export function validateInput(bytes:Uint8Array){

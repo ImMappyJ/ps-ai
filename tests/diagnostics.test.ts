@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {ComfyClient,uuid} from '../src/client';
-import {diagnostic} from '../src/diagnostics';import {setLanguage} from '../src/i18n';
+import {ComfyClient,uuid} from '../src/infrastructure/backends/client';
+import {diagnostic} from '../src/diagnostics/diagnostics';import {setLanguage} from '../src/localization/i18n';
 
 test('diagnostics identify the failed stage and keep pending-task retry instructions',()=>{
   setLanguage('en-US');try{

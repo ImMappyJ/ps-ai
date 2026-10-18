@@ -1,6 +1,8 @@
 node_modules/
 dist/
 release/
+!scripts/release/
+!scripts/release/*.mjs
 artifacts/
 .references/
 .tools/
@@ -36,6 +38,10 @@ docs/providers/*
 docs/development/*
 !docs/development/BACKEND.md
 !docs/development/BACKEND.en.md
+!docs/development/RELIGHT.md
+!docs/development/RELIGHT.en.md
+!docs/development/RELEASING.md
+!docs/development/RELEASING.en.md
 scripts/photoshop-network.ps1
 tests/network-isolation.test.ts
 .vscode/

@@ -43,6 +43,7 @@
       "sourceFileByteLimit": 64000000,
       "identity": "Same full path, dimensions and native depth; recheck source state after file selection",
       "workingCopy": "Unmerged sRGB duplicate, preserved original, capture/apply frozen to the copy",
+      "undoRecapture": "Development: profile assignment committed as a separate history baseline; mock apply/undo/recapture and explicit profile-removal rejection covered. Native acceptance of this later fix pending; old pathless untagged copies still require a verified manual profile assignment.",
       "nativeAcceptance": {
         "date": "2026-10-18",
         "host": "27.0.0",
@@ -140,11 +141,16 @@
   "backgroundReplacement": {
     "status": "development; not in published v0.4.0",
     "modes": ["background", "scene"],
+    "selection": "Development: select the subject to keep; capture full canvas, including transparent corners; ordinary edits and old saved candidates retain their own selection semantics",
+    "subjectComposite": "subject-background-v1; source/subject coverage intersection min(selection, alpha), native-size opaque patch for translucent pixels, editable protection-aware mask; binary subject/protection history",
+    "subjectSelectionAcceptance": "Offline regression coverage only. Native subject-selection/RGBA edge application and new inference pending; earlier stage acceptance below used a background selection.",
     "modelInput": "sRGB8 over white for background modes only; original capture and source document alpha preserved",
     "comfyuiGuide": false,
     "gatewayGuide": "provider/native mask behavior retained; offline coverage only",
     "preserveAlpha": false,
     "alignSubject": false,
+    "matchColor": false,
+    "legacyColorMatching": "Old background candidates retain their saved matchColor; parameter reuse creates new tasks with matching disabled",
     "applyAlphaCoverageMinimum": 0.9,
     "acceptance": {
       "date": "2026-10-18",
@@ -318,7 +324,87 @@
       "mode": "relight",
       "workspace": "cosplay (display Portrait)",
       "kind": "edit",
-      "status": "development; offline intent/protocol/panel checks; native/live result pending"
+      "sceneSchemaVersion": 1,
+      "parameterVersion": 1,
+      "control": "semantic lighting instructions; no per-light provider API or physical renderer",
+      "lightTypes": ["point", "spot", "directional"],
+      "maxLights": 8,
+      "source": "Frozen visible composite and effective grayscale mask; native-depth source retained separately from sRGB8 model input",
+      "outputs": {
+        "default": "NORMAL complete-result layer with editable mask through the existing safe apply path",
+        "compensation": "Mathematical opaque encoded-sRGB Multiply then Screen diagnostics only; apply disabled pending both native composition and real-image visual acceptance"
+      },
+      "nativeProbe": {
+        "host": "Windows Photoshop 27.0.0",
+        "container": "1040x740 resizable UXP dialog, PNG data URL and DOM pointer capture verified on a disposable synthetic document",
+        "writes": "Close dialog before native capture/write and reopen; apply inside open dialog failed",
+        "identity": "128x96 sRGB8, 49152 RGBA channels, maximum difference 0; this probe did not test undo",
+        "compensation": "Opaque isolated fixed base, NORMAL group, Multiply then Screen at full opacity, no masks or cross-profile conversion: sRGB/Adobe RGB 8-bit max 0, 16-bit max 2/65535. Display P3 unavailable. Synthetic composition only."
+      },
+      "liveModelProbe": {
+        "backend": "Local ComfyUI 0.37.4 / existing Qwen-Image 2.1 GGUF",
+        "settings": "512x512, 25 steps, seed 23491, source plus grayscale guide",
+        "scope": "Final compiler: three synthetic sphere/cube cases and three public NASA/scikit-image astronaut photo cases; left/right warm key and cool key with stronger fill",
+        "observed": "Distinguishable lighting direction on synthetic objects and warm/cool photo results; broad pose and environment retained",
+        "limits": "Semantic control only. Small text, fine texture, exact multi-light intensity and physical shadows not accepted as faithful. Raw outputs are not strictly opaque. Not Photoshop UI or platform API acceptance."
+      },
+      "nativePreviewBaseline": {
+        "scope": "Real core functions in PS27 PSJS, not final workbench dragging or installed-panel FPS",
+        "fixture": "4096x3072 sRGB8 capture, eight mixed point/spot/directional lights, 480x360 cached illustration",
+        "captureMs": 6606,
+        "prepareCacheMs": 11,
+        "warmRuns": 12,
+        "medianMs": { "render": 52.5, "pngEncode": 43, "imageLoad": 11, "total": 107.5 },
+        "percentileMethod": "arithmetic median; nearest-rank p95",
+        "p95TotalMs": 118,
+        "midRenderCancellationMs": 17,
+        "preexistingDocumentsUnchanged": true
+      },
+      "nativeWorkbench": {
+        "scope": "Final source modules in a PS27 native script; not installed-panel acceptance",
+        "interaction": "Actual point, spot-target and directional dragging, consecutive gestures, internal undo/redo, resize and off-image find verified",
+        "resize": "1040x740 to1160x820; fit recalculated without changing the scene fingerprint",
+        "preview": { "source": "4096x3072", "cache": "480x360", "lights": 8, "samples": 10, "minMs": 111, "medianMs": 116.5, "p50NearestRankMs": 115, "p95NearestRankMs": 124, "maxMs": 124 },
+        "timingDefinition": "Committed DOM parameter change to fresh image-load event; not painted-frame FPS",
+        "idleSampleMs": 2513,
+        "idleResizeAndLoadCountGrowth": 0,
+        "cleanup": "Listeners, preview cache and image references released; owned document closed; pre-existing document ID/history unchanged",
+        "probeLimit": "Raw off-image-find assertion retained false because the probe saved a live viewport reference; unchanged scene fingerprint and edge-to-center marker geometry independently confirmed find behavior"
+      },
+      "panelEndToEnd": {
+        "status": "pending installed UXP plugin acceptance",
+        "attempt": "PSJS native fetch denied at first GET; zero uploads and inference POSTs; no new source document created; pre-existing documents unchanged",
+        "reason": "Adobe UXP scripting does not permit Network; no proxy or permission bypass used",
+        "reference": "https://developer.adobe.com/photoshop/uxp/2022/scripting/how-it-works/"
+      },
+      "nativeSavedResultApply": {
+        "scope": "Final workbench and Photoshop adapter with controlled host callbacks and an already saved real Qwen result; not panel storage/network end-to-end",
+        "fixture": "512x512 sRGB16 source with retained non-257 channel values, previously generated sRGB8 public astronaut result",
+        "priorInferenceId": "aaa8ae77-97ec-4da0-9145-6124d9e6f5fc",
+        "newInferencePosts": 0,
+        "application": "Two ordinary close/apply/reopen operations; second replaces owned candidate, layer count unchanged",
+        "undo": "First previous history restores prior candidate; second restores original source",
+        "comparedRGBAValuesPerCheck": 1048576,
+        "sourceLayerMaxDifference": 0,
+        "priorCandidateUndoMaxDifference": 0,
+        "originalSourceUndoMaxDifference": 0,
+        "inputValidation": "Native keyboard invalid value retains scene; valid correction clears parameter error; unrelated export error remains",
+        "preexistingDocumentsUnchanged": true
+      },
+      "status": "development; core tests, native source workbench/API/composition/performance and limited real ComfyUI output recorded separately; installed panel, broader visual fidelity and platform acceptance pending"
+    },
+    "imageBlending": {
+      "mode": "blend",
+      "workspace": "cosplay (display Portrait)",
+      "kind": "edit",
+      "context": "Full visible canvas supplies environment context; apply only to subject selection minus protection",
+      "prompt": "Optional user instruction with built-in environment harmonization intent",
+      "status": "development; offline coverage; native controls, color/alpha and real output acceptance pending"
+    },
+    "promptFreeRemoval": {
+      "mode": "remove",
+      "prompt": "Hidden input; built-in removal instruction ignores unrelated prompt drafts",
+      "status": "development; offline coverage; native controls and real output acceptance pending"
     }
   }
 }

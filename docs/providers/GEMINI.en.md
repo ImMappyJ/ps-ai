@@ -37,7 +37,7 @@ The adapter uses Google's [GenerateContent image API](https://ai.google.dev/gemi
 
 Names follow the [official model guide](https://ai.google.dev/gemini-api/docs/image-generation). This list declares adapter scope, not account access or permanent model availability.
 
-Text-to-image and seven edit modes are exposed: objects/materials, removal, background, outfits/props, references, scenes and relighting. Transparent effects/atmosphere assets are disabled. Multi-turn conversations, search, 4K, configurable seeds and 16-bit output are not exposed. Steps and seed controls are disabled. Each candidate is a separate platform call.
+Text-to-image and eight edit modes are exposed: objects/materials, removal, background, outfits/props, references, scenes, relighting and image blending. Transparent effects/atmosphere assets are disabled. Multi-turn conversations, search, 4K, configurable seeds and 16-bit output are not exposed. Steps and seed controls are disabled. Each candidate is a separate platform call.
 
 Source and guide images are scaled proportionally and padded to 1024×1024. A matching square PNG is cropped using the same padding coordinates, then resized to the requested canvas. References retain their aspect ratio. Narrow selections get fewer effective model pixels; large requests may upscale a 1K result. Actual subject alignment still needs live acceptance; this is not a promise of pixel-perfect model editing.
 
@@ -54,4 +54,4 @@ This Gemini API returns an image directly. The adapter has no remote task ID for
 - Refusals, missing images, non-PNG output and invalid dimensions/color produce errors. Do not bypass validation to force application.
 - After a crash, remove a stale `gateway.lock` only after confirming its recorded process has exited. Data contains private images and prompts; keep it private.
 
-With a key, validate all eight modes, both UI languages, color/alpha edges, selections/protection, apply/undo, multiple candidates, disconnects/restarts and both installation paths. Update compatibility, screenshots and release status only after acceptance. The repository’s `docs/development/BACKEND.en.md` and `AGENTS.md` document adapter and persistence contracts.
+With a key, validate all nine modes (text-to-image and eight edits, excluding the two transparent asset modes), both UI languages, color/alpha edges, selections/protection, apply/undo, multiple candidates, disconnects/restarts and both installation paths. Update compatibility, screenshots and release status only after acceptance. The repository’s `docs/development/BACKEND.en.md` and `AGENTS.md` document adapter and persistence contracts.

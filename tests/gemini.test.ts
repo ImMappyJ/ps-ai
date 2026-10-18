@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {cloudRequest,cloudPng,untagPng,testId} from './gateway-fixtures';
-import {decodePng} from '../src/image';
+import {decodePng} from '../src/imaging/image';
 
 test('Gemini 适配独立于百炼：原生接口、私密请求头、图片顺序和能力限制',async()=>{
   const {GeminiProvider}=await import('../server/providers/gemini');let url='',init:any;
@@ -16,7 +16,7 @@ test('Gemini 适配独立于百炼：原生接口、私密请求头、图片顺�
 test('Gemini 编辑补齐方形上下文，回填裁回原比例而不拉伸主体',async()=>{
   const {GeminiProvider}=await import('../server/providers/gemini');const p=new GeminiProvider();
   const bytes=cloudPng(1024,1024);const raw=decodePng(bytes);for(let y=0;y<1024;y++)for(let x=0;x<1024;x++){const i=(y*1024+x)*4;raw.rgba[i]=y<256||y>=768?255:0;raw.rgba[i+1]=y>=256&&y<768?255:0;}
-  const {encodePng}=await import('../src/image');const request={...cloudRequest,model:'gemini-2.5-flash-image',seed:0,width:1024,height:512};
+  const {encodePng}=await import('../src/imaging/image');const request={...cloudRequest,model:'gemini-2.5-flash-image',seed:0,width:1024,height:512};
   const output=decodePng(p.normalizeOutput(encodePng(raw),request));assert.equal(output.width,1024);assert.equal(output.height,512);assert.equal(output.rgba[1],255);assert.equal(output.rgba[0],0);
   assert.throws(()=>p.normalizeOutput(cloudPng(1024,768),request),/square/);assert.throws(()=>p.normalizeOutput(untagPng(bytes),request),/sRGB/);
 });

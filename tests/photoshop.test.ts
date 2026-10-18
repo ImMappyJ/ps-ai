@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {PhotoshopAdapter,Snapshot} from '../src/photoshop';
+import {PhotoshopAdapter,Snapshot} from '../src/infrastructure/photoshop/photoshop';
+import {prepareBackgroundCandidate} from '../src/imaging/composite';
 
 function host() {
   const calls:any[]=[];let inside=false;let serial=0;
@@ -16,6 +17,15 @@ function host() {
   };return {ps,doc,calls,adapter:new PhotoshopAdapter(ps,'session-a')};
 }
 function snap():Snapshot {return {documentId:11,width:100,height:80,profile:'sRGB IEC61966-2.1',mode:'rgb',depth:8,historyId:91,sessionId:'session-a',bounds:{left:40,top:30,right:42,bottom:32},mask:new Uint8Array([255,128,0,255]),sourceHash:'fixture'};}
+
+test('relight can retain native16 capture independently of selected provider output depth',async()=>{
+  const h=host();h.doc.bitsPerChannel=16;
+  h.ps.imaging.getPixels=async()=>({imageData:{width:1,height:1,components:4,componentSize:16,getData:async()=>new Uint16Array([12345,23456,34567,65534]),dispose(){}},sourceBounds:{left:40,top:30,right:41,bottom:31}});
+  const c=await h.adapter.capture(0,undefined,11,8,{preserveNativeDepth:true} as any);
+  assert.ok(c.image.rgba instanceof Uint16Array);
+  assert.deepEqual((c.snapshot as any).sourceLayerIds,[2]);
+  await assert.rejects(h.adapter.capture(0,undefined,11,8,{preserveNativeDepth:'yes'} as any),/捕获策略/);
+});
 test('native16 capture and application retain non-257 colors/alpha;8 target converts explicitly',async()=>{
   const h=host();h.doc.bitsPerChannel=16;
   h.ps.imaging.getPixels=async()=>({imageData:{width:1,height:1,components:4,componentSize:16,getData:async()=>new Uint16Array([12345,23456,34567,45678]),dispose(){}},sourceBounds:{left:40,top:30,right:41,bottom:31}});
@@ -25,6 +35,78 @@ test('native16 capture and application retain non-257 colors/alpha;8 target conv
   const h8=host();await h8.adapter.apply(snap(),patch16,'8 target');assert.deepEqual([...h8.calls.find(c=>c[0]==='buffer')[1].slice(0,4)],[48,91,135,178]);
 });
 const patch={width:2,height:2,rgba:new Uint8Array([255,0,0,128,255,0,0,255,255,0,0,255,255,0,0,255])};
+
+// The live profile setter does not itself establish the duplicate's committed
+// history baseline. Native undo reads the stored history state, not that setter.
+function colorHistoryHost() {
+  const h=host();h.ps.constants.ColorProfileType={NONE:'none',CUSTOM:'customEnum'};
+  h.doc.path='D:\\Pictures\\source.webp';h.doc.colorProfileName='None';h.doc.colorProfileType='none';h.doc.saved=false;
+  let profile='None',type='none',nextHistory=200,reads=0;
+  const copy:any={...h.doc,id:22,path:undefined,activeHistoryState:{id:200},layers:h.doc.layers.map((l:any)=>({...l,id:9})),closeWithoutSaving:async()=>{h.ps.app.documents=h.ps.app.documents.filter((d:any)=>d!==copy);}};
+  Object.defineProperties(copy,{
+    colorProfileName:{get:()=>profile,set:(value:string)=>{profile=value;type=value==='None'?'none':'customEnum';},configurable:true},
+    colorProfileType:{get:()=>type,set:(value:string)=>{type=value;},configurable:true}
+  });
+  copy.createLayer=async()=>{const layer={id:56,isClippingMask:false,move:async()=>{}};copy.layers.unshift(layer);return layer;};
+  const state=()=>({id:copy.activeHistoryState.id,profile,type,layers:[...copy.layers]});
+  const history=[state()],suspensions=new Map<number,any>();let serial=0;
+  h.doc.duplicate=async(_name:string,merge:boolean)=>{assert.equal(merge,false);h.ps.app.documents.push(copy);h.ps.app.activeDocument=copy;return copy;};
+  const modal=h.ps.core.executeAsModal;
+  h.ps.core.executeAsModal=(fn:any)=>modal((ctx:any)=>fn({...ctx,hostControl:{
+    registerAutoCloseDocument:async()=>{},unregisterAutoCloseDocument:async()=>{},
+    suspendHistory:async(options:any)=>{assert.equal(options.documentID,22);h.calls.push(['suspend-copy',options]);const id=++serial;suspensions.set(id,state());return id;},
+    resumeHistory:async(id:number,commit:boolean)=>{h.calls.push(['resume-copy',id,commit]);if(commit){copy.activeHistoryState={id:++nextHistory};history.push(state());}else{const prior=suspensions.get(id);profile=prior.profile;type=prior.type;copy.layers=prior.layers;}suspensions.delete(id);}
+  }}));
+  const adapter=new PhotoshopAdapter(h.ps,'session-a',async()=>{},async(doc:any)=>{
+    reads++;if(doc.path!==h.doc.path)throw new Error('来源没有可核对的原文件；请在副本中指定正确配置文件后重试');
+    return {kind:'srgb',format:'webp',width:100,height:80,depth:8,reason:'webp-default'};
+  });
+  const undo=()=>{assert.ok(history.length>1);history.pop();const prior=history[history.length-1]!;profile=prior.profile;type=prior.type;copy.activeHistoryState={id:prior.id};copy.layers=[...prior.layers];};
+  return {...h,copy,adapter,undo,reads:()=>reads};
+}
+
+test('working-copy color is a committed baseline: apply then native undo can capture the pathless copy again',async()=>{
+  const h=colorHistoryHost(),captured=await h.adapter.capture(0,undefined,11);
+  await h.adapter.apply(captured.snapshot,captured.image,'AI');h.undo();
+  const again=await h.adapter.capture(0,undefined,22);
+  assert.equal(again.snapshot.documentId,22);assert.equal(again.snapshot.profile,'sRGB IEC61966-2.1');
+  assert.equal(h.copy.path,undefined);assert.equal(h.copy.colorProfileType,'customEnum');assert.equal(h.reads(),1);
+  assert.equal(h.copy.layers.length,1);assert.equal(h.doc.colorProfileName,'None');assert.equal(h.doc.activeHistoryState.id,91);
+});
+
+test('a lost or inconsistent profile is never inferred from a pathless copy or a previous adapter session',async()=>{
+  const h=colorHistoryHost(),captured=await h.adapter.capture(0,undefined,11);
+  h.copy.colorProfileType='none';
+  await assert.rejects(h.adapter.apply(captured.snapshot,captured.image,'stale type'),/状态已改变|色彩|配置文件/);
+  h.copy.colorProfileName='None';
+  await assert.rejects(h.adapter.capture(0,undefined,22),/原文件|配置文件/);
+  const fresh=new PhotoshopAdapter(h.ps,'session-b');await assert.rejects(fresh.capture(0,undefined,22),/色彩|配置文件/);
+  const arbitrary={...h.copy,id:33,colorProfileName:'None',colorProfileType:'none'};h.ps.app.documents.push(arbitrary);h.ps.app.activeDocument=arbitrary;
+  await assert.rejects(h.adapter.capture(0,undefined,33),/原文件|配置文件/);
+});
+
+test('working-copy assignment failure rolls back its own history and closes it without reading pixels',async()=>{
+  const h=colorHistoryHost();
+  Object.defineProperty(h.copy,'colorProfileName',{get:()=> 'None',set:()=>{throw new Error('profile assignment failed');},configurable:true});
+  await assert.rejects(h.adapter.capture(0,undefined,11),/profile assignment failed/);
+  assert.deepEqual(h.calls.find(call=>call[0]==='resume-copy').slice(1),[1,false]);
+  assert.equal(h.ps.app.documents.length,1);assert.equal(h.ps.app.activeDocument.id,11);assert.equal(h.doc.colorProfileName,'None');
+  assert.equal(h.calls.some(call=>call[0]==='getPixels'),false);
+});
+
+test('the new working-copy baseline does not authorize changed geometry, depth, mode, history, ICC, closed documents or sessions',async()=>{
+  const mutations=[
+    (h:any,s:Snapshot)=>h.copy.width++, (h:any,s:Snapshot)=>h.copy.height++,
+    (h:any,s:Snapshot)=>h.copy.bitsPerChannel=16, (h:any,s:Snapshot)=>h.copy.mode='gray',
+    (h:any,s:Snapshot)=>h.copy.activeHistoryState.id++, (h:any,s:Snapshot)=>h.copy.colorProfileName='Adobe RGB (1998)',
+    (h:any,s:Snapshot)=>h.ps.app.documents=[h.doc], (h:any,s:Snapshot)=>s.sessionId='previous-session'
+  ];
+  for(const mutate of mutations){
+    const h=colorHistoryHost(),c=await h.adapter.capture(0,undefined,11);mutate(h,c.snapshot);
+    await assert.rejects(h.adapter.apply(c.snapshot,c.image,'stale working copy'));
+    assert.equal(h.copy.layers.length,1);assert.equal(h.doc.colorProfileName,'None');
+  }
+});
 
 test('verified saved sRGB uses a tagged working copy for capture and apply without changing the original',async()=>{
   const h=host();h.doc.colorProfileName='';h.doc.saved=false;h.doc.layers.push({...h.doc.layers[0],id:3,opacity:40});
@@ -122,6 +204,82 @@ test('捕获真实选区灰度和透明裁边，保护区在原坐标减去',asy
   assert.equal(c.selectionMask[30*66+32],255);assert.equal(c.protectionMask[30*66+32],0);
   assert.equal(c.image.rgba[(30*66+32)*4],20);assert.equal(c.image.rgba[3],0);
   assert.equal(h.calls.filter(c=>c==='dispose').length,2);
+});
+
+test('subject-background captures the whole canvas including transparent corners, preserving raw subject/protection and source',async()=>{
+  const h=host(),protection={documentId:11,width:100,height:80,bounds:{left:40,top:30,right:42,bottom:32},mask:new Uint8Array([0,128,255,0]),sessionId:'session-a'};
+  h.ps.imaging.getPixels=async(o:any)=>{h.calls.push(['getPixels',o]);return {imageData:{width:2,height:2,components:4,componentSize:8,getData:async()=>new Uint8Array([20,30,40,255,80,90,100,128,120,130,140,0,10,20,30,255]),dispose(){}},sourceBounds:{left:40,top:30,right:42,bottom:32}};};
+  const c=await h.adapter.capture(0,protection,11,8,{context:'document',selection:'subject-background'}),p=30*100+40;
+  assert.deepEqual(c.snapshot.bounds,{left:0,top:0,right:100,bottom:80});assert.equal(c.snapshot.backgroundComposite,'subject-background-v1');assert.ok(c.subjectMask);
+  assert.deepEqual([c.snapshot.mask[0],c.snapshot.mask[7999],c.snapshot.mask[p],c.snapshot.mask[p+1],c.snapshot.mask[p+100]],[255,255,0,127,0]);
+  assert.deepEqual([c.subjectMask[p],c.subjectMask[p+1],c.subjectMask[p+100],c.subjectMask[p+101]],[255,128,0,255]);
+  assert.equal(c.selectionMask[p+1],255);assert.equal(c.protectionMask[p+1],128);
+  assert.deepEqual([...c.image.rgba.slice((p+1)*4,(p+1)*4+4)],[80,90,100,128]);assert.equal(c.image.rgba[3],0);
+  assert.deepEqual(h.calls.find(c=>c[0]==='getPixels')[1].sourceBounds,{left:0,top:0,right:100,bottom:80});
+});
+
+test('document/edit captures visible environment but only the subject minus feathered protection is editable',async()=>{
+  const h=host(),protection={documentId:11,width:100,height:80,bounds:{left:40,top:30,right:42,bottom:32},mask:new Uint8Array([0,128,0,0]),sessionId:'session-a'};
+  h.ps.imaging.getPixels=async()=>({imageData:{width:3,height:1,components:4,componentSize:8,getData:async()=>new Uint8Array([10,20,30,255,20,30,40,255,30,40,50,128]),dispose(){}},sourceBounds:{left:39,top:30,right:42,bottom:31}});
+  const c=await h.adapter.capture(0,protection,11,8,{context:'document',selection:'edit'}),p=30*100+40;
+  assert.deepEqual(c.snapshot.bounds,{left:0,top:0,right:100,bottom:80});assert.equal(c.snapshot.backgroundComposite,undefined);assert.equal(c.subjectMask,undefined);
+  assert.deepEqual([c.snapshot.mask[p-1],c.snapshot.mask[p],c.snapshot.mask[p+1]],[0,255,64]);
+  assert.deepEqual([...c.image.rgba.slice((p-1)*4,(p-1)*4+4)],[10,20,30,255]);
+});
+
+test('document capture maps cache-level bounds to the full native16 canvas without quantizing samples',async()=>{
+  const h=host();h.doc.bitsPerChannel=16;
+  h.ps.imaging.getSelection=async()=>({imageData:{width:1,height:1,componentSize:16,components:1,getData:async()=>new Uint16Array([32768]),dispose(){}},sourceBounds:{left:20,top:15,right:21,bottom:16},level:1});
+  h.ps.imaging.getPixels=async()=>({imageData:{width:1,height:1,components:4,componentSize:16,getData:async()=>new Uint16Array([12345,23456,34567,32769]),dispose(){}},sourceBounds:{left:20,top:15,right:21,bottom:16},level:1});
+  const c=await h.adapter.capture(0,undefined,11,16,{context:'document',selection:'subject-background'}),p=30*100+40;
+  assert.ok(c.image.rgba instanceof Uint16Array);assert.equal(c.image.width,100);assert.equal(c.image.height,80);assert.ok(c.subjectMask);
+  assert.deepEqual([...c.image.rgba.slice(p*4,p*4+4)],[12345,23456,34567,32769]);assert.equal(c.subjectMask[p],128);assert.equal(c.subjectMask[p+1],128);assert.equal(c.snapshot.mask[p],255);
+});
+
+test('background keeps native16 source alpha even when the provider output is 8-bit',async()=>{
+  const h=host();h.doc.bitsPerChannel=16;
+  h.ps.imaging.getPixels=async()=>({imageData:{width:1,height:1,components:4,componentSize:16,getData:async()=>new Uint16Array([12345,23456,34567,65534]),dispose(){}},sourceBounds:{left:40,top:30,right:41,bottom:31}});
+  const c=await h.adapter.capture(0,undefined,11,8,{context:'document',selection:'subject-background'}),p=30*100+40;
+  assert.ok(c.image.rgba instanceof Uint16Array);assert.equal(c.image.rgba[p*4+3],65534);assert.equal(c.snapshot.mask[p],255);
+});
+
+test('blend does not count protected subject pixels, feather-only edges or transparent surroundings as environment',async()=>{
+  for(const subject of [new Uint8Array([255,255]),new Uint8Array([255,254])]){
+    const h=host();h.doc.width=2;h.doc.height=1;h.doc.selection.bounds={left:0,top:0,right:2,bottom:1};
+    h.ps.imaging.getSelection=async()=>({imageData:{width:2,height:1,componentSize:8,components:1,getData:async()=>subject,dispose(){}},sourceBounds:{left:0,top:0,right:2,bottom:1}});
+    h.ps.imaging.getPixels=async()=>({imageData:{width:2,height:1,componentSize:8,components:4,getData:async()=>new Uint8Array([20,30,40,255,20,30,40,255]),dispose(){}},sourceBounds:{left:0,top:0,right:2,bottom:1}});
+    const protection={documentId:11,width:2,height:1,bounds:{left:0,top:0,right:2,bottom:1},mask:new Uint8Array([0,255]),sessionId:'session-a'};
+    await assert.rejects(h.adapter.capture(0,protection,11,8,{context:'document',selection:'edit'}),/主体选区外没有可见环境/);
+  }
+  const transparent=host();await assert.rejects(transparent.adapter.capture(0,undefined,11,8,{context:'document',selection:'edit'}),/主体选区外没有可见环境/);
+});
+
+test('background apply writes its reconstructed patch and actual grayscale mask in one ordinary undo transaction',async()=>{
+  const h=host();h.doc.width=3;h.doc.height=1;h.doc.selection.bounds={left:0,top:0,right:2,bottom:1};
+  h.ps.imaging.getSelection=async()=>({imageData:{width:2,height:1,componentSize:8,components:1,getData:async()=>new Uint8Array([255,128]),dispose(){}},sourceBounds:{left:0,top:0,right:2,bottom:1}});
+  h.ps.imaging.getPixels=async()=>({imageData:{width:3,height:1,componentSize:8,components:4,getData:async()=>new Uint8Array([200,100,50,255,200,100,50,128,0,0,0,0]),dispose(){}},sourceBounds:{left:0,top:0,right:3,bottom:1}});
+  const protection={documentId:11,width:3,height:1,bounds:{left:0,top:0,right:3,bottom:1},mask:new Uint8Array([0,128,0]),sessionId:'session-a'};
+  const c=await h.adapter.capture(0,protection,11,8,{context:'document',selection:'subject-background'}),prepared=prepareBackgroundCandidate({width:1,height:1,rgba:new Uint8Array([20,60,120,255])},c.image,c.subjectMask!,c.protectionMask);
+  await h.adapter.apply(c.snapshot,prepared,'background');
+  const buffers=h.calls.filter(call=>call[0]==='buffer');
+  assert.deepEqual([...buffers[0][1]],[20,60,120,255,110,80,85,255,20,60,120,255]);assert.deepEqual([...buffers[1][1]],[0,127,255]);
+  assert.equal(h.doc.layers[0].isClippingMask,false);assert.equal(h.calls.filter(call=>call[0]==='suspend').length,1);assert.deepEqual(h.calls.find(call=>call[0]==='resume').slice(1),[1,true]);
+  h.ps.imaging.putLayerMask=async()=>{throw new Error('background mask write failed');};
+  await assert.rejects(h.adapter.apply(c.snapshot,prepared,'bad background'),/background mask write failed/);
+  assert.deepEqual(h.calls.filter(call=>call[0]==='resume')[1].slice(1),[2,false]);assert.equal(h.calls.filter(call=>call==='dispose').length,4);
+});
+
+test('full-canvas strategies reject empty selections, unavailable environment and pixel-budget excess',async()=>{
+  const noEnvironment=host();
+  await assert.rejects(noEnvironment.adapter.capture(0,undefined,11,8,{context:'document',selection:'edit'}),/主体选区外没有可见环境/);
+  const empty=host();empty.ps.imaging.getSelection=async()=>({imageData:{width:2,height:2,componentSize:8,components:1,getData:async()=>new Uint8Array(4),dispose(){}},sourceBounds:{left:40,top:30,right:42,bottom:32}});
+  await assert.rejects(empty.adapter.capture(0,undefined,11,8,{context:'document',selection:'subject-background'}),/选区为空/);
+  const large=host();large.doc.width=5000;large.doc.height=5000;
+  await assert.rejects(large.adapter.capture(0,undefined,11,8,{context:'document',selection:'subject-background'}),/1600/);assert.equal(large.calls.some(c=>c[0]==='getPixels'),false);
+  const full=host();full.doc.width=2;full.doc.height=2;full.doc.selection.bounds={left:0,top:0,right:2,bottom:2};
+  full.ps.imaging.getSelection=async()=>({imageData:{width:2,height:2,componentSize:8,components:1,getData:async()=>new Uint8Array([255,255,255,255]),dispose(){}},sourceBounds:{left:0,top:0,right:2,bottom:2}});
+  full.ps.imaging.getPixels=async()=>({imageData:{width:2,height:2,componentSize:8,components:4,getData:async()=>new Uint8Array([20,30,40,255,20,30,40,255,20,30,40,255,20,30,40,255]),dispose(){}},sourceBounds:{left:0,top:0,right:2,bottom:2}});
+  await assert.rejects(full.adapter.capture(0,undefined,11,8,{context:'document',selection:'subject-background'}),/没有可替换背景/);
 });
 test('拒绝不同会话、关闭、尺寸、颜色与内容改变，写入前无新图层',async()=>{
   for(const mutate of [(s:Snapshot,h:any)=>s.sessionId='old-session',(s:Snapshot,h:any)=>h.ps.app.documents=[],(s:Snapshot,h:any)=>h.doc.width=101,(s:Snapshot,h:any)=>h.doc.colorProfileName='Adobe RGB',(s:Snapshot,h:any)=>h.doc.activeHistoryState.id=92]){

@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
-import {buildGraph,templateForDepth} from '../src/workflow';import {checkEnvironment} from '../src/environment';import {defaultSettings,validateSettings} from '../src/profile';import {ComfyClient} from '../src/client';import {panelHarness} from './uxp-harness';import {decodePng} from '../src/image';
+import {buildGraph,templateForDepth} from '../src/generation/workflow';import {checkEnvironment} from '../src/diagnostics/environment';import {defaultSettings,validateSettings} from '../src/infrastructure/config/profile';import {ComfyClient} from '../src/infrastructure/backends/client';import {panelHarness} from './uxp-harness';import {decodePng} from '../src/imaging/image';
 const opts={requestId:'depth-test',prompt:'blue',seed:42,steps:25,resolution:768};
 const schema={input:{required:{images:['IMAGE',{}],filename_prefix:['STRING',{default:'ps-ai/image'}]}},output:[]};
 test('16-bit workflow is pinned separately and optional node does not block8',async()=>{

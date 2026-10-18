@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateSettings,defaultSettings} from '../src/profile';
-import {uuid} from '../src/client';
+import {validateSettings,defaultSettings} from '../src/infrastructure/config/profile';
+import {uuid} from '../src/infrastructure/backends/client';
 
 export const capabilities={protocol:'ps-ai/1',provider:'bailian',configured:true,cancellation:'none',progress:'stages',models:[{id:'qwen-image-2.1-pro',label:'Qwen Image 2.1 Pro',operations:['t2i','edit','asset'],maxInputImages:10,outputDepths:[8],seedMax:2147483647,minPixels:262144,maxPixels:4194304,maxAspectRatio:8}]};
-test('relight is an edit-only gateway operation with a source image',async()=>{const {validateCapabilities,validateGeneration}=await import('../src/gateway-protocol');const id=uuid(),request={model:'qwen-image-2.1-pro',kind:'edit',mode:'relight',prompt:'warm soft light',seed:0,width:768,height:768,outputDepth:8,source:id+'-source.png'};assert.equal(validateGeneration(request,validateCapabilities(capabilities)).mode,'relight');assert.throws(()=>validateGeneration({...request,source:undefined},validateCapabilities(capabilities)));assert.throws(()=>validateGeneration({...request,kind:'asset'},validateCapabilities(capabilities)));});
+test('relight is an edit-only gateway operation with a source image',async()=>{const {validateCapabilities,validateGeneration}=await import('../src/infrastructure/backends/gateway-protocol');const id=uuid(),request={model:'qwen-image-2.1-pro',kind:'edit',mode:'relight',prompt:'warm soft light',seed:0,width:768,height:768,outputDepth:8,source:id+'-source.png'};assert.equal(validateGeneration(request,validateCapabilities(capabilities)).mode,'relight');assert.throws(()=>validateGeneration({...request,source:undefined},validateCapabilities(capabilities)));assert.throws(()=>validateGeneration({...request,kind:'asset'},validateCapabilities(capabilities)));});
 
 test('网关配置保留服务类型与平台模型，旧配置不改变且不导出密钥',()=>{
   const saved=validateSettings({...defaultSettings(),backend:'gateway',baseUrl:'http://localhost:8190',gatewayModel:'qwen-image-2.1-pro',apiKey:'must-not-be-exported'}) as any;
@@ -15,14 +15,14 @@ test('网关配置保留服务类型与平台模型，旧配置不改变且不�
 });
 
 test('网关客户端从能力清单读取模型，无密钥时在上传之前失败',async()=>{
-  const {GatewayClient}=await import('../src/gateway-client');let calls=0;
+  const {GatewayClient}=await import('../src/infrastructure/backends/gateway-client');let calls=0;
   const c=new GatewayClient('http://localhost:8190','qwen-image-2.1-pro',async()=>{calls++;return Response.json({...capabilities,configured:false});});
   const info=await c.connect();assert.equal(info.provider,'bailian');
   await assert.rejects(c.check(8),/DASHSCOPE_API_KEY/);assert.equal(calls,2);
 });
 
 test('语义协议校验模型能力、编辑来源、种子范围和输出位深',async()=>{
-  const {validateCapabilities,validateGeneration}=await import('../src/gateway-protocol');
+  const {validateCapabilities,validateGeneration}=await import('../src/infrastructure/backends/gateway-protocol');
   const cap=validateCapabilities(capabilities),base={model:'qwen-image-2.1-pro',kind:'t2i',mode:'generate',prompt:'white stockings',seed:42,width:768,height:768,outputDepth:8};
   assert.equal(validateGeneration(base,cap).model,base.model);
   for(const patch of [{outputDepth:16},{seed:2147483648},{width:32,height:32},{width:4096,height:256},{model:'other'},{kind:'edit',mode:'edit'},{source:'https://example.com/private.png'}])assert.throws(()=>validateGeneration({...base,...patch},cap));
@@ -33,7 +33,7 @@ test('语义协议校验模型能力、编辑来源、种子范围和输出位�
 });
 
 test('网关客户端使用语义请求与 UUID，不生成 ComfyUI 节点图',async()=>{
-  const {GatewayClient}=await import('../src/gateway-client');const id=uuid(),requests:{url:string;body:any}[]=[];
+  const {GatewayClient}=await import('../src/infrastructure/backends/gateway-client');const id=uuid(),requests:{url:string;body:any}[]=[];
   const transport=async(url:any,init:any)=>{requests.push({url:String(url),body:init?.body});if(String(url).endsWith('/capabilities'))return Response.json(capabilities);if(String(url).includes('/uploads/'))return Response.json({name:`${id}-source.png`});if(String(url).endsWith('/jobs'))return Response.json({id});if(String(url).includes('/outputs/'))return new Response(new Uint8Array([1,2,3]));return Response.json({state:'ready',images:[{filename:`${id}.png`,subfolder:'',type:'output'}]});};
   const c=new GatewayClient('http://localhost:8190','qwen-image-2.1-pro',transport);await c.check(8);
   await c.upload(new Uint8Array([1,2]),`${id}-source.png`);
@@ -44,7 +44,7 @@ test('网关客户端使用语义请求与 UUID，不生成 ComfyUI 节点图',a
 });
 
 test('云平台模板仍要求带 sRGB 标记的真实 8 位 PNG',async()=>{
-  const {GATEWAY_TEMPLATE}=await import('../src/gateway-protocol');const {decodeModelPng,encodePng}=await import('../src/image');
+  const {GATEWAY_TEMPLATE}=await import('../src/infrastructure/backends/gateway-protocol');const {decodeModelPng,encodePng}=await import('../src/imaging/image');
   assert.equal(GATEWAY_TEMPLATE,'gateway-v1-srgb8');
   const png=Buffer.from(encodePng({width:1,height:1,rgba:new Uint8Array([1,2,3,255])})),parts=[png.subarray(0,8)];
   for(let at=8;at<png.length;){const end=at+png.readUInt32BE(at)+12;if(png.toString('ascii',at+4,at+8)!=='sRGB')parts.push(png.subarray(at,end));at=end;}

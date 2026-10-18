@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {inspectSourceColor,createSourceColorReader,MAX_SOURCE_FILE_BYTES} from '../src/source-color';
-import {encodePng} from '../src/image';
+import {inspectSourceColor,createSourceColorReader,MAX_SOURCE_FILE_BYTES} from '../src/infrastructure/photoshop/source-color';
+import {encodePng} from '../src/imaging/image';
 
 function chunk(kind:string,data:Uint8Array){const out=new Uint8Array(8+data.length+(data.length%2));out.set([...kind].map(c=>c.charCodeAt(0)));new DataView(out.buffer).setUint32(4,data.length,true);out.set(data,8);return out;}
 export function webpFixture(width=100,height=80,icc=false){

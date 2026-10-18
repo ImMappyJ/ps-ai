@@ -6,10 +6,14 @@ This guide is for rewriting the server, adding providers or changing job storage
 
 ## Backend paths
 
+<a id="relighting-workbench"></a>
+
+See the [relighting workbench](RELIGHT.en.md) for structured lights, local illustrations and semantic request mapping. Lighting scenes belong to local task metadata; they do not add unknown fields to provider requests.
+
 | Setting | Request contract | Implementation |
 | --- | --- | --- |
-| Omitted `backend`, or `comfyui` | ComfyUI graph, node schemas and model filenames | [src/client.ts](../../src/client.ts), [src/workflow.ts](../../src/workflow.ts) |
-| `backend: gateway` | Semantic `ps-ai/1` requests and model capabilities | [src/gateway-client.ts](../../src/gateway-client.ts), [src/gateway-protocol.ts](../../src/gateway-protocol.ts) |
+| Omitted `backend`, or `comfyui` | ComfyUI graph, node schemas and model filenames | [src/infrastructure/backends/client.ts](../../src/infrastructure/backends/client.ts), [src/generation/workflow.ts](../../src/generation/workflow.ts) |
+| `backend: gateway` | Semantic `ps-ai/1` requests and model capabilities | [src/infrastructure/backends/gateway-client.ts](../../src/infrastructure/backends/gateway-client.ts), [src/infrastructure/backends/gateway-protocol.ts](../../src/infrastructure/backends/gateway-protocol.ts) |
 
 The new server does not need ComfyUI or pretend GGUF nodes. Photoshop retains capture, selections, protection, previews and safe application. The gateway owns provider authentication, translation, task identities and output files.
 
@@ -53,7 +57,7 @@ server/
     └── io.ts                 # Bounded provider-response reading
 ```
 
-HTTP calls the job service, which depends on persistence and the ImageProvider contract. main.ts injects concrete adapters; jobs never import Bailian, Gemini or OpenAI classes. Adapters neither access job directories nor write incoming HTTP responses. Failures use the shared ServiceError, serialized by HTTP; shared does not import upper layers. UXP and Node continue to use src/gateway-protocol.ts and the existing pixel utilities, without duplicating the protocol or introducing Node modules into the plugin.
+HTTP calls the job service, which depends on persistence and the ImageProvider contract. main.ts injects concrete adapters; jobs never import Bailian, Gemini or OpenAI classes. Adapters neither access job directories nor write incoming HTTP responses. Failures use the shared ServiceError, serialized by HTTP; shared does not import upper layers. UXP and Node continue to use src/infrastructure/backends/gateway-protocol.ts and the existing pixel utilities, without duplicating the protocol or introducing Node modules into the plugin.
 
 Jobs own UUIDs, state and background work. HTTP stops accepting work and drains handlers that may still persist a submission. Shutdown follows **handlers → workers → serialized writes → store lock**. Releasing the lock earlier could let a disconnected handler start work afterwards. gateway.store remains the original instance for diagnostics/fault injection; route operations use the job service.
 
@@ -65,7 +69,7 @@ Add a provider implementation and an explicit factory in main.ts, with capabilit
 
 UXP copies the standalone gateway and static launchers from plugin relay/ into its private data folder. On Windows, shell.openPath opens the .cmd under declared launchProcess permissions and user consent; it cannot spawn Node directly or pass arguments. The launcher starts Node 24 with a fixed entry and data path, hidden, without interpolating credentials, prompts or model names. Other systems use the existing manual entry point. Starting/connect/configure sends no generation request. ComfyUI never launches the relay; switching to it does not terminate an existing relay.
 
-[Managed composition](../../server/runtime/managed-relay.ts) owns three providers and stores under relay/provider. A private relay-session.json contains a Node-generated token and ports. Before sending a bearer or key, [RelayController](../../src/relay-controller.ts) verifies a fresh challenge HMAC bound to provider and nonce. [relay-auth.ts](../../src/relay-auth.ts) uses pinned @noble/hashes in UXP; no Node crypto is imported into the plugin. The handshake requires valid Host/Origin but no bearer, and reveals no token. Other routes require the bearer. All requests reject redirects. This is local pairing, not TLS or protection from software already running with the same OS account and private-file access.
+[Managed composition](../../server/runtime/managed-relay.ts) owns three providers and stores under relay/provider. A private relay-session.json contains a Node-generated token and ports. Before sending a bearer or key, [RelayController](../../src/infrastructure/backends/relay-controller.ts) verifies a fresh challenge HMAC bound to provider and nonce. [relay-auth.ts](../../src/infrastructure/backends/relay-auth.ts) uses pinned @noble/hashes in UXP; no Node crypto is imported into the plugin. The handshake requires valid Host/Origin but no bearer, and reveals no token. Other routes require the bearer. All requests reject redirects. This is local pairing, not TLS or protection from software already running with the same OS account and private-file access.
 
 | Managed-only route | Contract |
 | --- | --- |
@@ -110,7 +114,7 @@ Paths are relative to the gateway origin; JSON is UTF-8. The reference server bi
 }
 ```
 
-`kind` is `t2i`, `edit` or `asset`; `mode` uses the plugin's ten modes, including edit mode relight. Edits require a source. Optional guide and reference follow the source in that order, without empty slots. Platform intents do not assign image numbers; adapters bind roles. Bailian/Gemini use a visual guide. OpenAI converts it to a separate mask (alpha=255-gray), leaving source/reference in images. Photoshop selections and protection enforce the final boundary.
+`kind` is `t2i`, `edit` or `asset`; `mode` uses the plugin's eleven modes, including `relight` and `blend` as `edit` operations. Edits require a source. Optional guide and reference follow the source in that order, without empty slots. Platform intents do not assign image numbers; adapters bind roles. Bailian/Gemini use a visual guide. OpenAI converts it to a separate mask (alpha=255-gray), leaving source/reference in images. Photoshop selections and protection enforce the final boundary.
 
 Capabilities contain `protocol: ps-ai/1`, `provider`, `configured`, `cancellation: none`, `progress: stages` and `models`. Each model defines `id`, `label`, `operations`, `maxInputImages`, `outputDepths`, `seedMax`, `minPixels`, `maxPixels` and `maxAspectRatio`. `seedMax: 0` means no configurable seed; requests use placeholder 0 without sending a provider seed. Unknown parameters are rejected. This protocol revision supports only 8-bit output, stage progress and no guaranteed interruption. Add client support and version the contract before exposing other parameters, step progress or cancellation guarantees.
 

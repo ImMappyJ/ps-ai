@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';import path from 'node:path';import {randomBytes,createHmac} from 'node:crypto';
 import {createGateway} from '../http/gateway';import {BailianProvider} from '../providers/bailian';import {GeminiProvider} from '../providers/gemini';import {OpenAIImagesProvider} from '../providers/openai';
 import type {ImageProvider} from '../providers/contract';import {ServiceError} from '../shared/errors';
-import {PLATFORM_IDS,PLATFORMS} from '../../src/platforms';import type {PlatformId} from '../../src/platforms';
+import {PLATFORM_IDS,PLATFORMS} from '../../src/infrastructure/backends/platforms';import type {PlatformId} from '../../src/infrastructure/backends/platforms';
 
 export async function startManagedRelay(options:{dataDir:string;ports?:Record<PlatformId,number>}){
   if(Number(process.versions.node.split('.')[0])<24)throw new Error('PS-AI relay requires Node.js 24 or later');

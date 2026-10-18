@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {panelHarness} from './uxp-harness';import {defaultSettings} from '../src/profile';
+import test from 'node:test';import assert from 'node:assert/strict';import {panelHarness} from './uxp-harness';import {defaultSettings} from '../src/infrastructure/config/profile';
 
 test('ComfyUI never starts a relay, platform selection is explicit and per-platform profiles survive switches',async()=>{
   const h=await panelHarness({settings:{...defaultSettings(),baseUrl:'http://localhost:8288'}});

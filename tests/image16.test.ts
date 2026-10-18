@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {deflateSync,inflateSync} from 'node:zlib';
-import {encodePng,decodePng,decodeModelPng,resize,expandPixels,convertDepth,rasterDepth} from '../src/image';
-import {retainSourceAlpha,prepareEditCandidate,alphaBounds} from '../src/composite';
+import {encodePng,decodePng,decodeModelPng,resize,expandPixels,convertDepth,rasterDepth} from '../src/imaging/image';
+import {retainSourceAlpha,prepareEditCandidate,alphaBounds} from '../src/imaging/composite';
 function chunk(type:string,data:Uint8Array){const out=Buffer.alloc(data.length+12);out.writeUInt32BE(data.length);out.write(type,4);out.set(data,8);let n=0xffffffff;for(const v of out.subarray(4,-4)){n^=v;for(let k=0;k<8;k++)n=(n>>>1)^((n&1)?0xedb88320:0);}out.writeUInt32BE((n^0xffffffff)>>>0,out.length-4);return out;}
 function fixture(depth=16,type=6,tagged=true,extra=0){const samples=[12345,23456,34567,45678,65432,54321,43210,32109];const head=Buffer.alloc(13);head.writeUInt32BE(2);head.writeUInt32BE(1,4);head[8]=depth;head[9]=type;const raw=Buffer.alloc(1+2*(type===2?3:4)*2+extra);for(let i=0;i<(type===2?6:8);i++)raw.writeUInt16BE(samples[i],1+i*2);return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',head),...(tagged?[chunk('sRGB',new Uint8Array([1]))]:[]),chunk('IDAT',deflateSync(raw)),chunk('IEND',new Uint8Array())]);}
 test('independent RGB16/RGBA16 fixtures preserve all sample bits and the 16-bit template requires tagged16',()=>{

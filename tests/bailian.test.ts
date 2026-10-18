@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {cloudPng,untagPng,cloudRequest,testId} from './gateway-fixtures';
-import {decodeModelPng} from '../src/image';import {GATEWAY_TEMPLATE} from '../src/gateway-protocol';
+import {decodeModelPng} from '../src/imaging/image';import {GATEWAY_TEMPLATE} from '../src/infrastructure/backends/gateway-protocol';
 
 test('百炼模型能力按官方区分透明素材，平台 API Key 不进入清单',async()=>{
   const {BailianProvider}=await import('../server/providers/bailian');const p=new BailianProvider({apiKey:'test-server-secret'}),cap=p.capabilities();

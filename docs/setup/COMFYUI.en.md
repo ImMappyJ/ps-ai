@@ -162,6 +162,8 @@ Main and reference images support RGB / Grayscale 8/16-bit with a resolved color
 
 Other formats fall back to Photoshop's loaded document ICC. Unknown color, gamma alone, custom declarations without a loaded ICC, and untagged documents without a verifiable original file still require the correct profile on a copy. Source-file reading is limited to 64 MB; RGB mode alone does not imply sRGB. Prepare RGB copies of CMYK, Lab and HDR documents.
 
+A further development fix commits profile assignment as a separate history baseline, with mock coverage for apply → undo → recapture; native acceptance is pending. A pathless, untagged copy left by an older build still requires a verified profile assignment. Another image's color metadata cannot authorize it. See [source color and undo](../usage/USER_GUIDE.en.md#source-color).
+
 | Boundary | Contract |
 | --- | --- |
 | Capture, reference, model input | Photoshop converts copied pixels to sRGB. Model exchange uses 8-bit RGBA PNG with straight alpha. |
@@ -194,11 +196,13 @@ Also required: `LoadImage` and `JoinImageWithAlpha`. A scan proves file visibili
 
 Input / output rules:
 
-- [src/workflow.ts](../../src/workflow.ts) builds a ComfyUI API graph, not a UI workflow JSON with node coordinates.
+- [src/generation/workflow.ts](../../src/generation/workflow.ts) builds a ComfyUI API graph, not a UI workflow JSON with node coordinates.
 - Edit input is pre-scaled sRGB 8-bit RGBA PNG. `image_1` is the source. An enabled selection guide uses `image_2`; character reference uses the next slot. `JoinImageWithAlpha` restores alpha from `LoadImage`'s inverted MASK.
 - Editing uses `resolution=0`; output dimensions must equal the first input. The plugin rejects mismatches. Text-to-image uses the selected resolution.
 - The selection guide is a visual prompt, not a latent inpaint mask. Photoshop's final mask enforces selection and protection boundaries.
-- Development background / scene modes omit the visual guide, which Qwen can encode as picture content. A character reference still follows the source. Only the model input is matted over white; the saved source capture stays intact. These modes disable source-transparency preservation and subject alignment while retaining the real selection and protection mask for application. Transparent background candidates warn and block apply while keeping export available. See the [background correction and acceptance scope](../usage/USER_GUIDE.en.md#background-fix). Published v0.4.0 does not contain this change.
+- Development background / scene modes select the subject to keep, capture the whole canvas and use source alpha when handling background and translucent edges. They omit the visual guide, which Qwen can encode as picture content. A character reference still follows the source. Only model input is matted over white; the saved capture stays intact. Source-transparency preservation, alignment and context color matching are automatically disabled, with ordinary preferences restored on exit. Manual protection still applies; old background candidates retain their saved color-matching setting. Transparent candidates warn and block apply while keeping export available. Subject selection and the new RGBA flow still need native and inference acceptance; the earlier stage test does not validate them. See [background replacement and acceptance scope](../usage/USER_GUIDE.en.md#background-fix). Published v0.4.0 does not contain this change.
+- Development [Image Blending](../usage/USER_GUIDE.en.md#blend) uses the edit workflow with full-canvas environment context and a subject-only application range. Removal uses a built-in instruction without a prompt. Model and node configuration are unchanged; new effects still need real inference acceptance.
+- The development [relighting workbench](../usage/USER_GUIDE.en.md#relight) uses the same edit workflow and models, with no extra downloads. Light parameters become semantic text; the clean source remains first, followed by the existing guide/reference order. Local illustrations and markers are never uploaded. Structured relighting disables alignment and color matching, retains native-depth source data, and uses sRGB8 model input. Complete-result application remains available; experimental compensation application stays disabled. Real photographs and platform capabilities require separate acceptance.
 - Results come from node `8`'s `images`. The plugin then applies optional transparency, alignment and color processing; raw browser workflow output can differ.
 
 SD, SDXL, Flux, other Qwen architectures and arbitrary workflow import are unsupported. They need separate templates, node checks, size / mask contracts and Photoshop round-trip validation. Changing a dropdown filename is insufficient.

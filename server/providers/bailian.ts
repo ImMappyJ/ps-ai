@@ -1,5 +1,5 @@
-import {GATEWAY_PROTOCOL,UUID,validateGeneration} from '../../src/gateway-protocol';
-import type {GatewayCapabilities,GenerationRequest} from '../../src/gateway-protocol';
+import {GATEWAY_PROTOCOL,UUID,validateGeneration} from '../../src/infrastructure/backends/gateway-protocol';
+import type {GatewayCapabilities,GenerationRequest} from '../../src/infrastructure/backends/gateway-protocol';
 import {ServiceError,platformCode} from '../shared/errors';
 import {readBounded} from '../shared/io';import {validateInput} from '../shared/images';
 import type {ImageProvider,ProviderStatus} from './contract';

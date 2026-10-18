@@ -6,10 +6,14 @@
 
 ## 两条后端路径
 
+<a id="relighting-workbench"></a>
+
+结构化光源状态、本地示意与语义请求映射见[光影重塑工作台](RELIGHT.md)。布光参数保存于本地任务元数据，不增加供应商协议的未知字段。
+
 | 设置 | 请求方式 | 实现 |
 | --- | --- | --- |
-| `backend` 省略或 `comfyui` | ComfyUI 节点图、节点 schema、模型文件名 | [src/client.ts](../../src/client.ts)、[src/workflow.ts](../../src/workflow.ts) |
-| `backend: gateway` | `ps-ai/1` 语义请求与模型能力清单 | [src/gateway-client.ts](../../src/gateway-client.ts)、[src/gateway-protocol.ts](../../src/gateway-protocol.ts) |
+| `backend` 省略或 `comfyui` | ComfyUI 节点图、节点 schema、模型文件名 | [src/infrastructure/backends/client.ts](../../src/infrastructure/backends/client.ts)、[src/generation/workflow.ts](../../src/generation/workflow.ts) |
+| `backend: gateway` | `ps-ai/1` 语义请求与模型能力清单 | [src/infrastructure/backends/gateway-client.ts](../../src/infrastructure/backends/gateway-client.ts)、[src/infrastructure/backends/gateway-protocol.ts](../../src/infrastructure/backends/gateway-protocol.ts) |
 
 新协议不要求服务端安装 ComfyUI 或提供虚构的 GGUF 节点。插件负责捕获、选区、保护区、预览和安全回填；适配服务负责平台鉴权、参数转换、任务身份与结果文件。
 
@@ -53,7 +57,7 @@ server/
     └── io.ts                 # 平台响应的有界读取
 ```
 
-HTTP 调用作业服务，作业服务调用持久化与 `ImageProvider` 接口。具体平台由 `main.ts` 注入，作业服务不导入百炼、Gemini 或 OpenAI 类。平台实现不访问作业目录，也不写入 HTTP 响应；失败抛出统一的 `ServiceError`，由 HTTP 层序列化。`shared` 不导入上层模块。插件与服务共同使用 `src/gateway-protocol.ts` 和已有像素工具，不复制一套协议，也不把 Node 模块打进 UXP。
+HTTP 调用作业服务，作业服务调用持久化与 `ImageProvider` 接口。具体平台由 `main.ts` 注入，作业服务不导入百炼、Gemini 或 OpenAI 类。平台实现不访问作业目录，也不写入 HTTP 响应；失败抛出统一的 `ServiceError`，由 HTTP 层序列化。`shared` 不导入上层模块。插件与服务共同使用 `src/infrastructure/backends/gateway-protocol.ts` 和已有像素工具，不复制一套协议，也不把 Node 模块打进 UXP。
 
 作业服务负责 UUID、状态和后台工作；HTTP 层负责停止接入并等待仍在落盘的 handlers。正常退出严格按 **handlers → workers → 串行写入 → store 锁** 收尾。不能为了目录拆分先释放锁，否则断线请求仍可能启动工作。`gateway.store` 仍指向同一实例，便于原有诊断和故障注入；运行时只通过作业服务读写结果。
 
@@ -65,7 +69,7 @@ HTTP 调用作业服务，作业服务调用持久化与 `ImageProvider` 接口�
 
 UXP 把插件 relay/ 中的独立服务及固定启动器复制到插件私人数据目录。Windows 通过声明 launchProcess 的 shell.openPath 打开 .cmd，由 Photoshop 请求授权；UXP 不直接创建 Node 子进程或传命令参数。启动器固定入口和数据路径，以隐藏窗口启动 Node 24，不拼接 Key、提示词或模型名。其他系统保留手动服务入口。启动、连接和保存配置都不创建生图任务；ComfyUI 不启动中转，切回 ComfyUI 也不关闭已运行的中转。
 
-[自动服务组合](../../server/runtime/managed-relay.ts) 管理三个提供方及各自 relay/provider 数据目录。私人 relay-session.json 保存 Node 生成的令牌与端口。发送 Bearer 或 Key 之前，[RelayController](../../src/relay-controller.ts) 先验证绑定平台和本次 nonce 的 HMAC 服务端证明。[relay-auth.ts](../../src/relay-auth.ts) 在 UXP 使用锁定版本的 @noble/hashes，不把 Node crypto 引入插件。握手检查 Host／Origin，不需要 Bearer，也不返回令牌；其余接口要求 Bearer。所有请求拒绝重定向。这是本机配对，不是 TLS，也不隔离有同一系统账户和私人文件访问权的软件。
+[自动服务组合](../../server/runtime/managed-relay.ts) 管理三个提供方及各自 relay/provider 数据目录。私人 relay-session.json 保存 Node 生成的令牌与端口。发送 Bearer 或 Key 之前，[RelayController](../../src/infrastructure/backends/relay-controller.ts) 先验证绑定平台和本次 nonce 的 HMAC 服务端证明。[relay-auth.ts](../../src/infrastructure/backends/relay-auth.ts) 在 UXP 使用锁定版本的 @noble/hashes，不把 Node crypto 引入插件。握手检查 Host／Origin，不需要 Bearer，也不返回令牌；其余接口要求 Bearer。所有请求拒绝重定向。这是本机配对，不是 TLS，也不隔离有同一系统账户和私人文件访问权的软件。
 
 | 自动服务专用接口 | 契约 |
 | --- | --- |
@@ -110,7 +114,7 @@ Key 按平台加密保存在 UXP secureStorage，服务只在内存持有。cred
 }
 ```
 
-`kind` 为 `t2i`、`edit`、`asset`。`mode` 沿用插件的十种模式，新增 `relight` 属于编辑。编辑必须提供来源图；范围辅助与参考图按需加入。发给平台的顺序固定为来源、辅助、参考，缺省项不占位置。平台意图不自动写入图片编号，由适配器绑定实际角色。百炼／Gemini 以灰度辅助图提示范围；OpenAI 将它转为独立 mask（alpha=255-gray），images 只保留来源和参考。最终范围仍由 Photoshop 选区与保护区约束。
+`kind` 为 `t2i`、`edit`、`asset`。`mode` 沿用插件的十一种模式，`relight` 和 `blend` 均属于 `edit`。编辑必须提供来源图；范围辅助与参考图按需加入。发给平台的顺序固定为来源、辅助、参考，缺省项不占位置。平台意图不自动写入图片编号，由适配器绑定实际角色。百炼／Gemini 以灰度辅助图提示范围；OpenAI 将它转为独立 mask（alpha=255-gray），images 只保留来源和参考。最终范围仍由 Photoshop 选区与保护区约束。
 
 能力清单至少包含 `protocol: ps-ai/1`、`provider`、`configured`、`cancellation: none`、`progress: stages` 和 `models`。每个模型给出 `id`、`label`、`operations`、`maxInputImages`、`outputDepths`、`seedMax`、`minPixels`、`maxPixels`、`maxAspectRatio`。`seedMax: 0` 表示没有可设种子，信封只接受占位值 0，不向平台传种子；未知参数会被拒绝。本协议版本只支持 8 位输出、阶段进度和不保证中断的取消语义；需要真实步数、更多参数或其他取消保证时，应先扩展客户端和协议版本，不能伪造字段。
 

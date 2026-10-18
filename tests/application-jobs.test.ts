@@ -7,7 +7,7 @@ import {createJobService} from '../server/application/jobs';
 import {BailianProvider} from '../server/providers/bailian';
 import type {ImageProvider} from '../server/providers/contract';
 import {cloudPng,cloudRequest,testId} from './gateway-fixtures';
-import {uuid} from '../src/client';
+import {uuid} from '../src/infrastructure/backends/client';
 
 test('作业服务脱离HTTP：平台调用前身份已落盘，并发同UUID只提交一次',async()=>{
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'ps-ai-application-'));

@@ -6,25 +6,25 @@
 
 PS-AI 将 ComfyUI 接到 Photoshop 中，用于局部修图、人像服装和道具处理，以及文字生图。圈选区域、描述修改要求，在面板里生成并预览候选，确认后应用为带蒙版的新图层。
 
-当前已发布版本为 **0.4.0（实验版）**，包含配置向导、色彩检查、编辑范围预览和可选 16 位 SDR 输出。安装时使用同版本的插件包和环境工具。生成结果可能需要手工修整，建议在已保存的副本上使用。不包含常规人像磨皮、去痘和肤色精修功能。
+当前源码版本为 **0.5.0（实验性测试版）**。下方公开包安装说明及既有截图以 **v0.4.0（实验版）** 为基线；开发版与原生验收范围见下文。v0.4.0 包含配置向导、色彩检查、编辑范围预览和可选 16 位 SDR 输出。安装时使用同版本的插件包和环境工具。生成结果可能需要手工修整，建议在已保存的副本上使用。不包含常规人像磨皮、去痘和肤色精修功能。
 
 从 0.3.0 升级后，面板名称由 `PS-AI FOR ME` 改为 `PS-AI`，图标使用 Morph Frame 标识。插件 ID 与 `PS-AI-FOR-ME` 安装目录保持不变。
 
-开发分支的面板可选择 ComfyUI、Nano Banana、GPT Image 和 BaiLian，支持分别保存模型与加密 Key，并按需启动本机中转；人像工作区新增光影重塑。配置见 [平台选择](docs/setup/PLATFORMS.md)，接口细节见 [百炼](docs/providers/BAILIAN.md)、[Gemini / Nano Banana](docs/providers/GEMINI.md) 与 [OpenAI Images](docs/providers/OPENAI.md) 的平台适配服务。平台路径仍待真实 API Key 和 Photoshop 验收，**不在已发布的 v0.4.0 包中**。本页下方截图及已测能力对应 ComfyUI 路径。
+开发分支的面板可选择 ComfyUI、Nano Banana、GPT Image 和 BaiLian，支持分别保存模型与加密 Key，并按需启动本机中转；人像工作区提供独立的[光影重塑工作台](docs/usage/USER_GUIDE.md#relight)，编辑多光源意图后主动生成，完整结果以蒙版新图层回写。配置见 [平台选择](docs/setup/PLATFORMS.md)，接口细节见 [百炼](docs/providers/BAILIAN.md)、[Gemini / Nano Banana](docs/providers/GEMINI.md) 与 [OpenAI Images](docs/providers/OPENAI.md) 的平台适配服务。平台路径仍待真实 API Key 和 Photoshop 验收，**不在已发布的 v0.4.0 包中**。本页下方截图及已测能力对应 ComfyUI 路径；本地布光示意不是 AI 结果，实验补偿层尚未开放应用。
 
 开发版另补充了[原图色彩读取](docs/usage/USER_GUIDE.md#source-color)：没有文档 ICC 时可识别静态 WebP 的默认 sRGB 或 PNG 的显式 sRGB 标记，在工作副本中继续。WebP 8 位工作副本已在 Photoshop 27 完成等值回填与撤销检查；PNG、参考导入和新版面板交互仍待实机验收。现有 v0.4.0 包不包含这项改动。
 
-开发版还修正了[背景生成黑底／透明底](docs/usage/USER_GUIDE.md#background-fix)的问题，已用同一张样图验证舞台背景生成和 Photoshop 回填；现有 v0.4.0 包尚未更新。
+开发版还修正了[背景生成黑底／透明底](docs/usage/USER_GUIDE.md#background-fix)的问题，此前已用同一张样图验证舞台背景生成和 Photoshop 回填。后续开发改动增加免提示词移除、[人像溶图](docs/usage/USER_GUIDE.md#blend)、从主体选区替换整张背景及 RGBA 边缘处理；这些新交互与效果目前仅有离线覆盖，仍需 Photoshop 和真实推理验收。现有 v0.4.0 包尚未更新。
 
 ## 文档导航
 
 | 用途 | 文档 |
 | --- | --- |
-| 入门操作、已测九种模式与新版光影重塑 | [图文使用指南](docs/usage/USER_GUIDE.md) |
+| 入门操作、已测九种模式与新版光影重塑／溶图 | [图文使用指南](docs/usage/USER_GUIDE.md) |
 | 本地后端、模型与排错 | [ComfyUI 配置](docs/setup/COMFYUI.md) |
 | 平台选择与 Key 配置 | [平台配置](docs/setup/PLATFORMS.md) |
 | 平台接口和限制（开发中） | [百炼](docs/providers/BAILIAN.md) · [Gemini / Nano Banana](docs/providers/GEMINI.md) · [OpenAI Images](docs/providers/OPENAI.md) |
-| 参与开发与服务端扩展 | [开发入口](AGENTS.md) · [后端与持久化契约](docs/development/BACKEND.md) |
+| 参与开发与服务端扩展 | [代码地图与开发约定](AGENTS.md#source-map) · [后端与持久化契约](docs/development/BACKEND.md) |
 
 ## 看看效果
 
@@ -40,8 +40,8 @@ PS-AI 将 ComfyUI 接到 Photoshop 中，用于局部修图、人像服装和道
 
 ## 能做什么
 
-- **局部修图**：物体和材质修改、移除杂物、替换背景。选区外和手动保护区保留原始像素。
-- **人像**：服装／道具修复、场景修改、一张角色参考图辅助；开发版另有光影重塑。参考功能是实验性的，不保证角色和服装细节准确复现。
+- **局部修图**：物体和材质修改、移除杂物、替换背景。普通编辑保留选区外和手动保护区；开发版背景模式选择要保留的主体。
+- **人像**：服装／道具修复、场景修改、一张角色参考图辅助；开发版另有光影重塑和参考整图环境的溶图。参考功能是实验性的，不保证角色和服装细节准确复现。
 - **生图与素材**：文字生图，生成特效或氛围素材，在新文档打开或导出 PNG。透明素材仍可能有底色和杂边。
 - **候选与回填**：1–4 张串行候选，历史与断线恢复；ComfyUI 提供实际采样步数和按任务取消，平台适配仅显示阶段并停止后续候选。应用为独立图层和可编辑蒙版，支持一次撤销。
 - **透明与颜色**：默认保留原透明轮廓，可选主体对齐和小幅上下文颜色匹配。RGB／灰度 8/16 位已在 Photoshop 中测试图像往返；模型输入仍是 sRGB 8-bit。
@@ -138,15 +138,15 @@ npm run build
 
 在 PS“首选项 → 增效工具”启用开发人员模式并重启。通过 [Adobe UXP Developer Tool](https://developer.adobe.com/photoshop/uxp/2022/guides/devtool/) 添加 `dist/plugin/manifest.json`，点击 Load。后端配置与发行包相同。
 
-`npm run package` 会先运行测试和构建，再在 `release/` 生成 CCX、Portable ZIP、环境工具 ZIP 和各自的 SHA256 校验文件。ComfyUI 和模型需单独准备，Release 也需手动发布。
+`npm run package` 会先运行测试、类型检查和构建，再在 `release/` 生成 CCX、Portable ZIP、环境工具 ZIP 和各自的 SHA256 校验文件。ComfyUI 和模型需单独准备。
 
-也可以在 **Actions → Build packages → Run workflow** 手动构建。下载产物、解开外层 ZIP，将发行文件和校验文件上传到 GitHub Release。发版前保持 `package.json`、锁文件和 `plugin/manifest.json` 中的版本号一致，并在 Photoshop 中实际测试安装和生成。
+**Actions → Build packages** 保留普通 CI 和手动构建。部署发行工作流后，推送严格的 `vX.Y.Z` 标签会自动校验、打包并发布；**Actions → Release** 可从默认分支对已有远端标签执行 `dry_run`（默认开启）。发布通道默认预发布；本地未推送代码不会进入远端构建。版本准备、首发、权限和原始批次恢复见[构建与发布](docs/development/RELEASING.md)。CI 通过不代表 Photoshop 实机验收。
 
 ## 反馈与参与开发
 
 在 [Issues](https://github.com/ImMappyJ/ps-ai/issues) 提供系统、PS／插件／ComfyUI 版本、模型、显卡、复现步骤和脱敏错误。效果问题可以附有权公开的局部对比；不要上传完整崩溃转储或私人照片。
 
-欢迎提交 PR，尽量让每次改动集中解决一个问题。克隆仓库后，先读根目录的 `AGENTS.md` 了解代码结构和开发约定。服务端重写与新增平台的契约见 [后端开发文档](docs/development/BACKEND.md)。提交前运行 `npm ci`、`npm test`、`npm run build`；改动工作流时，同步更新兼容清单和中英文说明。开发使用独立分支，讨论和评审放在 Issue／PR。交接笔记、调试记录和本机报告留在本地。
+欢迎提交 PR，尽量让每次改动集中解决一个问题。克隆仓库后，先读[代码地图与开发约定](AGENTS.md#source-map)了解代码结构和开发约定。服务端重写与新增平台的契约见 [后端开发文档](docs/development/BACKEND.md)。提交前运行 `npm ci`、`npm test`、`npm run build`；改动工作流时，同步更新兼容清单和中英文说明。开发使用独立分支，讨论和评审放在 Issue／PR。交接笔记、调试记录和本机报告留在本地。
 
 ## 许可与鸣谢
 

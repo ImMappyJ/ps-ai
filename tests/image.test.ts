@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {effectiveMask,makeMapping,encodePng,decodePng,expandPixels,resize} from '../src/image';
+import {effectiveMask,makeMapping,encodePng,decodePng,expandPixels,resize} from '../src/imaging/image';
 
 test('保护区与灰度羽化逐像素相乘，完整保护为零',()=>{
   assert.deepEqual([...effectiveMask(new Uint8Array([0,255,128,255]),new Uint8Array([0,255,128,64]))],[0,0,64,191]);

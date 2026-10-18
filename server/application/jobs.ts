@@ -1,4 +1,4 @@
-import {UUID,validateGeneration} from '../../src/gateway-protocol';
+import {UUID,validateGeneration} from '../../src/infrastructure/backends/gateway-protocol';
 import {GatewayStore,requestFingerprint} from '../persistence/job-store';
 import type {DurableJob} from '../persistence/job-store';
 import type {ImageProvider} from '../providers/contract';

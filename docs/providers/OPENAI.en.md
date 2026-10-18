@@ -61,6 +61,6 @@ Each original or prepared input PNG is capped at 10 MiB; OpenAI response JSON at
 
 ## Live acceptance
 
-With a key, validate model access/output for all three models, ten modes, guide/reference combinations, transparent assets, color/coordinates, protection, original layers/undo, multiple candidates, stopping/recovery, both UI languages and CCX/Portable installation. Update screenshots, compatibility and release status afterwards. Offline mocks do not establish platform or host acceptance.
+With a key, validate model access/output for all three models, eleven modes (including relighting and image blending), guide/reference combinations, transparent assets, color/coordinates, protection, original layers/undo, multiple candidates, stopping/recovery, both UI languages and CCX/Portable installation. Update screenshots, compatibility and release status afterwards. Offline mocks do not establish platform or host acceptance.
 
 The repository’s `docs/development/BACKEND.en.md` and `AGENTS.md` define server and persistence contracts.

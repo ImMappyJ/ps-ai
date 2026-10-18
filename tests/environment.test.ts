@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
-import {checkEnvironment} from '../src/environment';
+import {checkEnvironment} from '../src/diagnostics/environment';
 const nodes=()=>JSON.parse(fs.readFileSync('tests/fixtures/comfy-nodes.json','utf8'));
 test('template check accepts the observed API and rejects scalar and dynamic field drift',()=>{
   assert.doesNotThrow(()=>checkEnvironment('27.0.0',nodes()));

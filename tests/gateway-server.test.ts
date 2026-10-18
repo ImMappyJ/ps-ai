@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';import os from 'node:os';import path from 'node:path';
-import {GatewayClient} from '../src/gateway-client';import {uuid} from '../src/client';
+import {GatewayClient} from '../src/infrastructure/backends/gateway-client';import {uuid} from '../src/infrastructure/backends/client';
 import {cloudRequest,cloudPng,testId} from './gateway-fixtures';
 import type {ImageProvider} from '../server/providers/contract';
 import {ServiceError} from '../server/shared/errors';

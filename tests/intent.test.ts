@@ -1,4 +1,27 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {intent} from '../src/intent';
+import test from 'node:test';import assert from 'node:assert/strict';import {intent} from '../src/generation/intent';
+
+test('remove generates from the selection with no prompt and never includes a hidden draft',()=>{
+  for(const binding of ['images','semantic'] as const){
+    const empty=intent('local','remove','',false,true,'道具',binding);
+    const hidden=intent('local','remove','PRIVATE DRAFT: paint the person red',false,true,'道具',binding);
+    assert.equal(empty.kind,'edit');assert.equal(hidden.prompt,empty.prompt);
+    assert.match(empty.prompt,/移除选中对象/);assert.match(empty.prompt,/材质.*结构.*光线.*透视/);
+    assert.doesNotMatch(empty.prompt,/PRIVATE DRAFT/);
+    if(binding==='semantic')assert.doesNotMatch(empty.prompt,/<image\d/);
+  }
+});
+
+test('Image Blending uses the full source environment and permits optional supplemental instructions',()=>{
+  const raw='  保留标签 <image9>，暖色轮廓光  ';
+  for(const binding of ['images','semantic'] as const){
+    const base=intent('cosplay','blend','',false,true,'材质',binding);
+    assert.equal(base.kind,'edit');assert.match(base.prompt,/整张.*环境/);assert.match(base.prompt,/光线.*色温.*对比度.*纹理.*景深/);
+    assert.match(base.prompt,/只修改.*主体/);assert.match(base.prompt,/身份.*姿态.*位置.*比例.*结构/);
+    const extra=intent('cosplay','blend',raw,false,true,'材质',binding);assert.ok(extra.prompt.includes(raw.trim()));
+    if(binding==='semantic')assert.doesNotMatch(base.prompt,/<image\d/);else assert.match(base.prompt,/<image1>/);
+  }
+  assert.throws(()=>intent('local','blend','',false,false,'材质'),/工作区|模式/);
+});
 
 test('background and scene explicitly replace the environment while preserving the foreground and original request',()=>{
   for(const [workspace,mode] of [['local','background'],['cosplay','scene']] as const)for(const binding of ['images','semantic'] as const){

@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import http from 'node:http';
-import {ComfyClient,uuid} from '../src/client';import {JobCoordinator,JobRecord} from '../src/jobs';
-import {buildGraph} from '../src/workflow';
+import {ComfyClient,uuid} from '../src/infrastructure/backends/client';import {JobCoordinator,JobRecord} from '../src/generation/jobs';
+import {buildGraph} from '../src/generation/workflow';
 test('检查使用所选模型映射，发现模型时允许当前映射暂缺',async()=>{
   const models={unet:'preset/model.gguf',clip:'preset/clip.safetensors',vae:'preset/vae.safetensors'};
   const infos:any={UnetLoaderGGUF:{input:{required:{unet_name:[[models.unet]]}}},CLIPLoader:{input:{required:{clip_name:[[models.clip]]}}},VAELoader:{input:{required:{vae_name:[[models.vae]]}}},TextEncodeQwenImage21:{input:{required:{images:['COMFY_AUTOGROW_V3',{template:{names:['image_1','image_3']}}]}}}};

@@ -1,14 +1,18 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {editBehavior,editModelInput,backgroundCoverage} from '../src/edit-behavior';
-import {effectiveMask} from '../src/image';
+import {editBehavior,editModelInput,backgroundCoverage} from '../src/features/editing/edit-behavior';
+import {effectiveMask} from '../src/imaging/image';
 
 test('background behavior omits only the ComfyUI visual guide and keeps provider masks',()=>{
   for(const mode of ['background','scene']){
-    assert.deepEqual(editBehavior(mode,{guide:true,preserveAlpha:true,alignSubject:true}),{guide:false,preserveAlpha:false,alignSubject:false});
-    assert.deepEqual(editBehavior(mode,{guide:true,preserveAlpha:true,alignSubject:true},'gateway'),{guide:true,preserveAlpha:false,alignSubject:false});
+    assert.deepEqual(editBehavior(mode,{guide:true,preserveAlpha:true,alignSubject:true}),{guide:false,preserveAlpha:false,alignSubject:false,matchColor:false});
+    assert.deepEqual(editBehavior(mode,{guide:true,preserveAlpha:true,alignSubject:true},'gateway'),{guide:true,preserveAlpha:false,alignSubject:false,matchColor:false});
   }
-  assert.deepEqual(editBehavior('edit',{guide:true,preserveAlpha:true,alignSubject:true}),{guide:true,preserveAlpha:true,alignSubject:true});
-  assert.deepEqual(editBehavior('remove',{guide:false,preserveAlpha:false,alignSubject:true}),{guide:false,preserveAlpha:false,alignSubject:false});
+  assert.deepEqual(editBehavior('edit',{guide:true,preserveAlpha:true,alignSubject:true}),{guide:true,preserveAlpha:true,alignSubject:true,matchColor:false});
+  assert.deepEqual(editBehavior('remove',{guide:false,preserveAlpha:false,alignSubject:true}),{guide:false,preserveAlpha:false,alignSubject:false,matchColor:false});
+});
+test('Image Blending preserves source alpha without alignment or context color correction',()=>{
+  assert.deepEqual(editBehavior('blend',{guide:true,preserveAlpha:true,alignSubject:true,matchColor:true}),{guide:true,preserveAlpha:true,alignSubject:false,matchColor:false});
+  assert.deepEqual(editBehavior('costume',{guide:true,preserveAlpha:true,alignSubject:true,matchColor:true}),{guide:true,preserveAlpha:true,alignSubject:true,matchColor:true});
 });
 test('model-only background matte handles straight alpha at both depths and leaves capture pixels intact',()=>{
   for(const depth of [8,16]){

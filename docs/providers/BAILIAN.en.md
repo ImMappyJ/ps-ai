@@ -68,7 +68,7 @@ The server listens locally and is not an authenticated public service. For migra
 ## Acceptance after obtaining a key
 
 - [ ] Verify region, access and model ID with one real text-to-image result.
-- [ ] Use the same demonstration image for local edits, outfits/props, removal, backgrounds, references, scenes, effects and atmosphere; save genuine screenshots for each.
+- [ ] Use the same demonstration image for local edits, outfits/props, removal, backgrounds, references, scenes, relighting, image blending, effects and atmosphere; save genuine screenshots for each.
 - [ ] Inspect dimensions, sRGB, alpha edges, outside-mask/protection pixels, original layers and one-step undo.
 - [ ] Check batches, stopping remaining candidates, plugin reload, normal service restart and recovery by the original ID after a lost response.
 - [ ] Check both panel languages, CCX/Portable installation and final package contents before updating the compatibility manifest and feature status.

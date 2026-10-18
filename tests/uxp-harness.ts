@@ -1,7 +1,7 @@
-import {relayProof} from '../src/relay-auth';
+import {relayProof} from '../src/infrastructure/backends/relay-auth';
 import fs from 'node:fs/promises';import vm from 'node:vm';import {parseHTML} from 'linkedom';import {build} from 'esbuild';
-import {encodePng,decodePng,Raster} from '../src/image';import type {JobRecord} from '../src/jobs';
-export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boolean;delayCheck?:boolean;settings?:unknown;models?:{unet:string;clip:string;vae:string};noDocuments?:boolean;delaySettings?:boolean;nativePreviewUnavailable?:boolean;source?:Raster;output?:Raster;save16Node?:boolean;untaggedSource?:{bytes:Uint8Array;wrongPath?:boolean;unsaved?:boolean};gateway?:{configured?:boolean;provider?:'bailian'|'gemini'|'openai'}}={}) {
+import {encodePng,decodePng,Raster,Bounds,expandPixels,maskRaster} from '../src/imaging/image';import type {JobRecord} from '../src/generation/jobs';
+export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boolean;delayCheck?:boolean;settings?:unknown;models?:{unet:string;clip:string;vae:string};noDocuments?:boolean;delaySettings?:boolean;nativePreviewUnavailable?:boolean;dialogUnsupported?:boolean;source?:Raster;selection?:{bounds:Bounds;mask:Uint8Array};output?:Raster;save16Node?:boolean;untaggedSource?:{bytes:Uint8Array;wrongPath?:boolean;unsaved?:boolean};gateway?:{configured?:boolean;provider?:'bailian'|'gemini'|'openai'}}={}) {
   const html=await fs.readFile('plugin/index.html','utf8');const {document,window}=parseHTML(html);
   for(const select of Array.from(document.querySelectorAll('select'))) {
     const hasInitialSelection=!!select.querySelector('option[selected]');
@@ -12,6 +12,13 @@ export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boo
     Object.defineProperty(select,'value',{get(){if(chosen!==undefined)return chosen;if(options.uxpSelect&&!hasInitialSelection)return undefined;const node=select.querySelector('option[selected]')??select.querySelector('option');return node?(options.uxpSelect?node.getAttribute('value')??undefined:node.getAttribute('value')??node.textContent):undefined;},set(v){chosen=String(v);caption=Array.from(select.querySelectorAll('option')).find(node=>node.getAttribute('value')===chosen)?.textContent;},configurable:true});
   }
   const el=(id:string)=>document.getElementById(id) as any;
+  const nativeEvents:string[]=[],appliedLayers:any[]=[],dialogOptions:any[]=[];let dialogOpen=false,closeDialog:(reason?:string)=>void=()=>{};
+  const dialog=el('relight-dialog');
+  if(dialog&&!options.dialogUnsupported){dialog.uxpShowModal=(value:any)=>{assertDialogClosed();dialogOpen=true;nativeEvents.push('dialog-open');dialogOptions.push(value);dialog.setAttribute('open','');return new Promise(resolve=>{closeDialog=(reason?:string)=>{dialogOpen=false;dialog.removeAttribute('open');nativeEvents.push('dialog-close');resolve(reason);};});};dialog.close=(reason?:string)=>closeDialog(reason);}
+  function assertDialogClosed(){if(dialogOpen)throw Error('Native Photoshop commands are unavailable while dialog is open');}
+  const viewport=el('relight-viewport');if(viewport)viewport.getBoundingClientRect=()=>({left:20,top:100,width:680,height:450,right:700,bottom:550});
+  (window.HTMLElement.prototype as any).setPointerCapture=function(id:number){this.capturedPointer=id;};
+  (window.HTMLElement.prototype as any).releasePointerCapture=function(){this.capturedPointer=undefined;};
   el('prompt').value='blue lightning';el('guide').checked=true;el('lock-seed').checked=true;for(const id of ['preserve-alpha','align-subject'])if(el(id))el(id).checked=true;
   const files:Record<string,Uint8Array|string>={};let holdHistory=false;let releaseHistory:()=>void=()=>{};
   if(options.settings!==undefined)files['settings.json']=JSON.stringify(options.settings);
@@ -61,27 +68,32 @@ export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boo
     if(url.includes('/cancel'))return Response.json({cancelled:false});
     throw new Error('Unexpected URL '+url);
   };
-  const makeDoc=(id:number)=>({id,width:2,height:2,mode:'rgb',bitsPerChannel:8,colorProfileName:'sRGB IEC61966-2.1',activeHistoryState:{id:1},layers:[{id:2,kind:'normal',blendMode:'normal',visible:true,opacity:100,fillOpacity:100,isClippingMask:false}],selection:{bounds:{left:0,top:0,right:2,bottom:2}}});
+  const source=options.source??{width:2,height:2,rgba:new Uint8Array(16).fill(255)},fullBounds={left:0,top:0,right:source.width,bottom:source.height};
+  let selection=options.selection??{bounds:fullBounds,mask:new Uint8Array(source.width*source.height).fill(255)};
+  const pixelRequests:any[]=[];
+  let layerSerial=50;const documents=new Map<number,any>();
+  const makeDoc=(id:number):any=>{if(documents.has(id))return documents.get(id);const doc:any={id,width:source.width,height:source.height,mode:'rgb',bitsPerChannel:source.rgba instanceof Uint16Array?16:8,colorProfileName:'sRGB IEC61966-2.1',activeHistoryState:{id:1},layers:[{id:2,kind:'normal',blendMode:'normal',visible:true,opacity:100,fillOpacity:100,isClippingMask:false}],get selection(){return {bounds:selection.bounds};},createLayer:async(_kind:any,value:any)=>{assertDialogClosed();const layer:any={...value,id:layerSerial++,isClippingMask:false,move:async()=>{},delete:async()=>{doc.layers=doc.layers.filter((l:any)=>l.id!==layer.id);}};doc.layers.unshift(layer);appliedLayers.push({documentId:id,layer});return layer;}};documents.set(id,doc);return doc;};
+  makeDoc(11);
   const colorDocuments:any[]=options.untaggedSource?[{...makeDoc(11),colorProfileName:'',path:'C:\\Mock\\source.webp',saved:!options.untaggedSource.unsaved}]:[];
   if(colorDocuments.length)colorDocuments[0].duplicate=async()=>{const copy={...makeDoc(22),colorProfileName:'',saved:false};colorDocuments.push(copy);documentId=22;return copy;};
-  const data=(components:number)=>({width:2,height:2,components,componentSize:8,dispose(){},getData:async()=>new Uint8Array(components*4).fill(255)});
-  const ps:any={app:{get activeDocument(){if(options.noDocuments)throw new Error('No active document');return colorDocuments.length?colorDocuments.find(d=>d.id===documentId):makeDoc(documentId);},get documents(){return options.noDocuments?[]:colorDocuments.length?colorDocuments:[makeDoc(documentId)];}},constants:{DocumentMode:{RGB:'rgb'},BitsPerChannelType:{EIGHT:8},LayerKind:{NORMAL:'normal'},BlendMode:{NORMAL:'normal'}},core:{executeAsModal:async(fn:any)=>fn({hostControl:{registerAutoCloseDocument:async()=>{},unregisterAutoCloseDocument:async()=>{}}})},imaging:{
+  const data=(components:number)=>({width:source.width,height:source.height,components,componentSize:8,dispose(){},getData:async()=>new Uint8Array(components*source.width*source.height).fill(255)});
+  const ps:any={app:{get activeDocument(){if(options.noDocuments)throw new Error('No active document');return colorDocuments.length?colorDocuments.find(d=>d.id===documentId):makeDoc(documentId);},set activeDocument(doc:any){documentId=doc.id;},get documents(){return options.noDocuments?[]:colorDocuments.length?colorDocuments:[...documents.values()];}},constants:{DocumentMode:{RGB:'rgb'},BitsPerChannelType:{EIGHT:8,SIXTEEN:16},LayerKind:{NORMAL:'normal'},BlendMode:{NORMAL:'normal'},ElementPlacement:{PLACEBEFORE:'before'}},action:{batchPlay:async(cmd:any[])=>{assertDialogClosed();return cmd.map(()=>({}));}},core:{executeAsModal:async(fn:any)=>{assertDialogClosed();nativeEvents.push('native');return fn({hostControl:{registerAutoCloseDocument:async()=>{},unregisterAutoCloseDocument:async()=>{},suspendHistory:async(o:any)=>o.documentID,resumeHistory:async(id:number,commit:boolean)=>{const doc=colorDocuments.find(d=>d.id===id)??documents.get(id);if(commit&&doc)doc.activeHistoryState={id:doc.activeHistoryState.id+1};}}});}},imaging:{
     createImageDataFromBuffer:async()=>{if(options.nativePreviewUnavailable)throw new Error('Native preview codec unavailable');return {dispose(){}};},encodeImageData:async()=>{if(options.nativePreviewUnavailable)throw new Error('Native preview codec unavailable');return '';},
-    getSelection:async(o:any)=>{captured.push(o.documentID);return {imageData:data(1),sourceBounds:{left:0,top:0,right:2,bottom:2}};},
-    getPixels:async()=>({imageData:options.source?{...data(4),getData:async()=>options.source!.rgba}:data(4),sourceBounds:{left:0,top:0,right:2,bottom:2},level:0})
+    getSelection:async(o:any)=>{captured.push(o.documentID);const image=expandPixels(maskRaster(selection.mask,source.width,source.height),fullBounds,o.sourceBounds),gray=Uint8Array.from({length:image.width*image.height},(_,i)=>image.rgba[i*4]);return {imageData:{...data(1),width:image.width,height:image.height,getData:async()=>gray},sourceBounds:o.sourceBounds};},
+    getPixels:async(o:any)=>{pixelRequests.push(o);const image=expandPixels(source,fullBounds,o.sourceBounds);return {imageData:{...data(4),width:image.width,height:image.height,componentSize:image.rgba instanceof Uint16Array?16:8,getData:async()=>image.rgba},sourceBounds:o.sourceBounds,level:0};},putPixels:async()=>{assertDialogClosed();},putLayerMask:async()=>{assertDialogClosed();}
   }};
   const uxp={shell:{openPath:async(p:string)=>{relayLaunches.push(p);relayRunning=true;files['relay/relay-session.json']=JSON.stringify({protocol:'ps-ai-relay/1',token:'a'.repeat(64),ports:{bailian:8191,gemini:8192,openai:8193}});return '';}},host:{version:'27.0.0'},entrypoints:{setup(){}},storage:{formats:{binary:'binary'},secureStorage:{getItem:async(k:string)=>{if(!secrets.has(k))throw Error('missing');return secrets.get(k);},setItem:async(k:string,v:string)=>secrets.set(k,new TextEncoder().encode(v)),removeItem:async(k:string)=>secrets.delete(k)},localFileSystem:{getDataFolder:async()=>folder,getPluginFolder:async()=>({getEntry:async()=>({read:async()=>new ArrayBuffer(1)})}),getFileForSaving:async(name:string)=>folder.createFile(name,{})}}};
   if(options.untaggedSource)(uxp.storage.localFileSystem as any).getFileForOpening=async()=>({isFile:true,nativePath:options.untaggedSource!.wrongPath?'C:\\Mock\\other.webp':'C:\\Mock\\source.webp',getMetadata:async()=>({size:options.untaggedSource!.bytes.length}),read:async()=>options.untaggedSource!.bytes.slice().buffer});
-  const bundled=await build({entryPoints:['src/panel.ts'],bundle:true,write:false,format:'iife',platform:'browser',target:'es2020',external:['photoshop','uxp'],define:{'process.env.NODE_ENV':'"production"'}});
+  const bundled=await build({entryPoints:['src/app/panel.ts'],bundle:true,write:false,format:'iife',platform:'browser',target:'es2020',external:['photoshop','uxp'],define:{'process.env.NODE_ENV':'"production"'}});
   const errors:any[]=[];
   vm.runInNewContext(bundled.outputFiles[0].text,{document,window,require:(name:string)=>name==='photoshop'?ps:uxp,fetch:fetcher,Response,AbortController,WebSocket:TestSocket,setTimeout,clearTimeout,console:{log(){},error:(e:any)=>errors.push(e)}});
   await new Promise(r=>setTimeout(r,25));
-  const click=(id:string)=>el(id).dispatchEvent(new window.Event('click'));
-  const wait=async()=>{for(let n=0;n<300;n++){await new Promise(r=>setTimeout(r,10));if(!el('generate').disabled)return;}throw new Error('Panel did not settle');};
-  return {el,click,change:(id:string)=>el(id).dispatchEvent(new window.Event('change')),wait,posts,gatewayPosts,captured,uploads,errors,files,secrets,relayLaunches,configuredKeys,setDocument:(id:number)=>{documentId=id;},
+  const click=(id:string)=>el(id).dispatchEvent(new window.Event('click',{bubbles:true}));
+  const wait=async()=>{for(let n=0;n<300;n++){await new Promise(r=>setTimeout(r,10));if(!el('generate').disabled&&(!dialogOpen||el('relight-cancel').disabled))return;}throw new Error('Panel did not settle');};
+  return {el,click,change:(id:string)=>el(id).dispatchEvent(new window.Event('change')),event:(id:string,type:string,values:Record<string,unknown>={})=>{const event=new window.Event(type,{bubbles:true,cancelable:true});Object.assign(event,values);el(id).dispatchEvent(event);return event;},wait,posts,gatewayPosts,captured,uploads,errors,files,secrets,relayLaunches,configuredKeys,pixelRequests,nativeEvents,appliedLayers,dialogOptions,ps,setSelection:(value:{bounds:Bounds;mask:Uint8Array})=>{selection=value;},setDocument:(id:number)=>{documentId=id;documents.clear();makeDoc(id);},switchDocument:(id:number)=>{documentId=id;makeDoc(id);},
     setJobStatus(value:'queued'|'running'|'ready'){ownStatus=value;},progress(id:string,value:number,max:number){for(const s of sockets)if(!s.closed)s.onmessage?.({data:JSON.stringify({type:'progress',data:{prompt_id:id,value,max}})});},
     releaseSettings(){holdStartup=false;releaseStartup();},
     holdHistory(){holdHistory=true;historyBarrier=new Promise(r=>{releaseHistory=r;});},releaseHistory(){holdHistory=false;releaseHistory();},
     holdCheck(){holdCheck=true;checkBarrier=new Promise(r=>{releaseCheck=r;});},releaseCheck(){holdCheck=false;releaseCheck();},
-    records:()=>JSON.parse(String(files['history.json']??'[]')) as JobRecord[],close:async()=>{}};
+    records:()=>JSON.parse(String(files['history.json']??'[]')) as JobRecord[],close:async()=>{if(dialogOpen)closeDialog('user-close');await new Promise(r=>setTimeout(r,10));}};
 }

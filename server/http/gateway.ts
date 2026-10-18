@@ -1,7 +1,7 @@
 import {createServer} from 'node:http';
 import {timingSafeEqual} from 'node:crypto';
-import {relayProof} from '../../src/relay-auth';
-import {UUID,UPLOAD} from '../../src/gateway-protocol';
+import {relayProof} from '../../src/infrastructure/backends/relay-auth';
+import {UUID,UPLOAD} from '../../src/infrastructure/backends/gateway-protocol';
 import {createJobService} from '../application/jobs';
 import type {JobServiceOptions} from '../application/jobs';
 import {ServiceError} from '../shared/errors';

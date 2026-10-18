@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';import path from 'node:path';import {execFileSync} from 'node:child_process';
-import {ComfyClient,uuid} from '../src/client';import {JobCoordinator,JobRecord} from '../src/jobs';
-import {buildGraph} from '../src/workflow';import {decodeModelPng,decodePng,encodePng,Raster,maskRaster} from '../src/image';
+import {ComfyClient,uuid} from '../src/infrastructure/backends/client';import {JobCoordinator,JobRecord} from '../src/generation/jobs';
+import {buildGraph} from '../src/generation/workflow';import {decodeModelPng,decodePng,encodePng,Raster,maskRaster} from '../src/imaging/image';
 
 const client=new ComfyClient();
 const stamp=new Date().toISOString().replace(/[:.]/g,'-');
