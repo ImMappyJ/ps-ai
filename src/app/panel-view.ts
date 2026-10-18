@@ -90,7 +90,7 @@ export class CandidatePreview {
   private request=0;
   private fit=new Map<Raster,Promise<string>>();
   constructor(private render:(image:Raster,size:number)=>Promise<string>=displayPreview){}
-  retain(images:Raster[]):void {for(const image of this.fit.keys())if(!images.includes(image))this.fit.delete(image);}
+  retain(images:Raster[]):void {this.request++;for(const image of this.fit.keys())if(!images.includes(image))this.fit.delete(image);}
   async show(image:Raster,actualSize:boolean,apply:(url:string)=>void):Promise<void> {
     const request=++this.request;
     let pending=actualSize?undefined:this.fit.get(image);

@@ -14,14 +14,14 @@ const selected=(h:Harness)=>h.el('history-rows')?.querySelector('[aria-selected=
 const clickRow=(h:Harness,uuid:string,cell=false)=>{const row=rows(h).find(row=>row.getAttribute('data-history-id')===uuid);assert.ok(row,'row must be visible');const Event=h.el('nav-history').ownerDocument.defaultView.Event;(cell?row.querySelector('[role="cell"]')!:row.querySelector('button')!).dispatchEvent(new Event('click',{bubbles:true}));};
 const noJobIO=(h:Harness)=>assert.equal(h.requests.some(r=>/\/history\/|\/jobs\/|\/prompt$|\/interrupt/.test(r.url)),false);
 
-test('history uses four visible columns and literal metadata with a plain row selection button',async()=>{
+test('history uses aligned date/type/prompt columns and focused literal source details with a plain selection button',async()=>{
   const literal='<img src=x onerror=alert(1)> '+'很长的来源名称'.repeat(16),h=await panelHarness({settings:defaultSettings(),history:[record(1,'ready',{sourceName:literal,snapshot:{documentId:17},userPrompt:'PRIVATE PROMPT'}),record(2,'queued',{snapshot:{documentId:22}}),record(3),record(4,'ready',{params:{}})]});
   try{await h.wait();assert.equal(h.el('history')===null,true,'the dropdown must be removed');assert.equal(h.el('history-table')?.getAttribute('role'),'table');
-    assert.deepEqual(Array.from(h.el('history-table').querySelectorAll('[role="columnheader"]')).map((node:any)=>node.textContent),['状态','来源','创建时间','任务 ID']);assert.equal(rows(h).length,4);
-    const first=rows(h)[0];assert.equal(first.querySelector('.history-source')?.textContent,literal);assert.equal(first.querySelector('img'),null);assert.doesNotMatch(h.el('history-table').textContent,/PRIVATE PROMPT/);
-    assert.equal(first.querySelector('.history-date')?.children.length,2);assert.match(first.querySelector('.history-date')!.textContent!,/2026-10-18.*09:35/);assert.equal(first.querySelector('button')!.textContent,id(1).slice(0,8));assert.equal(first.querySelector('button')!.children.length,0);
-    assert.match(rows(h)[1].querySelector('.history-source')!.textContent!,/22/);assert.match(rows(h)[1].querySelector('.history-state')!.textContent!,/排队.*未确认/);assert.match(rows(h)[2].querySelector('.history-source')!.textContent!,/文字生图/);assert.match(rows(h)[3].querySelector('.history-source')!.textContent!,/未保存来源/);
-    assert.equal(selected(h),id(2));assert.match(rows(h)[1].textContent!,/已选中/);noJobIO(h);
+    assert.deepEqual(Array.from(h.el('history-table').querySelectorAll('[role="columnheader"]')).map((node:any)=>node.textContent),['选择','保存时间','任务类型','提示词']);assert.equal(rows(h).length,4);
+    const first=rows(h)[0];assert.equal(first.querySelector('img'),null);assert.match(h.el('history-table').textContent,/PRIVATE PROMPT/);
+    assert.equal(first.querySelector('.history-date')?.children.length,2);assert.match(first.querySelector('.history-date')!.textContent!,/2026-10-18/);assert.equal(first.querySelector('button')!.children.length,0);
+    assert.match(rows(h)[1].querySelector('.history-type')!.textContent!,/排队.*未确认/);assert.match(rows(h)[2].querySelector('.history-type')!.textContent!,/文字生图/);assert.match(rows(h)[3].querySelector('.history-type')!.textContent!,/未保存任务类型/);
+    assert.equal(selected(h),id(2));assert.match(rows(h)[1].textContent!,/正在查看/);clickRow(h,id(1));assert.ok(h.el('history-details').textContent.includes(literal));assert.equal(h.el('history-details').querySelector('img'),null);assert.equal(h.el('history-prompt').value,'PRIVATE PROMPT');noJobIO(h);
   }finally{await h.close();}
 });
 
@@ -93,7 +93,7 @@ test('generation keeps history navigation locked through its final local refresh
 
 test('language and local refresh preserve the visible selected page, literal source and saved parameters',async()=>{
   const history=Array.from({length:25},(_,i)=>record(i+1,'ready',{sourceName:'私人来源.psd',userPrompt:'保留原文'})),h=await panelHarness({history});try{await h.wait();h.click('history-next');clickRow(h,id(24));h.el('seed').value='987';h.el('language').value='en-US';h.change('language');await h.wait();
-    assert.equal(selected(h),id(24));assert.equal(rows(h)[0].getAttribute('data-history-id'),id(21));assert.deepEqual(Array.from(h.el('history-table').querySelectorAll('[role="columnheader"]')).map((node:any)=>node.textContent),['State','Source','Created','Task ID']);assert.match(h.el('history-all').textContent,/All.*25/);assert.equal(h.el('seed').value,'987');assert.equal(rows(h)[0].querySelector('.history-source')!.textContent,'私人来源.psd');
+    assert.equal(selected(h),id(24));assert.equal(rows(h)[0].getAttribute('data-history-id'),id(21));assert.deepEqual(Array.from(h.el('history-table').querySelectorAll('[role="columnheader"]')).map((node:any)=>node.textContent),['Select','Saved','Task type','Prompt']);assert.match(h.el('history-all').textContent,/All.*25/);assert.equal(h.el('seed').value,'987');assert.ok(h.el('history-details').textContent.includes('私人来源.psd'));assert.equal(h.el('history-prompt').value,'保留原文');
     h.click('history-refresh');await h.wait();assert.equal(selected(h),id(24));assert.deepEqual(h.records(),history);noJobIO(h);
   }finally{await h.close();}
 });
@@ -106,7 +106,7 @@ test('loading a candidate and reusing parameters target only the selected table 
 });
 
 test('the history implementation retains long source text without runtime thumbnails or nested native-button content',async()=>{
-  const source='无空格超长名称'.repeat(40),h=await panelHarness({history:[record(1,'ready',{sourceName:source})]});try{await h.wait();assert.equal(rows(h)[0].querySelector('.history-source')!.textContent,source);assert.equal(h.el('history-table').querySelector('img'),null);
+  const source='无空格超长名称'.repeat(40),h=await panelHarness({history:[record(1,'ready',{sourceName:source})]});try{await h.wait();assert.ok(h.el('history-details').textContent.includes(source));assert.equal(h.el('history-table').querySelector('img'),null);
     const css=await fs.readFile('plugin/style.css','utf8');assert.doesNotMatch(css,/\.history[^{}]*\{[^}]*display\s*:\s*grid/);assert.equal(rows(h)[0].querySelector('button')!.children.length,0);
   }finally{await h.close();}
 });

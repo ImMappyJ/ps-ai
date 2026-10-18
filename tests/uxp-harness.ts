@@ -1,7 +1,7 @@
 import {relayProof} from '../src/infrastructure/backends/relay-auth';
 import fs from 'node:fs/promises';import vm from 'node:vm';import {parseHTML} from 'linkedom';import {build} from 'esbuild';
 import {encodePng,decodePng,Raster,Bounds,expandPixels,maskRaster} from '../src/imaging/image';import type {JobRecord} from '../src/generation/jobs';
-export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boolean;delayCheck?:boolean;settings?:unknown;history?:JobRecord[];pollDelayMs?:number;buildId?:string;models?:{unet:string;clip:string;vae:string};noDocuments?:boolean;delaySettings?:boolean;nativePreviewUnavailable?:boolean;dialogUnsupported?:boolean;source?:Raster;selection?:{bounds:Bounds;mask:Uint8Array};output?:Raster;save16Node?:boolean;untaggedSource?:{bytes:Uint8Array;wrongPath?:boolean;unsaved?:boolean;tokenUnavailable?:boolean};gateway?:{configured?:boolean;provider?:'bailian'|'gemini'|'openai'}}={}) {
+export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boolean;delayCheck?:boolean;settings?:unknown;history?:JobRecord[];files?:Record<string,Uint8Array|string>;pollDelayMs?:number;buildId?:string;models?:{unet:string;clip:string;vae:string};noDocuments?:boolean;delaySettings?:boolean;nativePreviewUnavailable?:boolean;dialogUnsupported?:boolean;source?:Raster;selection?:{bounds:Bounds;mask:Uint8Array};output?:Raster;save16Node?:boolean;untaggedSource?:{bytes:Uint8Array;wrongPath?:boolean;unsaved?:boolean;tokenUnavailable?:boolean};gateway?:{configured?:boolean;provider?:'bailian'|'gemini'|'openai'}}={}) {
   const html=await fs.readFile('plugin/index.html','utf8');const {document,window}=parseHTML(html);
   for(const select of Array.from(document.querySelectorAll('select'))) {
     const hasInitialSelection=!!select.querySelector('option[selected]');
@@ -19,19 +19,23 @@ export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boo
   const viewport=el('relight-viewport');if(viewport)viewport.getBoundingClientRect=()=>({left:20,top:100,width:680,height:450,right:700,bottom:550});
   (window.HTMLElement.prototype as any).setPointerCapture=function(id:number){this.capturedPointer=id;};
   (window.HTMLElement.prototype as any).releasePointerCapture=function(){this.capturedPointer=undefined;};
+  const scrolled:string[]=[];
+  (window.HTMLElement.prototype as any).scrollIntoView=function(top:boolean){if(typeof top!=='boolean')throw Error('UXP scrollIntoView requires a boolean');scrolled.push(this.getAttribute('data-history-id')??this.id);};
   el('prompt').value='blue lightning';el('guide').checked=true;el('lock-seed').checked=true;for(const id of ['preserve-alpha','align-subject'])if(el(id))el(id).checked=true;
-  const files:Record<string,Uint8Array|string>={};let holdHistory=false;let releaseHistory:()=>void=()=>{};
+  const files:Record<string,Uint8Array|string>={...options.files};let holdHistory=false;let releaseHistory:()=>void=()=>{};
   if(options.settings!==undefined)files['settings.json']=JSON.stringify(options.settings);
   if(options.history)files['history.json']=JSON.stringify(options.history);
   let historyBarrier:Promise<void>=Promise.resolve();
   let holdStartup=!!options.delaySettings,releaseStartup:()=>void=()=>{};const startupBarrier=new Promise<void>(r=>{releaseStartup=r;});
   const directories=new Set(['']);
+  const failDeletes=new Set<string>(),failMoves=new Set<string>(),fileReads:string[]=[],readBarriers=new Map<string,{promise:Promise<void>;release():void}>();
+  function fileEntry(key:string):any{return {name:key.split('/').pop(),isFile:true,read:async()=>{fileReads.push(key);const value=files[key];await readBarriers.get(key)?.promise;return value;},delete:async()=>{if(failDeletes.has(key))throw Error('Delete failed');delete files[key];}};}
   function makeFolder(prefix=''):any{return {
     nativePath:'C:\\Mock\\'+prefix.replace(/\//g,'\\'),
     createFolder:async(name:string)=>{directories.add(prefix+name+'/');return makeFolder(prefix+name+'/');},
-    createFile:async(name:string,_opts:unknown)=>({name,write:async(data:any)=>{const key=prefix+name;files[key]=typeof data==='string'?data:new Uint8Array(data);},moveTo:async(_folder:unknown,o:any)=>{files[prefix+o.newName]=files[prefix+name];delete files[prefix+name];}}),
-    getEntries:async()=>{if(holdStartup)await startupBarrier;if(holdHistory)await historyBarrier;return Object.keys(files).filter(k=>k.startsWith(prefix)).map(k=>({name:k.slice(prefix.length)}));},
-    getEntry:async(name:string)=>{if(directories.has(prefix+name+'/'))return makeFolder(prefix+name+'/');if(!(prefix+name in files))throw new Error('Missing '+name);return {read:async()=>files[prefix+name]};}
+    createFile:async(name:string,_opts:unknown)=>({...fileEntry(prefix+name),write:async(data:any)=>{const key=prefix+name;files[key]=typeof data==='string'?data:new Uint8Array(data);},moveTo:async(_folder:unknown,o:any)=>{if(failMoves.has(prefix+o.newName))throw Error('Move failed');files[prefix+o.newName]=files[prefix+name];delete files[prefix+name];}}),
+    getEntries:async()=>{if(holdStartup)await startupBarrier;if(holdHistory)await historyBarrier;return Object.keys(files).filter(k=>k.startsWith(prefix)&&!k.slice(prefix.length).includes('/')).map(fileEntry);},
+    getEntry:async(name:string)=>{if(directories.has(prefix+name+'/'))return makeFolder(prefix+name+'/');if(!(prefix+name in files))throw new Error('Missing '+name);return fileEntry(prefix+name);}
   };}
   const folder=makeFolder();const secrets=new Map<string,Uint8Array>(),relayLaunches:string[]=[],configuredKeys=new Map<string,string>();let relayRunning=false;
   let holdCheck=false;let releaseCheck:()=>void=()=>{};let checkBarrier:Promise<void>=Promise.resolve();
@@ -115,7 +119,8 @@ export async function panelHarness(options:{uxpSelect?:boolean;delayHistory?:boo
   const refreshHistory=async()=>{click('nav-history');click('history-refresh');await wait();};
   return {el,click,change:(id:string)=>el(id).dispatchEvent(new window.Event('change')),event:(id:string,type:string,values:Record<string,unknown>={})=>{const event=new window.Event(type,{bubbles:true,cancelable:true});Object.assign(event,values);el(id).dispatchEvent(event);return event;},wait,posts,gatewayPosts,captured,uploads,requests,errors,files,secrets,relayLaunches,configuredKeys,pixelRequests,nativeEvents,appliedLayers,dialogOptions,ps,setSelection:(value:{bounds:Bounds;mask:Uint8Array})=>{selection=value;},setDocument:(id:number)=>{documentId=id;documents.clear();makeDoc(id);},switchDocument:(id:number)=>{documentId=id;makeDoc(id);},
     selectionWrites,selectionTransactions,selectionState:()=>({bounds:selection.bounds&&{...selection.bounds},mask:selection.mask.slice()}),sourceAccessEvents,setJobStatus(value:TestState|Error,id?:string){if(id){statusSequences.delete(id);jobStates.set(id,value);}else if(!(value instanceof Error))ownStatus=value;},setJobStatusSequence(id:string,values:(TestState|Error)[]){statusSequences.set(id,[...values]);},setCancelResult(id:string,value:boolean|Error){cancelResults.set(id,value);},progress(id:string,value:number,max:number){for(const s of sockets)if(!s.closed)s.onmessage?.({data:JSON.stringify({type:'progress',data:{prompt_id:id,value,max}})});},
-    historyRows,historySelectedId,selectHistory,refreshHistory,
+    historyRows,historySelectedId,selectHistory,refreshHistory,scrolled,fileReads,failDeletes,failMoves,
+    holdFileRead(name:string){let release=()=>{};const promise=new Promise<void>(resolve=>{release=resolve;});readBarriers.set(name,{promise,release});},releaseFileRead(name:string){readBarriers.get(name)?.release();readBarriers.delete(name);},
     releaseSettings(){holdStartup=false;releaseStartup();},
     holdHistory(){holdHistory=true;historyBarrier=new Promise(r=>{releaseHistory=r;});},releaseHistory(){holdHistory=false;releaseHistory();},
     holdCheck(){holdCheck=true;checkBarrier=new Promise(r=>{releaseCheck=r;});},releaseCheck(){holdCheck=false;releaseCheck();},

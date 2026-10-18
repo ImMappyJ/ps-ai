@@ -58,6 +58,15 @@ export class RelightWorkbench {
   get currentResultId():string|undefined{return this.selectedResult;}
   get isGenerating():boolean{return this.pending;}
   refreshAvailability():void {if(this.visible)this.refresh();}
+  /** Drop deleted candidate URLs even while closed; keep the frozen source and lighting editor. */
+  invalidateResults(ids:readonly string[]):void {
+    if(this.resultUrlId&&ids.includes(this.resultUrlId)){
+      if(this.displayedImageUrl===this.resultUrl){this.el('image').removeAttribute('src');this.displayedImageUrl='';this.displayedImageGeometry='';}
+      this.resultUrl='';this.resultUrlId='';
+    }
+    if(this.selectedResult&&ids.includes(this.selectedResult)){this.selectedResult=this.host.results()[0]?.jobId;if(!this.selectedResult&&this.tab==='result')this.tab='illustration';}
+    if(this.visible)this.refresh();
+  }
   setSourceInvalid(invalid:boolean):void {this.sourceInvalid=invalid;if(invalid)this.message(t('来源已关闭或改变，请重新读取原图；布光配置和已有结果仍保留'));if(this.visible)this.refresh();}
   setScopePending(pending:boolean):void {const previous=this.scopePending;this.scopePending=pending;if(pending)this.message(t('布光范围已改变，请重新读取原图；原有布光配置已保留'));else if(previous&&!this.sourceInvalid)this.message(t('编辑布光不会发起 AI 请求；主动点击生成'));if(this.visible)this.refresh();}
   private el(id:string):any{return this.dialog.querySelector(`#relight-${id}`);}

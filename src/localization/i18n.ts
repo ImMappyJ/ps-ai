@@ -3,6 +3,19 @@ import type {Language} from '../infrastructure/config/profile';
 // Chinese source messages are stable keys. Model prompts and saved parameter values
 // are deliberately independent of the display language.
 export const english:Record<string,string>={
+  '选择':'Select','保存时间':'Saved','任务类型':'Task type','提示词':'Prompt','查看详情':'View details','未知状态':'Unknown state','未保存时间':'Date not saved','正在查看':'Viewing',
+  '未保存任务类型':'Task type not saved','内置移除指令':'Built-in removal instruction','无补充描述（已保存布光）':'Saved lighting (no additional description)','空提示词':'Empty prompt','未保存提示词':'Prompt not saved',
+  '任务类型：{0}':'Task type: {0}','当前记录详情':'Focused record details','完整提示词（可复制）':'Full prompt (copyable)',
+  '全选当前筛选（所有页）':'Select current filter (all pages)','取消全部勾选':'Deselect all','已勾选 {0} 条':'{0} records checked','勾选清除任务 {0}':'Check task {0} for local clearing',
+  '清除勾选历史（{0}）':'Clear checked history ({0})','确认清除这些记录':'Confirm clearing these records','保留记录':'Keep records','重试本地清理':'Retry local cleanup',
+  '将清除 {0} 条记录（其中 {1} 个未确认任务）及插件保存的来源、蒙版和候选文件。原文档、已应用图层及外部导出保留。不会取消远端任务，任务和计费可能继续。':'Clear {0} records ({1} unresolved tasks), plus their plugin-saved sources, masks and candidates. Original documents, applied layers and external exports are preserved. This does not cancel remote jobs; work and billing may continue.',
+  '已清除 {0} 条本地历史记录':'{0} local history records cleared','{0} 个文件待清理；请重试本地清理':'{0} files await cleanup; retry local cleanup',
+  '历史元数据更新待重试；已清除记录不会阻挡生成':'History metadata update awaits retry; cleared records no longer block generation',
+  '保留共享文件：{0} 个，其他历史记录仍在使用':'Shared files retained: {0}, still used by other history records','跳过不安全或非标准文件：{0} 个；未访问这些路径':'Unsafe or nonstandard files skipped: {0}; these paths were not accessed',
+  '勾选记录已改变，请重新核对并确认清除':'Checked records changed. Review them and confirm clearing again.',
+  '此记录尚无本地候选；可按原 ID 恢复':'No local candidate is saved for this record; recover using its original ID','正在读取本地候选预览…':'Reading local candidate preview…','本地候选预览（只读）':'Local candidate preview (read only)','本地候选预览':'Local candidate preview',
+  '无法预览本地候选：文件缺失、损坏或不安全。仍可恢复任务或尝试读取候选。':'Local preview unavailable: files are missing, damaged or unsafe. Recovery and explicit candidate loading remain available.',
+  '历史本地文件名不安全，无法读取候选':'Unsafe local history filename; the candidate cannot be read','历史编辑参数缺失或损坏，无法安全重建候选':'Saved edit parameters are missing or damaged; the candidate cannot be safely reconstructed',
   '状态':'State','来源':'Source','创建时间':'Created','任务 ID':'Task ID','历史记录':'History records',
   '全部（{0}）':'All ({0})','未确认（{0}）':'Unresolved ({0})','刷新记录':'Refresh','上一页':'Previous','下一页':'Next','第 {0} / {1} 页 · {2} 条':'Page {0} / {1} · {2} records',
   '待提交':'Created','提交中':'Submitting','已排队':'Queued','生成中':'Running','状态未知':'Unknown','取消确认中':'Cancelling','下载中':'Downloading','候选就绪':'Ready','生成失败':'Failed','已取消':'Cancelled','输出异常':'Output error',
