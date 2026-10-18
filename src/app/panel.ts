@@ -304,14 +304,19 @@ function clearPendingDiagnostic():void {
   if(historyRecords.some(blocksGeneration))return;
   try{if(['pending-task','pending-backend'].includes(JSON.parse(el('diagnostic-details').value).code)){el('diagnostic-box').style.display='none';el('diagnostic-details').value='';el('diagnostic-summary').textContent='';}}catch{/* No stored diagnostic, or an unrelated error. */}
 }
-async function evictHistoryCandidates(ids:readonly string[]):Promise<void> {
+async function reconcileClearedHistory(ids:readonly string[]):Promise<void> {
   const removed=new Set(ids),previous=candidates[Number(el('candidate-select').value)]?.job.id;
+  // Durable tombstones are authoritative even if a later repaint or reread fails.
+  clearConfirmation=undefined;detachAcknowledgedId=undefined;
+  historyRecords=historyRecords.filter(record=>!removed.has(record.id));
+  historyTable.setRecords(historyRecords);clearPendingDiagnostic();
   candidates=candidates.filter(candidate=>!removed.has(candidate.job.id));
   if(current&&removed.has(current.id))current=undefined;
   if(applied&&removed.has(applied.jobId))applied=undefined;
   candidatePreview.retain(candidates.map(candidate=>candidate.image));
-  el('detail-preview').removeAttribute('src');
-  relightWorkbench?.invalidateResults(ids);await renderCandidates(previous);
+  historyPreview.invalidate();el('detail-preview').removeAttribute('src');
+  historyUi();candidateUi();relightWorkbench?.invalidateResults(ids);
+  await renderCandidates(previous);
 }
 async function clearHistory(confirm=false):Promise<void> {
   if(busy)return;
@@ -326,14 +331,14 @@ async function clearHistory(confirm=false):Promise<void> {
     if(clearConfirmation!==frozen||frozen.revision!==historyTable.selectionRevision||selectionSignature(frozen.ids,records)!==frozen.signature){await refreshHistory();historyNotice='勾选记录已改变，请重新核对并确认清除';return;}
     clearConfirmation=undefined;
     const result=await store.clearHistory(frozen.ids);cleanupStatus=result;
-    await evictHistoryCandidates(result.removedIds);historyTable.clearChecked();
+    await reconcileClearedHistory(result.removedIds);
     await refreshHistory();clearPendingDiagnostic();
   }finally{clearConfirmation=undefined;lock(false);}
 }
 async function retryHistoryCleanup():Promise<void> {
   if(busy||!cleanupStatus||!cleanupStatus.pendingFiles&&!cleanupStatus.metadataPending)return;
   lock(true);clearConfirmation=undefined;detachAcknowledgedId=undefined;historyPreview.invalidate();
-  try{cleanupStatus=await store.retryHistoryCleanup();await evictHistoryCandidates(cleanupStatus.removedIds);await refreshHistory();clearPendingDiagnostic();}
+  try{cleanupStatus=await store.retryHistoryCleanup();await reconcileClearedHistory(cleanupStatus.removedIds);await refreshHistory();clearPendingDiagnostic();}
   finally{lock(false);}
 }
 async function stopTracking(confirm=false){

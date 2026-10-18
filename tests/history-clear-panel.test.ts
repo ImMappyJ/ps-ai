@@ -79,3 +79,42 @@ test('clearing a cached relight result chooses the surviving result and keeps th
 test('clearing a blocker removes obsolete pending diagnostics while preserving unrelated diagnostic errors',async()=>{
  for(const unrelated of [false,true]){const h=await panelHarness({history:[record(A,'unknown')]});try{await h.wait();h.click('generate');await h.wait();assert.equal(h.el('diagnostic-box').style.display,'block');if(unrelated){h.el('backend-url').value='bad';h.click('save-settings');await h.wait();}await clear(h);assert.equal(h.el('diagnostic-box').style.display,unrelated?'block':'none');}finally{await h.close();}}
 });
+
+test('durable clear removes its row, focus and blocker when the following history or cleanup-status read fails once',async()=>{
+ for(const failingRead of [1,2]){
+  const h=await panelHarness({history:[record(A,'unknown')]});try{
+   await h.wait();h.click('generate');await h.wait();assert.equal(JSON.parse(h.el('diagnostic-details').value).code,'pending-task');arm(h);
+   let saved=h.files['history.json'],armed=false,reads=0,failures=0;
+   Object.defineProperty(h.files,'history.json',{configurable:true,get(){if(armed&&++reads===failingRead){armed=false;failures++;throw Error('Injected post-clear history read failure');}return saved;},set(value){saved=value;if(JSON.parse(String(value)).length===0){armed=true;reads=0;}}});
+   const requests=h.requests.length;h.click('confirm-clear-history');await h.wait();
+   assert.equal(failures,1,'failure must occur after durable history removal');assert.deepEqual(JSON.parse(String(saved)),[]);assert.deepEqual(JSON.parse(String(h.files['history-cleanup.json'])).removedIds,[A]);
+   assert.deepEqual(h.historyRows().map(node=>node.getAttribute('data-history-id')),[]);assert.equal(h.el('history-id').value,'');assert.equal(h.el('history-prompt').value,'');assert.equal(h.el('pending-notice').style.display,'none');assert.equal(h.el('history-clear-confirmation').style.display,'none');assert.equal(h.el('history-selected-count').textContent,'已勾选 0 条');
+   for(const action of ['recover','history-cancel','load-history','repeat-history','clear-history','apply','export'])assert.equal(h.el(action).disabled,true,action);
+   assert.equal(h.el('history-preview').getAttribute('src'),null);assert.match(h.el('history-cleanup-status').textContent,/已清除 1/);assert.equal(h.el('diagnostic-box').style.display,'block');assert.notEqual(JSON.parse(h.el('diagnostic-details').value).code,'pending-task');assert.ok(h.errors.some(error=>error.message==='Injected post-clear history read failure'));assert.equal(h.requests.length,requests);
+  }finally{await h.close();}
+ }
+});
+
+test('durable clear keeps an undeleted focused Result and opacity target after its survivor repaint fails',async()=>{
+ const h=await panelHarness();try{
+  await h.wait();h.el('resolution').value='32';h.el('count').value='2';h.click('generate');await h.wait();const [first,second]=h.posts.map(post=>post.prompt_id);
+  h.el('candidate-select').value='0';h.change('candidate-select');await h.wait();h.click('apply');await h.wait();h.el('candidate-select').value='1';h.change('candidate-select');await h.wait();
+  const history=h.records();history.find(item=>item.id===second)!.state='unknown';h.files['history.json']=JSON.stringify(history);await h.refreshHistory();h.click('generate');await h.wait();h.selectHistory(first);check(h,second);h.click('clear-history');
+  const image=h.el('detail-preview');let failures=0;Object.defineProperty(image,'src',{configurable:true,get:()=>image.getAttribute('src')??'',set(value:string){if(!failures++){throw Error('Injected survivor repaint failure');}image.setAttribute('src',value);}});
+  const requests=h.requests.length;h.click('confirm-clear-history');await h.wait();
+  assert.equal(failures,1);assert.deepEqual(h.records().map(item=>item.id),[first]);assert.deepEqual(h.historyRows().map(node=>node.getAttribute('data-history-id')),[first]);assert.equal(h.el('history-id').value,first);assert.equal(h.el('history-selected-count').textContent,'已勾选 0 条');assert.equal(h.el('pending-notice').style.display,'none');assert.equal(h.el('history-clear-confirmation').style.display,'none');
+  assert.equal(h.el('candidate-select').children.length,1);assert.equal(h.el('candidates').children.length,1);assert.equal(h.el('apply').disabled,false);assert.equal(h.el('export').disabled,false);assert.notEqual(h.el('applied-opacity').style.display,'none');assert.equal(h.files[second+'-output.png'],undefined);assert.equal(image.getAttribute('src'),null);assert.ok(h.errors.some(error=>error.message==='Injected survivor repaint failure'));assert.notEqual(JSON.parse(h.el('diagnostic-details').value).code,'pending-task');assert.equal(h.requests.length,requests);
+ }finally{await h.close();}
+});
+
+test('cleanup retry reconciles its durable IDs before a failed refresh and preserves checked and focused survivors',async()=>{
+ const C='33333333-3333-4333-8333-333333333333',h=await panelHarness({history:[record(A,'unknown',{outputFile:A+'-output.png'}),record(B,'unknown'),record(C)],files:{[A+'-output.png']:png}});try{
+  await h.wait();h.failDeletes.add(A+'-output.png');h.click('nav-history');check(h,A);h.click('clear-history');h.click('confirm-clear-history');await h.wait();assert.notEqual(h.el('retry-history-cleanup').style.display,'none');
+  h.selectHistory(C);check(h,B);check(h,C);
+  // A durable intent can be ahead of the panel after a lost response or earlier refresh failure.
+  const journal=JSON.parse(String(h.files['history-cleanup.json']));journal.removedIds.push(B);journal.metadataPending=true;h.files['history-cleanup.json']=JSON.stringify(journal);h.failDeletes.clear();
+  let saved=h.files['history.json'],armed=false,failures=0;Object.defineProperty(h.files,'history.json',{configurable:true,get(){if(armed){armed=false;failures++;throw Error('Injected post-retry history read failure');}return saved;},set(value){saved=value;if(JSON.parse(String(value)).length===1)armed=true;}});
+  const requests=h.requests.length;h.click('retry-history-cleanup');await h.wait();
+  assert.equal(failures,1);assert.deepEqual(h.records().map(item=>item.id),[C]);assert.deepEqual(h.historyRows().map(node=>node.getAttribute('data-history-id')),[C]);assert.equal(h.el('history-id').value,C);assert.equal(h.el('history-selected-count').textContent,'已勾选 1 条');assert.equal((h.historyRows()[0].querySelector('[data-history-check]') as any).checked,true);assert.equal(h.el('pending-notice').style.display,'none');assert.equal(h.el('retry-history-cleanup').style.display,'none');assert.equal(h.files[A+'-output.png'],undefined);assert.match(h.el('history-cleanup-status').textContent,/已清除 2/);assert.ok(h.errors.some(error=>error.message==='Injected post-retry history read failure'));assert.equal(h.requests.length,requests);
+ }finally{await h.close();}
+});
