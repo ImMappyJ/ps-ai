@@ -2,6 +2,7 @@ import UPNG from 'upng-js';
 import {validatePngColor,ColorContractError} from './color';
 import {checkedPixelPng} from './png-decode';
 import {encodeRgba16} from './png16';
+import {checkDocumentSize} from './budget';
 
 export interface Bounds { left:number; top:number; right:number; bottom:number }
 export interface Raster { width:number; height:number; rgba:Uint8Array|Uint16Array }
@@ -21,7 +22,7 @@ export function effectiveMask(m:Uint8Array,p?:Uint8Array):Uint8Array {
   return Uint8Array.from(m,(value,i)=>Math.round(value*(255-(p?.[i]??0))/255));
 }
 export function makeMapping(bounds:Bounds,resolution:number):{bounds:Bounds;width:number;height:number} {
-  const w=bounds.right-bounds.left,h=bounds.bottom-bounds.top;checkSize(w,h);
+  const w=bounds.right-bounds.left,h=bounds.bottom-bounds.top;checkDocumentSize(w,h);
   if(!Number.isInteger(resolution)||resolution<32||resolution>2048||resolution%32) throw new Error('分辨率须为 32 的倍数，范围 32–2048');
   const ratio=w/h;
   const width=Math.max(32,Math.round(Math.sqrt(resolution*resolution*ratio)/32)*32);
@@ -85,7 +86,7 @@ export function expandPixels(image:Raster,actual:Bounds,requested:Bounds,level=0
   const scale=2**level;
   const original={left:Math.round(actual.left*scale),top:Math.round(actual.top*scale),right:Math.round(actual.right*scale),bottom:Math.round(actual.bottom*scale)};
   const width=requested.right-requested.left,height=requested.bottom-requested.top;checkSize(width,height);
-  const restored=resize(image,original.right-original.left,original.bottom-original.top);
+  const restored=image.width===original.right-original.left&&image.height===original.bottom-original.top?image:resize(image,original.right-original.left,original.bottom-original.top);
   const rgba=pixelArray(image,width*height*4);
   for(let y=Math.max(requested.top,original.top);y<Math.min(requested.bottom,original.bottom);y++) {
     const left=Math.max(requested.left,original.left),right=Math.min(requested.right,original.right);

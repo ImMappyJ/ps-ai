@@ -17,3 +17,17 @@ test('损坏的诊断日志重新建立阶段记录，不影响任务历史',asy
     assert.equal(files['history.json'],undefined);
   }
 });
+
+test('operation trace retains bounded numeric evidence and identifiers without arbitrary private payloads',async()=>{
+  const {store,files}=traceStorage();
+  await store.trace('capture.complete','task-1',{operationId:'operation-1',documentId:11,width:9000,height:5000,durationMs:123.4,estimatedBytes:300_000_000,prompt:'private description',apiKey:'secret',sourcePath:'C:\\Private\\photo.psd',rgba:new Uint8Array([1,2,3])} as any);
+  const event=JSON.parse(files['runtime-trace.json']).events[0];
+  assert.equal(event.metrics.operationId,'operation-1');assert.equal(event.metrics.width,9000);assert.equal(event.metrics.durationMs,123.4);
+  assert.doesNotMatch(JSON.stringify(event),/private|secret|sourcePath|rgba/i);
+});
+
+test('invalid timing and unbounded identifier values are excluded from diagnostics',async()=>{
+  const {store,files}=traceStorage();await store.trace('operation.complete',undefined,{durationMs:NaN,modalMs:-1,operationId:'C:\\Users\\Private\\file.psd',snapshotId:'x'.repeat(200),discardedPreviews:3} as any);
+  const metrics=JSON.parse(files['runtime-trace.json']).events[0].metrics;
+  assert.deepEqual(metrics,{discardedPreviews:3});
+});

@@ -1,7 +1,38 @@
 import {convertDepth,encodePng,resize,type Raster} from '../imaging/image';
 import {t,english} from '../localization/i18n';
+import type {Stage} from '../diagnostics/diagnostics';
 
 export type PanelPage='create'|'results'|'history'|'settings';
+export interface OperationContext {id:string;sequence:number;page:PanelPage;feature:string;stage:Stage;taskId?:string;documentId?:number;mode?:string;startedAt:number}
+type SourceContext=Pick<OperationContext,'mode'|'documentId'>;
+const CAPTURE_CAUSES=['selection-required','empty-range','no-document','source-profile','source-unavailable','source-changed','image-budget'];
+export class OperationFeedback {
+  private sequence=0;
+  private owners=new Map<string,OperationContext>();
+  private errors=new Map<string,{operation:OperationContext;diagnostic:any}>();
+  private running=new Set<OperationContext>();
+  private key(value:Pick<OperationContext,'page'|'feature'>):string{return `${value.page}:${value.feature}`;}
+  begin(value:Omit<OperationContext,'id'|'sequence'|'startedAt'>):OperationContext {const sequence=++this.sequence,operation={...value,id:`operation-${sequence}`,sequence,startedAt:Date.now()};this.owners.set(this.key(operation),operation);this.running.add(operation);return operation;}
+  get active():OperationContext|undefined{return [...this.running].pop();}
+  finish(operation:OperationContext):void {this.running.delete(operation);}
+  fail(operation:OperationContext,value:any):boolean {const key=this.key(operation);if(this.owners.get(key)!==operation)return false;this.errors.set(key,{operation,diagnostic:value});return true;}
+  private sameSource(left:SourceContext,right:SourceContext):boolean {return left.mode===right.mode&&left.documentId===right.documentId;}
+  private captureCause(value:{diagnostic:any}):boolean{return value.diagnostic.stage==='capture'&&CAPTURE_CAUSES.includes(value.diagnostic.code);}
+  succeed(operation:OperationContext):void {const key=this.key(operation),error=this.errors.get(key);if(this.owners.get(key)===operation&&(!error||this.sameSource(error.operation,operation)&&(error.operation.taskId===undefined||error.operation.taskId===operation.taskId)))this.errors.delete(key);}
+  /** A verified fresh capture resolves range causes only for the source that was actually read. */
+  resolveCapture(operation:OperationContext):void {for(const [key,value] of this.errors)if(this.captureCause(value)&&value.operation.page===operation.page&&value.operation.sequence<=operation.sequence&&this.sameSource(value.operation,operation))this.errors.delete(key);}
+  forPage(page:PanelPage,source?:SourceContext):{operation:OperationContext;diagnostic:any}|undefined {return [...this.errors.values()].filter(value=>value.operation.page===page&&(!source||!this.captureCause(value)||this.sameSource(value.operation,source))).sort((a,b)=>b.operation.sequence-a.operation.sequence)[0];}
+  clearCodes(codes:readonly string[]):void {for(const [key,value] of this.errors)if(codes.includes(value.diagnostic.code))this.errors.delete(key);}
+}
+
+/** A completion can navigate once, only while it still owns the latest manual intent. */
+export class ResultNavigation {
+  private latest=0;
+  private pending?:{intent:number;candidateId:string};
+  begin():number {this.pending=undefined;return ++this.latest;}
+  complete(intent:number,ids:readonly string[],selectedId?:string):void {if(intent===this.latest&&ids.length)this.pending={intent,candidateId:selectedId&&ids.includes(selectedId)?selectedId:ids[0]};}
+  take(available:readonly string[],ready:boolean,enabled=true):string|undefined {const pending=this.pending;if(!pending)return;if(!enabled||pending.intent!==this.latest||!available.includes(pending.candidateId)){this.pending=undefined;return;}if(!ready)return;this.pending=undefined;return pending.candidateId;}
+}
 
 interface SourceCaptionDetails {documentId:number;width:number;height:number;profile:string;protectedArea:boolean;colorReason?:string}
 /** Only presentation metadata is retained; no document, raster or persisted state. */
@@ -71,6 +102,7 @@ export class PanelViews {
     }
     this.show('create');
   }
+  get current():PanelPage{return this.page;}
   show(page:PanelPage):void {
     const previous=this.page;this.page=page;
     for(const node of Array.from(this.root.querySelectorAll<HTMLElement>('[data-panel-page]'))){

@@ -1,22 +1,26 @@
 import {encodePng,type Raster} from '../../imaging/image';
 import {RELIGHT_LIMITS,createRelightScene,normalizedToViewport,viewportToNormalized,viewportLightIndicator,type RelightScene,type RelightLight,type RelightViewport,type RelightGeometry} from './relight-scene';
-import {prepareRelightPreview,renderRelightPreview,type RelightPreparedPreview} from './relight-preview';
-import {RelightSession,type FrozenRelightSubmission} from './relight-session';
+import {prepareRelightPreview,RelightPreviewRenderer,encodeRelightDragPreview,type RelightPreparedPreview} from './relight-preview';
+import {downsampleSnapshotMask} from '../../imaging/budget';
+import {RelightSession,relightOutputKind,type RelightOutputKind,type FrozenRelightSubmission} from './relight-session';
 import {t,errorText} from '../../localization/i18n';
 import {DiagnosticError,diagnostic} from '../../diagnostics/diagnostics';
 
-export interface RelightResult {jobId:string;fingerprint:string;image:Raster;warning?:string}
+export interface RelightResult {jobId:string;fingerprint:string;image:Raster;warning?:string;outputKind?:RelightOutputKind}
 export interface RelightWorkbenchHost {
   uuid():string;save(scene:RelightScene):Promise<void>;loadDraft():Promise<RelightScene|undefined>;
   prepare(frozen:FrozenRelightSubmission):Promise<void>;
   generate(frozen:FrozenRelightSubmission,onJob:(id:string)=>void):Promise<void>;
-  cancel():Promise<void>;reread():Promise<void>;apply(jobId:string):Promise<void>;export(jobId:string):Promise<void>;
+  cancel():Promise<void>;reread(options?:{explicit?:boolean}):Promise<void>;rebindCurrent?():Promise<void>;apply(jobId:string):Promise<void>;export(jobId:string):Promise<void>;
   results():RelightResult[];diagnostics(jobId:string):Promise<string>;
   busy?():boolean;pendingTasks?():number;openPendingTasks?():Promise<void>;reportError?(error:Error):void;
+  sourceState?():'current'|'changed'|'closed'|'rebind-required';observeSource?(invalidate:()=>void):()=>void;
 }
 type Tab='original'|'illustration'|'result';
 type Drag={kind:'light'|'target'|'pan';id?:string;startX:number;startY:number;panX:number;panY:number;pointerId?:number;node?:any};
-type RequestOwner={lifecycle:number;fingerprint:string;ids:Set<string>;cancelled:boolean};
+type RequestOwner={lifecycle:number;fingerprint:string;outputKind:RelightOutputKind;ids:Set<string>;cancelled:boolean};
+type PreviewRequest={token:number;quality:'drag'|'final';snapshotId:string};
+export interface RelightWorkbenchPreviewStats {requested:number;started:number;completed:number;discarded:number;encoded:number;renderMs:number;encodeMs:number;running:boolean;pending:boolean;previewWidth:number;previewHeight:number}
 class ParameterValidationError extends Error {}
 const clamp=(v:number,min:number,max:number)=>Math.max(min,Math.min(max,v));
 const LIGHT_CONTROLS=['name','type','role','enabled','locked','x','y','z','intensity','range','softness','cone','targetX','targetY','direction','elevation','color-mode','temperature','color'];
@@ -29,8 +33,8 @@ function warningText(warning:string):string {
   if(warning.startsWith('Only the clean source image fits'))return t('此模型只能容纳干净原图，辅助蒙版不能替换原图；最终范围仍由保存的选区限制。');
   return errorText(warning);
 }
-function dataUrl(image:Raster):string {
-  const bytes=encodePng(image),alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';let encoded='';
+function dataUrl(image:Raster,drag=false):string {
+  const bytes=drag?encodeRelightDragPreview(image):encodePng(image),alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';let encoded='';
   for(let i=0;i<bytes.length;i+=3){const n=(bytes[i]<<16)|((bytes[i+1]??0)<<8)|(bytes[i+2]??0);encoded+=alphabet[n>>>18]+alphabet[(n>>>12)&63]+(i+1<bytes.length?alphabet[(n>>>6)&63]:'=')+(i+2<bytes.length?alphabet[n&63]:'=');}
   return 'data:image/png;base64,'+encoded;
 }
@@ -46,17 +50,22 @@ export class RelightWorkbench {
   private tab:Tab='illustration';private markersVisible=true;private panMode=false;private advanced=false;
   private viewport:RelightViewport={clientRect:{left:0,top:0,width:1,height:1},fitScale:1,zoom:1,panX:0,panY:0};
   private visible=false;private transitioning=false;private pending=false;private nativeBusy=false;private lifecycle=0;
-  private request?:RequestOwner;private selectedResult?:string;private lastStatus='';private parameterStatus=false;private warnings:string[]=[];private acknowledged=false;private sourceInvalid=false;private scopePending=false;
+  private request?:RequestOwner;private selectedResult?:string;private lastStatus='';private parameterStatus=false;private warnings:string[]=[];private acknowledged=false;private sourceInvalid=false;private scopePending=false;private outputPending=false;
   private pendingDraft?:RelightScene;private invalid=new Set<string>();private invalidLightId:string|null=null;private afterClose?:()=>Promise<void>;private reopenAfterClose=true;
   private listeners:Array<()=>void>=[];private drag?:Drag;private preview?:RelightPreparedPreview;
   private originalUrl='';private illustrationUrl='';private resultUrl='';private resultUrlId='';
   private displayedImageUrl='';private displayedImageGeometry='';
-  private previewToken=0;private previewRunning=false;private lastRender=0;private previewTimer?:ReturnType<typeof setTimeout>;private resizeTimer?:ReturnType<typeof setTimeout>;private saveTimer?:ReturnType<typeof setTimeout>;
+  private previewToken=0;private previewRequest?:PreviewRequest;private previewRun?:PreviewRequest;private lastRender=0;private previewTimer?:ReturnType<typeof setTimeout>;private resizeTimer?:ReturnType<typeof setTimeout>;private saveTimer?:ReturnType<typeof setTimeout>;
+  private finalRenderer?:RelightPreviewRenderer;private dragRenderer?:RelightPreviewRenderer;
+  private sourceSyncTimer?:ReturnType<typeof setTimeout>;private sourceSyncFailed=false;
+  private previewCounters={requested:0,started:0,completed:0,discarded:0,encoded:0,renderMs:0,encodeMs:0};
+  private lightListKey='';private resultListKey='';
   private markerNodes=new Map<string,any>();
   constructor(private dialog:any,public session:RelightSession,private host:RelightWorkbenchHost){}
   get isOpen():boolean{return this.visible;}
   get currentResultId():string|undefined{return this.selectedResult;}
   get isGenerating():boolean{return this.pending;}
+  get previewStats():RelightWorkbenchPreviewStats {return {...this.previewCounters,running:!!this.previewRun,pending:!!this.previewRequest,previewWidth:this.preview?.image.width??0,previewHeight:this.preview?.image.height??0};}
   refreshAvailability():void {if(this.visible)this.refresh();}
   /** Drop deleted candidate URLs even while closed; keep the frozen source and lighting editor. */
   invalidateResults(ids:readonly string[]):void {
@@ -67,7 +76,8 @@ export class RelightWorkbench {
     if(this.selectedResult&&ids.includes(this.selectedResult)){this.selectedResult=this.host.results()[0]?.jobId;if(!this.selectedResult&&this.tab==='result')this.tab='illustration';}
     if(this.visible)this.refresh();
   }
-  setSourceInvalid(invalid:boolean):void {this.sourceInvalid=invalid;if(invalid)this.message(t('来源已关闭或改变，请重新读取原图；布光配置和已有结果仍保留'));if(this.visible)this.refresh();}
+  setSourceInvalid(invalid:boolean):void {if(invalid){this.invalidateSource();return;}const previous=this.sourceInvalid;this.sourceInvalid=false;this.sourceSyncFailed=false;if(previous)this.message(t('编辑布光不会发起 AI 请求；主动点击生成'));if(this.visible)this.refresh();}
+  invalidateSource(reason?:string):void {const previous=this.sourceInvalid;this.sourceInvalid=true;this.cancelPreview();if(reason||!previous)this.message(reason??t('来源已关闭或改变，请重新读取原图；布光配置和已有结果仍保留'));if(this.visible)this.refresh();}
   setScopePending(pending:boolean):void {const previous=this.scopePending;this.scopePending=pending;if(pending)this.message(t('布光范围已改变，请重新读取原图；原有布光配置已保留'));else if(previous&&!this.sourceInvalid)this.message(t('编辑布光不会发起 AI 请求；主动点击生成'));if(this.visible)this.refresh();}
   private el(id:string):any{return this.dialog.querySelector(`#relight-${id}`);}
   private listen(node:any,name:string,fn:(event:any)=>void):void {node.addEventListener(name,fn);this.listeners.push(()=>node.removeEventListener(name,fn));}
@@ -99,7 +109,7 @@ export class RelightWorkbench {
   notifyResult(jobId:string):void {
     const owner=this.request;
     if(!this.visible||!owner||owner.cancelled||owner.lifecycle!==this.lifecycle||!owner.ids.has(jobId))return;
-    const result=this.host.results().find(r=>r.jobId===jobId&&r.fingerprint===owner.fingerprint);
+    const result=this.host.results().find(r=>r.jobId===jobId&&r.fingerprint===owner.fingerprint&&relightOutputKind(r)===owner.outputKind);
     if(!result)return;
     this.selectedResult=jobId;this.tab='result';this.refresh();
   }
@@ -128,10 +138,10 @@ export class RelightWorkbench {
     this.dialog.close('native-operation');
   }
   private generate():void {
-    if(this.pending||this.nativeBusy||this.sourceInvalid||this.scopePending)return;
+    if(this.pending||this.nativeBusy||this.sourceInvalid||this.scopePending||this.outputPending)return;
     this.assertHostIdle();
     if(this.invalid.size)throw new ParameterValidationError(t('请先修正标记为无效的参数，再生成'));
-    const frozen=this.session.freeze(),owner:RequestOwner={lifecycle:this.lifecycle,fingerprint:frozen.fingerprint,ids:new Set(),cancelled:false};
+    const frozen=this.session.freeze(),owner:RequestOwner={lifecycle:this.lifecycle,fingerprint:frozen.fingerprint,outputKind:frozen.outputKind,ids:new Set(),cancelled:false};
     this.pending=true;this.request=owner;
     this.closeForNative(async()=>{
       try {
@@ -164,7 +174,7 @@ export class RelightWorkbench {
       const rows=options.map(n=>({value:n.getAttribute('value'),text:n.getAttribute('data-i18n'),disabled:n.hasAttribute('disabled')}));
       select.innerHTML='';for(const row of rows){const n=this.dialog.ownerDocument.createElement('option');n.value=row.value;n.setAttribute('value',row.value);n.setAttribute('data-i18n',row.text);n.textContent=t(row.text);if(row.disabled){n.setAttribute('disabled','');n.disabled=true;}select.appendChild(n);}select.value=value;
     }
-    this.el('output').value='full';
+    this.el('output').value=this.session.outputKind;
     const limits:Record<string,{min:number;max:number}>={x:RELIGHT_LIMITS.position,y:RELIGHT_LIMITS.position,z:RELIGHT_LIMITS.depth,targetX:RELIGHT_LIMITS.position,targetY:RELIGHT_LIMITS.position,intensity:RELIGHT_LIMITS.intensity,range:RELIGHT_LIMITS.range,softness:RELIGHT_LIMITS.softness,cone:RELIGHT_LIMITS.cone,direction:RELIGHT_LIMITS.direction,elevation:RELIGHT_LIMITS.elevation,temperature:RELIGHT_LIMITS.temperature,'ambient-intensity':RELIGHT_LIMITS.intensity,'shadow-strength':RELIGHT_LIMITS.softness,'shadow-softness':RELIGHT_LIMITS.softness};
     for(const [id,range]of Object.entries(limits)){this.el(id).min=String(range.min);this.el(id).max=String(range.max);}
     this.el('name').maxLength=RELIGHT_LIMITS.maxName;this.el('supplement').setAttribute('maxlength',String(RELIGHT_LIMITS.maxSupplement));
@@ -189,10 +199,16 @@ export class RelightWorkbench {
     this.click('save',async()=>{await this.save();this.message(t('布光草稿已保存'));});
     this.click('load-draft',async()=>{const scene=await this.host.loadDraft();if(!scene)throw new Error(t('尚无保存的布光草稿'));try{this.session.restore(scene);this.selectedResult=undefined;this.changed();}catch(error){this.pendingDraft=scene;this.refresh();throw error;}});
     this.click('reuse-draft',()=>{if(this.pendingDraft){this.session.restore(this.pendingDraft,true);this.pendingDraft=undefined;this.selectedResult=undefined;this.changed();this.message(t('已明确将保存的布光复用到当前快照，请检查位置后生成'));}});
-    this.click('reread',()=>this.closeForNative(async()=>{await this.host.reread();this.sourceInvalid=false;this.scopePending=false;this.selectedResult=undefined;this.pendingDraft=undefined;this.message(t('原图已重新读取，布光已绑定新快照；请检查位置后生成'));await this.save();}));
+    this.click('reread',()=>this.rereadSource());
+    if(this.el('rebind-current'))this.click('rebind-current',()=>this.rereadSource(true));
+    this.listen(this.el('output'),'change',()=>void this.guard(()=>{
+      const previous=this.session.outputKind;this.session.setOutputKind(this.el('output').value);
+      if(this.session.outputKind===previous)return;
+      this.outputPending=true;this.message(t('切换输出方式后请重新读取原图；布光配置已保留'));this.refresh();
+    }));
     this.click('generate',()=>this.generate());
     this.click('cancel',async()=>{if(this.request)this.request.cancelled=true;await this.host.cancel();this.message(t('已请求取消或停止后续候选；平台当前任务可能继续并计费，结果保留在历史中'));this.refresh();});
-    this.click('apply',()=>{this.assertHostIdle();const r=this.result();if(!r)throw new Error(t('请先选择实际 AI 结果'));if(this.el('output').value!=='full')throw new Error(t('补偿应用尚未通过验收，请使用完整结果层'));this.closeForNative(async()=>{await this.host.apply(r.jobId);this.message(t('完整结果已应用；可编辑蒙版并一次撤销'));});});
+    this.click('apply',()=>{this.assertHostIdle();const r=this.result();if(!r)throw new Error(t('请先选择实际 AI 结果'));const kind=relightOutputKind(r);this.closeForNative(async()=>{await this.host.apply(r.jobId);this.message(t(kind==='lighting-layers'?'光影层已应用；原图细节保留在来源图层，可编辑并一次撤销':'完整结果已应用；可编辑蒙版并一次撤销'));});});
     this.click('export',async()=>{const r=this.result();if(!r)throw new Error(t('请先选择实际 AI 结果'));await this.host.export(r.jobId);});
     this.click('compensation',async()=>{const r=this.result();if(!r)throw new Error(t('请先选择实际 AI 结果'));this.el('compensation-info').textContent=await this.host.diagnostics(r.jobId);});
     this.listen(this.el('acknowledge'),'change',()=>{this.acknowledged=!!this.el('acknowledge').checked;});
@@ -202,47 +218,111 @@ export class RelightWorkbench {
       const node=this.el(id);this.listen(node,'change',()=>void this.guard(()=>this.commitControl(id)));
       if(['intensity','range','softness','ambient-intensity','shadow-strength','shadow-softness'].includes(id))this.listen(node,'input',()=>void this.guard(()=>this.commitControl(id)));
     }
-    this.listen(this.el('markers'),'pointerdown',e=>this.startDrag(e));
-    this.listen(this.el('viewport'),'pointerdown',e=>{if(this.panMode&&!e.target?.closest?.('[data-light-id]'))this.startPan(e);});
+    this.listen(this.el('markers'),'pointerdown',e=>void this.guard(()=>this.startDrag(e)));
+    this.listen(this.el('viewport'),'pointerdown',e=>{if(this.panMode&&!e.target?.closest?.('[data-light-id]'))void this.guard(()=>this.startPan(e));});
     const doc=this.dialog.ownerDocument;
-    this.listen(doc,'pointermove',e=>this.moveDrag(e));this.listen(doc,'pointerup',e=>this.finishDrag(e));this.listen(doc,'pointercancel',()=>this.finishDrag(undefined,true));
+    this.listen(doc,'pointermove',e=>this.moveDrag(e));this.listen(doc,'pointerup',e=>this.finishDrag(e));this.listen(doc,'pointercancel',e=>this.finishDrag(e,true));
+    // UXP does not promise lostpointercapture dispatch. Keep independent blur,
+    // cancel and released-buttons paths; do not rely on browser-only events.
+    this.listen(doc,'lostpointercapture',e=>this.finishDrag(e));
+    this.listen(doc,'pointerout',e=>{if(!e.relatedTarget&&e.buttons===0)this.finishDrag(e);});
+    this.listen(this.dialog,'blur',e=>{if(e.target===this.dialog)this.finishDrag();});
     this.listen(doc,'keydown',e=>this.key(e));
-    const win=doc.defaultView;if(win?.addEventListener)this.listen(win,'resize',()=>{if(this.visible)this.measure();});
+    const win=doc.defaultView;if(win?.addEventListener){this.listen(win,'resize',()=>{if(this.visible)this.measure();});this.listen(win,'blur',()=>this.finishDrag());}
     this.listen(this.dialog,'resize',()=>this.measure());
     this.listen(this.dialog,'cancel',()=>{this.afterClose=undefined;});
+    if(this.host.observeSource)this.listeners.push(this.host.observeSource(()=>{this.invalidateSource();this.checkSourceState();}));
+    const state=this.host.sourceState?.();if(state&&state!=='current')this.invalidateSource();
     this.message(this.lastStatus||t('编辑布光不会发起 AI 请求；主动点击生成'),this.parameterStatus);this.refresh();
-    try{this.preview=prepareRelightPreview(this.session.sourceCapture.image,this.session.sourceCapture.snapshot.mask);this.originalUrl=dataUrl(this.preview.image);this.schedulePreview();this.renderImage();}
+    try{
+      const capture=this.session.sourceCapture,mask=downsampleSnapshotMask(capture.snapshot,capture.image.width,capture.image.height);
+      this.preview=prepareRelightPreview(capture.image,mask);this.finalRenderer=new RelightPreviewRenderer(this.preview);
+      this.dragRenderer=new RelightPreviewRenderer(prepareRelightPreview(this.preview.image,this.preview.mask,{maxEdge:240}));
+      this.originalUrl=dataUrl(this.preview.image);this.schedulePreview();this.renderImage();
+    }
     catch(error){this.message(t('布光示意失败，请重试示意或重新读取原图：{0}',error instanceof Error?error.message:String(error)));this.tab='original';}
+  }
+  private rereadSource(rebind=false,explicit=true):void {
+    if(this.pending||this.nativeBusy||this.host.busy?.())return;
+    if(rebind&&!this.host.rebindCurrent)return;
+    if(explicit)this.sourceSyncFailed=false;
+    this.invalidateSource();
+    this.closeForNative(async()=>{
+      try{if(rebind)await this.host.rebindCurrent!();else await this.host.reread({explicit});}
+      catch(error){if(!explicit)this.sourceSyncFailed=true;throw error;}
+      this.sourceInvalid=false;this.scopePending=false;this.outputPending=false;this.sourceSyncFailed=false;this.selectedResult=undefined;this.pendingDraft=undefined;
+      this.message(t('原图已重新读取，布光已绑定新快照；请检查位置后生成'));await this.save();
+    });
+  }
+  /** Metadata checks are cheap; the actual read runs only after the dialog closes. */
+  private checkSourceState():void {
+    if(!this.visible)return;
+    const state=this.host.sourceState?.();if(!state||state==='current')return;
+    if(!this.sourceInvalid){this.sourceInvalid=true;this.cancelPreview();this.message(t('来源已关闭或改变，请重新读取原图；布光配置和已有结果仍保留'));}
+    if(state!=='changed'||!this.canSyncSource()||this.sourceSyncTimer)return;
+    this.sourceSyncTimer=setTimeout(()=>{this.sourceSyncTimer=undefined;if(this.host.sourceState?.()==='changed'&&this.canSyncSource())this.rereadSource(false,false);},0);
+  }
+  private canSyncSource():boolean {return this.visible&&!this.transitioning&&!this.pending&&!this.nativeBusy&&!this.drag&&!this.scopePending&&!this.outputPending&&!this.sourceSyncFailed&&!this.host.busy?.()&&!(this.host.pendingTasks?.()??0)&&this.host.results().length===0;}
+  private interactionIdle():void {
+    const EventType=this.dialog.ownerDocument.defaultView?.Event;
+    if(typeof EventType==='function')this.dialog.dispatchEvent(new EventType('psai-interaction-idle',{bubbles:true}));
+  }
+  private cancelPreview():void {
+    this.previewToken++;this.previewRequest=undefined;
+    if(this.previewTimer)clearTimeout(this.previewTimer);this.previewTimer=undefined;
   }
   private cleanup():void {
     this.finishDrag();for(const remove of this.listeners.splice(0))remove();
-    this.previewToken++;if(this.previewTimer)clearTimeout(this.previewTimer);this.previewTimer=undefined;
+    this.cancelPreview();this.finalRenderer?.clear();this.dragRenderer?.clear();this.finalRenderer=undefined;this.dragRenderer=undefined;
     if(this.resizeTimer)clearTimeout(this.resizeTimer);this.resizeTimer=undefined;
     if(this.saveTimer)clearTimeout(this.saveTimer);this.saveTimer=undefined;
+    if(this.sourceSyncTimer)clearTimeout(this.sourceSyncTimer);this.sourceSyncTimer=undefined;
     this.preview=undefined;this.originalUrl='';this.illustrationUrl='';this.resultUrl='';this.resultUrlId='';
     this.displayedImageUrl='';this.displayedImageGeometry='';
-    this.el('image').removeAttribute('src');this.el('markers').innerHTML='';this.markerNodes.clear();
+    this.el('image').removeAttribute('src');this.el('markers').innerHTML='';this.markerNodes.clear();this.lightListKey='';this.resultListKey='';this.interactionIdle();
   }
   private schedulePreview():void {
-    const token=++this.previewToken;
-    if(this.previewTimer)clearTimeout(this.previewTimer);
-    if(!this.visible||!this.preview||this.previewRunning)return;
-    this.previewTimer=setTimeout(()=>{this.previewTimer=undefined;const cache=this.preview;if(!cache||token!==this.previewToken)return;this.previewRunning=true;this.lastRender=Date.now();const scene=this.session.editor.snapshot();
-      void renderRelightPreview(cache.image,scene,cache.mask,{cancelled:()=>!this.visible||token!==this.previewToken}).then(image=>{
-        if(!this.visible||token!==this.previewToken)return;this.illustrationUrl=dataUrl(image);this.renderImage();
-      }).catch(error=>{if(error?.name!=='AbortError'&&this.visible&&token===this.previewToken)this.message(t('布光示意失败，请重试示意或重新读取原图：{0}',error instanceof Error?error.message:String(error)));}).finally(()=>{this.previewRunning=false;if(this.visible&&token!==this.previewToken)this.schedulePreview();});
-    },Math.max(0,84-(Date.now()-this.lastRender)));
+    this.previewCounters.requested++;
+    const request:PreviewRequest={token:++this.previewToken,quality:this.drag?'drag':'final',snapshotId:this.session.editor.snapshot().source.snapshotId};
+    if(!this.visible||!this.preview||this.sourceInvalid)return;
+    this.previewRequest=request;
+    if(this.previewTimer)clearTimeout(this.previewTimer);this.previewTimer=undefined;
+    this.queuePreview();
+  }
+  private queuePreview():void {
+    if(!this.visible||!this.previewRequest||this.previewRun||this.previewTimer||this.sourceInvalid)return;
+    const delay=this.previewRequest.quality==='drag'?Math.max(0,32-(Date.now()-this.lastRender)):0;
+    this.previewTimer=setTimeout(()=>{
+      this.previewTimer=undefined;const request=this.previewRequest;if(!request||!this.visible||request.token!==this.previewToken||this.sourceInvalid)return;
+      this.previewRequest=undefined;const renderer=request.quality==='drag'?this.dragRenderer:this.finalRenderer;if(!renderer)return;
+      const current=()=>this.visible&&!this.sourceInvalid&&request.token===this.previewToken&&request.snapshotId===this.session.editor.snapshot().source.snapshotId;
+      this.previewRun=request;this.previewCounters.started++;this.lastRender=Date.now();const started=Date.now(),scene=this.session.editor.snapshot();
+      void renderer.render(scene,{cancelled:()=>!current()}).then(image=>{
+        this.previewCounters.renderMs=Date.now()-started;
+        // CPU work may finish after another pointer/source request. Encode only
+        // the newest version, and retain the last accepted image until it is ready.
+        if(!current()){this.previewCounters.discarded++;return;}
+        const encoded=Date.now(),url=dataUrl(image,request.quality==='drag');this.previewCounters.encodeMs=Date.now()-encoded;this.previewCounters.encoded++;
+        if(!current()){this.previewCounters.discarded++;return;}
+        this.illustrationUrl=url;this.previewCounters.completed++;this.renderImage();
+      }).catch(error=>{
+        if(error?.name==='AbortError'){this.previewCounters.discarded++;return;}
+        if(current())this.message(t('布光示意失败，请重试示意或重新读取原图：{0}',error instanceof Error?error.message:String(error)));
+      }).finally(()=>{if(this.previewRun===request){this.previewRun=undefined;this.queuePreview();}});
+    },delay);
   }
   private refresh():void {
     if(!this.visible)return;
+    this.checkSourceState();
     const scene=this.session.editor.snapshot(),light=scene.lights.find(l=>l.id===this.session.editor.selectedId),doc=this.dialog.ownerDocument;
     this.reconcileInvalid(light);
     if(this.parameterStatus&&!this.invalid.size)this.message(t('编辑布光不会发起 AI 请求；主动点击生成'));
     const defaults=createRelightScene(scene.source,'color-default');
     const captured=this.session.sourceCapture;
-    this.el('source').textContent=t('可见合成 · 文档 {0} · {1}×{2} · {3} · {4} 位',scene.source.documentId,scene.source.bounds.right-scene.source.bounds.left,scene.source.bounds.bottom-scene.source.bounds.top,scene.source.profile,scene.source.documentDepth)+(captured.documentName?` · ${captured.documentName}`:'')+t(this.session.scope==='document'?' · 整张图像（减去保护区）':' · 当前选区（减去保护区）')+(captured.workingCopyOf===undefined?'':t(' · sRGB 工作副本，原文档 {0}',captured.workingCopyOf));
+    this.el('source').textContent=t('可见合成 · 文档 {0} · {1}×{2} · {3} · {4} 位',scene.source.documentId,scene.source.bounds.right-scene.source.bounds.left,scene.source.bounds.bottom-scene.source.bounds.top,scene.source.profile,scene.source.documentDepth)+(captured.documentName?` · ${captured.documentName}`:'')+t(this.session.scope==='document'?' · 整张图像（减去保护区）':' · 当前选区（减去保护区）')+(captured.workingCopyOf===undefined?'':t(' · sRGB 工作副本，原文档 {0}',captured.workingCopyOf))+(this.sourceInvalid?t(' · 来源已过期'):'');
     this.el('scope-info').textContent=t(this.session.scope==='document'?'作用范围：捕获时的整张图像减去保护区。位置与 Z 为图像相对意图，并非已恢复的三维结构。':'作用范围：捕获时的选区减去保护区。位置与 Z 为图像相对意图，并非已恢复的三维结构。');
-    this.el('lights').innerHTML='';scene.lights.forEach((l,i)=>{const row=doc.createElement('div');row.className='relight-light-row'+(l.id===light?.id?' selected':'');const select=doc.createElement('button');select.className='relight-light-name';select.setAttribute('data-light-id',l.id);const swatch=doc.createElement('span');swatch.className='relight-swatch';swatch.style.backgroundColor=l.color.mode==='custom'?l.color.hex:l.color.kelvin<5000?'#F6C78A':l.color.kelvin>6500?'#A5C7FF':'#FFFFFF';select.appendChild(swatch);const text=doc.createElement('span');text.textContent=`${i+1}. ${l.name}${l.enabled?'':t('（已禁用）')}`;select.appendChild(text);row.appendChild(select);const find=doc.createElement('button');find.className='relight-find';find.textContent=t('找回');find.setAttribute('data-light-id',l.id);find.setAttribute('data-find','true');row.appendChild(find);this.el('lights').appendChild(row);});
+    const lightListKey=JSON.stringify([scene.lights.map(l=>[l.id,l.name,l.color,l.enabled]),light?.id]);
+    if(lightListKey!==this.lightListKey){this.lightListKey=lightListKey;this.el('lights').innerHTML='';scene.lights.forEach((l,i)=>{const row=doc.createElement('div');row.className='relight-light-row'+(l.id===light?.id?' selected':'');const select=doc.createElement('button');select.className='relight-light-name';select.setAttribute('data-light-id',l.id);const swatch=doc.createElement('span');swatch.className='relight-swatch';swatch.style.backgroundColor=l.color.mode==='custom'?l.color.hex:l.color.kelvin<5000?'#F6C78A':l.color.kelvin>6500?'#A5C7FF':'#FFFFFF';select.appendChild(swatch);const text=doc.createElement('span');text.textContent=`${i+1}. ${l.name}${l.enabled?'':t('（已禁用）')}`;select.appendChild(text);row.appendChild(select);const find=doc.createElement('button');find.className='relight-find';find.textContent=t('找回');find.setAttribute('data-light-id',l.id);find.setAttribute('data-find','true');row.appendChild(find);this.el('lights').appendChild(row);});}
     this.el('selected').style.display=light?'block':'none';
     const set=(id:string,value:unknown)=>{if(doc.activeElement!==this.el(id)&&!this.invalid.has(id))this.el(id).value=String(value);};
     if(light){
@@ -259,17 +339,22 @@ export class RelightWorkbench {
     this.el('advanced').style.display=this.advanced?'block':'none';
     this.el('add').disabled=scene.lights.length>=RELIGHT_LIMITS.maxLights;this.el('duplicate').disabled=!light||scene.lights.length>=RELIGHT_LIMITS.maxLights;this.el('delete').disabled=!light;
     this.el('undo').disabled=!this.session.editor.canUndo;this.el('redo').disabled=!this.session.editor.canRedo;
-    this.el('hide-markers').textContent=t(this.markersVisible?'隐藏标记':'显示标记');this.el('pan').className=this.panMode?'active':'';this.el('viewport').className=this.panMode?'pan':'';
+    this.el('hide-markers').textContent=t(this.markersVisible?'隐藏标记':'显示标记');this.el('pan').className=this.panMode?'active':'';this.el('viewport').className=[this.panMode?'pan':'',this.drag?'dragging':''].filter(Boolean).join(' ');
     this.el('zoom-label').textContent=`${Math.round(this.viewport.zoom*100)}%`;
     for(const tab of ['original','illustration','result'])this.el(`tab-${tab}`).className=this.tab===tab?'active':'';
     const sharedBusy=!!this.host.busy?.();
     const pendingTasks=this.host.pendingTasks?.()??0;this.el('pending-tasks').style.display=pendingTasks?'block':'none';this.el('pending-tasks').disabled=this.pending||this.nativeBusy||sharedBusy;this.el('pending-tasks').textContent=t('处理未确认任务（{0}）；保留布光并返回历史',pendingTasks);
-    this.el('generate').disabled=this.pending||this.nativeBusy||this.sourceInvalid||this.scopePending||sharedBusy;this.el('cancel').disabled=!this.pending;
+    this.el('generate').disabled=this.pending||this.nativeBusy||this.sourceInvalid||this.scopePending||this.outputPending||sharedBusy;this.el('cancel').disabled=!this.pending;
     const result=this.result();this.el('apply').disabled=this.pending||this.nativeBusy||this.sourceInvalid||sharedBusy||!result||!!result.warning;this.el('export').disabled=!result;this.el('compensation').disabled=!result;this.el('reread').disabled=this.pending||this.nativeBusy||sharedBusy;
-    this.el('stale').textContent=result&&result.fingerprint!==this.session.fingerprint?t('布光已修改，当前结果尚未更新；应用仍使用该结果提交时的配置'):'';
+    if(this.el('rebind-current')){this.el('rebind-current').style.display=this.host.rebindCurrent?'block':'none';this.el('rebind-current').disabled=this.pending||this.nativeBusy||sharedBusy;}
+    this.el('apply').textContent=t(result&&relightOutputKind(result)==='lighting-layers'?'应用光影层组':'应用整图结果');
+    this.el('output').value=this.session.outputKind;
+    if(this.el('output-info'))this.el('output-info').textContent=t(this.session.outputKind==='lighting-layers'?'光影层使用 AI 低分辨率参考估算照明影响；人脸、文字和材质仍需检查。':'整图重绘由 AI 生成完整编辑图，可能改变原图细节。');
+    this.el('stale').textContent=result&&(result.fingerprint!==this.session.fingerprint||relightOutputKind(result)!==this.session.outputKind)?t('布光已修改，当前结果尚未更新；应用仍使用该结果提交时的配置'):'';
     this.el('warnings').textContent=[...this.warnings.map(warningText),...(result?.warning?[errorText(result.warning)]:[])].join('\n');this.el('acknowledge').style.display=this.warnings.some(w=>/Resolve this conflict/.test(w))?'block':'none';this.el('acknowledge').checked=this.acknowledged;
     this.el('reuse-draft').style.display=this.pendingDraft?'block':'none';
-    this.el('result-list').innerHTML='';this.host.results().forEach((r,i)=>{const button=doc.createElement('button');button.textContent=t('AI 结果 {0} · {1}',i+1,r.jobId.slice(0,8));button.setAttribute('data-job-id',r.jobId);button.className=r.jobId===this.selectedResult?'active':'';this.el('result-list').appendChild(button);});
+    const results=this.host.results(),resultListKey=JSON.stringify([results.map(r=>[r.jobId,relightOutputKind(r)]),this.selectedResult]);
+    if(resultListKey!==this.resultListKey){this.resultListKey=resultListKey;this.el('result-list').innerHTML='';results.forEach((r,i)=>{const button=doc.createElement('button');button.textContent=t('AI 结果 {0} · {1}',i+1,r.jobId.slice(0,8))+' · '+t(relightOutputKind(r)==='lighting-layers'?'保细节光影层（实验）':'整图重绘');button.setAttribute('data-job-id',r.jobId);button.className=r.jobId===this.selectedResult?'active':'';this.el('result-list').appendChild(button);});}
     this.renderImage();this.renderMarkers();
   }
   private renderImage():void {
@@ -297,7 +382,7 @@ export class RelightWorkbench {
       // PS27 native buttons can lose pointerdown at directional marker positions.
       // Keep a focusable DOM handle stable while its geometry/type changes.
       active.add(key);let node=this.markerNodes.get(key);if(!node){node=this.dialog.ownerDocument.createElement('div');node.setAttribute('data-light-id',id);node.setAttribute('data-kind',kind);node.setAttribute('role','button');node.setAttribute('tabindex','0');container.appendChild(node);this.markerNodes.set(key,node);}
-      node.textContent=text;node.setAttribute('aria-label',label);node.className='relight-marker '+classes;const size=kind==='target'?24:28;
+      node.textContent=text;node.setAttribute('aria-label',label);node.className='relight-marker '+classes+(this.drag?.node===node?' dragging':'');const size=kind==='target'?24:28;
       node.style.left=`${point.x-rect.left-size/2}px`;node.style.top=`${point.y-rect.top-size/2}px`;
       return node;
     };
@@ -349,30 +434,47 @@ export class RelightWorkbench {
     }catch(error){this.invalid.add(id);this.el(id).setAttribute('aria-invalid','true');throw new ParameterValidationError(t('参数未保存，请修正后重试：{0}',error instanceof Error?error.message:String(error)));}
   }
   private startDrag(e:any):void {
-    const node=e.target?.closest?.('[data-light-id]');if(!node||e.button>0)return;
+    const node=e.target?.closest?.('[data-light-id]');if(!node||e.button>0||this.drag)return;
     e.preventDefault();const id=node.getAttribute('data-light-id');this.session.editor.select(id);
     if(this.panMode){this.startPan(e);return;}
     const light=this.session.editor.snapshot().lights.find(l=>l.id===id)!;if(light.positionLocked&&light.type!=='directional'&&node.getAttribute('data-kind')!=='target'){this.message(t('光源位置已锁定，请先解锁'));this.refresh();return;}
     this.session.editor.beginGesture();this.drag={kind:node.getAttribute('data-kind')==='target'?'target':'light',id,startX:e.clientX,startY:e.clientY,panX:this.viewport.panX,panY:this.viewport.panY,pointerId:e.pointerId,node};
-    if(typeof node.setPointerCapture==='function'&&Number.isFinite(e.pointerId))node.setPointerCapture(e.pointerId);this.refresh();
+    try{if(typeof node.setPointerCapture==='function'&&Number.isFinite(e.pointerId))node.setPointerCapture(e.pointerId);}catch(error){this.finishDrag(undefined,true);throw error;}
+    this.refresh();
   }
-  private startPan(e:any):void {if(e.button>0)return;e.preventDefault();this.drag={kind:'pan',startX:e.clientX,startY:e.clientY,panX:this.viewport.panX,panY:this.viewport.panY};}
+  private startPan(e:any):void {
+    if(e.button>0||this.drag)return;e.preventDefault();const node=this.el('viewport');
+    this.drag={kind:'pan',startX:e.clientX,startY:e.clientY,panX:this.viewport.panX,panY:this.viewport.panY,pointerId:e.pointerId,node};
+    try{if(typeof node.setPointerCapture==='function'&&Number.isFinite(e.pointerId))node.setPointerCapture(e.pointerId);}catch(error){this.finishDrag(undefined,true);throw error;}
+    this.el('viewport').className='pan dragging';
+  }
   private moveDrag(e:any):void {
     const d=this.drag;if(!d||!Number.isFinite(e.clientX)||!Number.isFinite(e.clientY))return;
     if(d.pointerId!==undefined&&e.pointerId!==undefined&&d.pointerId!==e.pointerId)return;
+    if(e.buttons===0){this.finishDrag(e);return;}
     e.preventDefault();
     if(d.kind==='pan'){this.viewport.panX=d.panX+e.clientX-d.startX;this.viewport.panY=d.panY+e.clientY-d.startY;this.renderImage();this.renderMarkers();return;}
     const point=viewportToNormalized({x:e.clientX,y:e.clientY},this.geometry(),this.viewport),light=this.session.editor.snapshot().lights.find(l=>l.id===d.id)!;
     try{if(d.kind==='target')this.session.editor.updateLight(d.id!,{targetX:clamp(point.x,RELIGHT_LIMITS.position.min,RELIGHT_LIMITS.position.max),targetY:clamp(point.y,RELIGHT_LIMITS.position.min,RELIGHT_LIMITS.position.max)});
       else if(light.type==='directional')this.session.editor.updateLight(d.id!,{direction:Math.atan2(point.y-.5,point.x-.5)*180/Math.PI});
       else this.session.editor.updateLight(d.id!,{x:clamp(point.x,RELIGHT_LIMITS.position.min,RELIGHT_LIMITS.position.max),y:clamp(point.y,RELIGHT_LIMITS.position.min,RELIGHT_LIMITS.position.max)});
-      this.refresh();this.schedulePreview();
+      this.refreshDrag();this.schedulePreview();
     }catch(error){this.message(error instanceof Error?error.message:String(error));this.finishDrag(undefined,true);}
+  }
+  private refreshDrag():void {
+    this.acknowledged=false;this.warnings=[];this.el('warnings').textContent='';this.el('acknowledge').checked=false;this.el('acknowledge').style.display='none';
+    const light=this.session.editor.snapshot().lights.find(l=>l.id===this.drag?.id);
+    if(light)for(const key of ['x','y','targetX','targetY','direction'] as const)this.el(key).value=String(light[key]);
+    this.el('viewport').className=this.panMode?'pan dragging':'dragging';
+    const result=this.result();this.el('stale').textContent=result&&result.fingerprint!==this.session.fingerprint?t('布光已修改，当前结果尚未更新；应用仍使用该结果提交时的配置'):'';
+    this.renderMarkers();
   }
   private finishDrag(e?:any,cancel=false):void {
     const d=this.drag;if(!d)return;if(e&&d.pointerId!==undefined&&e.pointerId!==undefined&&d.pointerId!==e.pointerId)return;this.drag=undefined;
     try{if(d.node&&d.pointerId!==undefined&&typeof d.node.releasePointerCapture==='function')d.node.releasePointerCapture(d.pointerId);}catch{}
     if(d.kind!=='pan'){if(cancel)this.session.editor.cancelGesture();else this.session.editor.endGesture();if(this.visible)this.changed();}
+    else if(this.visible)this.refresh();
+    this.el('viewport').className=this.panMode?'pan':'';this.interactionIdle();
   }
   private key(e:any):void {
     if(!this.visible||relightTextFocus(e.target)||relightTextFocus(this.dialog.ownerDocument.activeElement))return;

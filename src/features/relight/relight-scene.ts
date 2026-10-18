@@ -1,5 +1,6 @@
 import {sha256} from '@noble/hashes/sha2.js';
 import type {Bounds} from '../../imaging/image';
+import {IMAGE_BUDGETS} from '../../imaging/budget';
 
 export interface RelightPoint {x:number;y:number}
 export type RelightColor={mode:'temperature';kelvin:number}|{mode:'custom';hex:string};
@@ -68,7 +69,7 @@ function bounds(value:unknown,label:string):Bounds {
 function source(value:unknown):RelightSource {
   const v=object(value,['documentId','layerIds','sessionId','historyId','sourceHash','snapshotId','docWidth','docHeight','bounds','profile','documentMode','documentDepth','maskRef'],'source');
   const docWidth=number(v.docWidth,1,300000,'document width',true),docHeight=number(v.docHeight,1,300000,'document height',true),b=bounds(v.bounds,'source bounds');
-  if(b.right>docWidth||b.bottom>docHeight||Object.values(b).some(v=>!Number.isInteger(v))||(b.right-b.left)*(b.bottom-b.top)>16_000_000)throw new Error('Invalid source bounds: recapture a valid region inside the document');
+  if(b.right>docWidth||b.bottom>docHeight||Object.values(b).some(v=>!Number.isInteger(v))||(b.right-b.left)*(b.bottom-b.top)>IMAGE_BUDGETS.documentPixels)throw new Error('Invalid source bounds: recapture a valid region inside the document');
   if(!Array.isArray(v.layerIds)||!v.layerIds.length||v.layerIds.length>RELIGHT_LIMITS.maxSourceLayers)throw new Error('Invalid visible-composite source layer IDs');
   const layerIds=Array.from(v.layerIds,v=>number(v,1,Number.MAX_SAFE_INTEGER,'source layer ID',true));
   if(new Set(layerIds).size!==layerIds.length)throw new Error('Duplicate source layer IDs');

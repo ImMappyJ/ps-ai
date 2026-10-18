@@ -60,7 +60,9 @@ test('source validation allows a small crop in a large document and bounds persi
   assert.deepEqual(createRelightScene(binding,'large-doc').source.bounds,{left:18000,top:11000,right:18400,bottom:11200});
   for(const key of ['sessionId','sourceHash','snapshotId','profile','documentMode','maskRef'] as const){const bad=scene();bad.source[key]='x'.repeat(1000);assert.throws(()=>validateRelightScene(bad));}
   const bad=scene();bad.supplement='x'.repeat(8001);assert.throws(()=>validateRelightScene(bad));
-  bad.supplement='';bad.source.bounds={left:0,top:0,right:5000,bottom:4000};bad.source.docWidth=20000;bad.source.docHeight=12000;assert.throws(()=>validateRelightScene(bad));
+  bad.supplement='';bad.source.bounds={left:0,top:0,right:9000,bottom:5000};bad.source.docWidth=20000;bad.source.docHeight=12000;
+  assert.equal(validateRelightScene(bad).source.bounds.right,9000,'45 MP scene metadata is permitted for bounded analysis captures');
+  bad.source.bounds.bottom=5001;assert.throws(()=>validateRelightScene(bad));
 });
 
 test('scene validation rejects accessors without executing their code',()=>{

@@ -20,9 +20,9 @@ test('managed Nano Banana disables transparent assets and seeds, keeps password 
   }finally{await h.close();}
 });
 
-test('saved managed profile starts without generating and blocks missing credentials before capture',async()=>{
+test('saved managed profile stays idle until an explicit action and blocks missing credentials before capture',async()=>{
   const h=await panelHarness({settings:{...defaultSettings(),backend:'gateway',platform:'bailian',baseUrl:'http://127.0.0.1:8191',gatewayModel:'qwen-image-2.1-pro',outputDepth:8}});
-  try{await h.wait();assert.equal(h.relayLaunches.length,1);assert.ok(h.errors.some(e=>String(e).includes('面板保存')));h.click('generate');await h.wait();assert.equal(h.captured.length,0);assert.equal(h.uploads.length,0);assert.equal(h.gatewayPosts.length,0);assert.equal(h.el('backend-kind').value,'bailian');}finally{await h.close();}
+  try{await h.wait();assert.equal(h.relayLaunches.length,0);assert.equal(h.requests.length,0);assert.equal(h.errors.length,0);h.click('generate');await h.wait();assert.equal(h.relayLaunches.length,1);assert.ok(h.errors.some(e=>String(e).includes('面板保存')));assert.equal(h.captured.length,0);assert.equal(h.uploads.length,0);assert.equal(h.gatewayPosts.length,0);assert.equal(h.el('backend-kind').value,'bailian');}finally{await h.close();}
 });
 test('scanning ComfyUI models preserves the unsaved custom address and selected depth',async()=>{const h=await panelHarness();try{await h.wait();h.el('backend-url').value='http://localhost:8288';h.el('output-depth').value='16';h.click('scan-models');await h.wait();assert.equal(h.el('backend-url').value,'http://localhost:8288');assert.equal(h.el('output-depth').value,'16');}finally{await h.close();}});
 

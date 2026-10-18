@@ -191,7 +191,7 @@ test('local configuration and bounded model validation produce translated displa
   }finally{setLanguage('zh-CN');}
 });
 
-test('classified errors lead with the next action while raw detail stays folded and recoverable',async()=>{
+test('unknown failures show their safe cause and technical details copies a redacted report',async()=>{
   const h=await panelHarness({settings:defaultSettings()});
   try{
     await h.wait();h.click('tab-t2i');
@@ -200,10 +200,10 @@ test('classified errors lead with the next action while raw detail stays folded 
     h.click('generate');await h.wait();
     assert.equal(h.el('status').style.display,'none','raw error text does not compete with classified guidance');
     assert.equal(h.el('task-progress').style.display,'none','a failed task does not repeat its raw error in the progress label');
-    assert.match(h.el('diagnostic-summary').textContent,/原因尚未确认[\s\S]*展开技术详情/);
-    assert.equal(h.el('diagnostic-details').style.display,'none');assert.ok(h.el('status').textContent.includes(technical));
+    assert.match(h.el('diagnostic-summary').textContent,/Synthetic storage failure/);assert.match(h.el('diagnostic-action').textContent,/技术详情/);
+    assert.equal(h.el('diagnostic-details').style.display,'none');assert.doesNotMatch(h.el('status').textContent,/private-token|C:\\fixture/);
     assert.doesNotMatch(h.el('diagnostic-summary').textContent,/private-token|C:\\fixture/);
-    h.click('toggle-error-details');assert.equal(h.el('diagnostic-details').style.display,'block');assert.ok(h.el('diagnostic-details').value.includes('private-token-'));
+    h.click('toggle-error-details');await h.wait();assert.equal(h.el('diagnostic-details').style.display,'none');assert.equal(h.clipboardWrites.length,1);assert.match(h.clipboardWrites[0],/Synthetic storage failure/);assert.doesNotMatch(h.clipboardWrites[0],/private-token|C:\\fixture/);
     delete h.files['history.json'];h.click('generate');await h.wait();
     assert.equal(h.el('diagnostic-box').style.display,'none');assert.equal(h.el('status').style.display,'block');
   }finally{await h.close();}
@@ -215,8 +215,9 @@ test('candidate selection is numbered and explicit while display navigation leav
   try{
     await h.wait();h.click('tab-t2i');h.el('count').value='2';h.click('generate');await h.wait();
     assert.ok(h.el('candidate-caption'),'a preview identifies its selected candidate');
-    assert.match(h.el('candidate-caption').textContent,/2 \/ 2/);
-    const buttons=h.el('candidates').querySelectorAll('button');assert.equal(buttons.length,2);
+    assert.match(h.el('candidate-caption').textContent,/1 \/ 2/);
+    const buttons=h.el('candidates').querySelectorAll('button');assert.equal(buttons.length,2);assert.equal(buttons[0].getAttribute('aria-pressed'),'true');
+    buttons[1].dispatchEvent(new (h.el('prompt').ownerDocument.defaultView!.Event)('click'));await h.wait();
     assert.equal(buttons[1].getAttribute('aria-pressed'),'true');assert.match(buttons[1].textContent,/2/);
     const display=decodePng(new Uint8Array(Buffer.from(h.el('detail-preview').src.split(',')[1],'base64')));
     assert.equal(display.width,640,'the fit preview is independent of the 240px thumbnail');assert.equal(display.height,320);
