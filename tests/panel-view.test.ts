@@ -5,6 +5,12 @@ import {defaultSettings,validateSettings,validateModels} from '../src/infrastruc
 import {decodePng} from '../src/imaging/image';
 import * as panelView from '../src/app/panel-view';
 import {setLanguage} from '../src/localization/i18n';
+import {parseHTML} from 'linkedom';
+
+test('view transitions notify once for both navigation clicks and programmatic shows without remounting controls',()=>{
+ const {document,window}=parseHTML('<button data-panel-nav="create"></button><button data-panel-nav="results"></button><div data-panel-page="create"><input id="draft" value="keep"></div><div data-panel-page="results"></div><div data-panel-page="history"></div>'),changes:string[]=[],views=new panelView.PanelViews(document,page=>changes.push(page)),draft=document.getElementById('draft');
+ assert.deepEqual(changes,[]);document.querySelector('[data-panel-nav="results"]')!.dispatchEvent(new window.Event('click',{bubbles:true}));views.show('history');views.show('history');views.show('create');assert.deepEqual(changes,['results','history','create']);assert.equal(document.getElementById('draft'),draft);assert.equal(draft?.getAttribute('value'),'keep');
+});
 
 test('view navigation preserves mounted inputs and captured state without capture, persistence or requests',async()=>{
   const h=await panelHarness({settings:defaultSettings()});

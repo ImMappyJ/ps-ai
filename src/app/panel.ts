@@ -44,7 +44,7 @@ async function checkBackend(backend:ComfyClient|GatewayClient,value:BackendSetti
   return result;
 }
 const el=(id:string):any=>document.getElementById(id);
-const views=new PanelViews(document),candidatePreview=new CandidatePreview(),sourceCaption=new SourceCaption(el('source-info'));
+const views=new PanelViews(document,()=>{clearConfirmation=undefined;historyUi();}),candidatePreview=new CandidatePreview(),sourceCaption=new SourceCaption(el('source-info'));
 el('build-id').textContent=BUILD_ID;
 const modes={local:[['edit','局部物体 / 材质修改'],['remove','移除杂物'],['background','换背景（选择主体）']],cosplay:[['effect','特效素材'],['costume','服装 / 道具修复'],['reference','角色参考辅助'],['scene','场景替换'],['atmosphere','氛围素材'],['relight','光影重塑'],['blend','溶图']],t2i:[['generate','文字生图']]};
 let workspace:Workspace='local',capture:Capture|undefined,protection:Protection|undefined,reference:Raster|undefined;
@@ -599,7 +599,6 @@ on('generate',generate);on('apply',apply);on('recover',recover);
 on('cancel',cancelSelected);on('open-pending',()=>showPending());on('next-pending',()=>showPending(true));
 on('history-cancel',async()=>{if(!busy)await cancelSelected();});
 on('clear-history',()=>clearHistory());on('confirm-clear-history',()=>clearHistory(true));on('keep-history',async()=>{if(!busy){clearConfirmation=undefined;historyUi();}});on('retry-history-cleanup',retryHistoryCleanup);
-el('nav-history').addEventListener('click',historyUi);
 on('stop-tracking',()=>stopTracking());on('confirm-stop-tracking',()=>stopTracking(true));on('keep-tracking',async()=>{detachAcknowledgedId=undefined;historyUi();});
 el('mode').addEventListener('change',()=>{invalidateCapture();inputUi();if(workspace==='cosplay'&&el('mode').value==='reference'){fold('reference',true);el('guide').checked=false;status(t("角色参考默认使用原图 + 参考图；范围辅助可能影响颜色，请按需试验"));}});
 el('destination').addEventListener('change',inputUi);

@@ -118,3 +118,26 @@ test('cleanup retry reconciles its durable IDs before a failed refresh and prese
   assert.equal(failures,1);assert.deepEqual(h.records().map(item=>item.id),[C]);assert.deepEqual(h.historyRows().map(node=>node.getAttribute('data-history-id')),[C]);assert.equal(h.el('history-id').value,C);assert.equal(h.el('history-selected-count').textContent,'已勾选 1 条');assert.equal((h.historyRows()[0].querySelector('[data-history-check]') as any).checked,true);assert.equal(h.el('pending-notice').style.display,'none');assert.equal(h.el('retry-history-cleanup').style.display,'none');assert.equal(h.files[A+'-output.png'],undefined);assert.match(h.el('history-cleanup-status').textContent,/已清除 2/);assert.ok(h.errors.some(error=>error.message==='Injected post-retry history read failure'));assert.equal(h.requests.length,requests);
  }finally{await h.close();}
 });
+
+for(const page of ['create','results','settings'])test(`history clear confirmation expires on a ${page} page roundtrip without losing focus or checks`,async()=>{
+ const h=await panelHarness({history:[record(A,'unknown'),record(B)]});try{
+  await h.wait();h.selectHistory(B);check(h,A);h.click('clear-history');assert.notEqual(h.el('history-clear-confirmation').style.display,'none');const requests=h.requests.length;
+  h.click('nav-'+page);assert.equal(h.el('view-'+page).style.display,'block');h.click('nav-history');assert.equal(h.el('history-id').value,B);assert.equal(h.el('history-selected-count').textContent,'已勾选 1 条');assert.equal(h.el('history-clear-confirmation').style.display,'none');h.click('confirm-clear-history');await h.wait();
+  assert.deepEqual(h.records().map(item=>item.id),[A,B]);assert.equal(h.files['history-cleanup.json'],undefined);h.click('clear-history');h.click('confirm-clear-history');await h.wait();assert.deepEqual(h.records().map(item=>item.id),[B]);assert.equal(h.requests.length,requests);
+ }finally{await h.close();}
+});
+
+for(const [action,page] of [['load-history','results'],['repeat-history','create']])test(`history clear confirmation expires on programmatic ${action} navigation`,async()=>{
+ const params={workspace:'t2i',mode:'generate',outputKind:'t2i',steps:25,resolution:32,seed:7,destination:'document',margin:.15},h=await panelHarness({history:[record(A,'ready',{params,outputFile:A+'-output.png',userPrompt:'literal source prompt'}),record(B,'unknown')],files:{[A+'-output.png']:png}});try{
+  await h.wait();h.selectHistory(A);check(h,B);h.click('clear-history');assert.notEqual(h.el('history-clear-confirmation').style.display,'none');const requests=h.requests.length;h.click(action);await h.wait();assert.equal(h.el('view-'+page).style.display,'block');h.click('nav-history');
+  assert.equal(h.el('history-id').value,A);assert.equal(h.el('history-selected-count').textContent,'已勾选 1 条');assert.equal(h.el('history-clear-confirmation').style.display,'none');h.click('confirm-clear-history');await h.wait();assert.deepEqual(h.records().map(item=>item.id),[A,B]);assert.equal(h.files['history-cleanup.json'],undefined);h.click('clear-history');h.click('confirm-clear-history');await h.wait();assert.deepEqual(h.records().map(item=>item.id),[A]);assert.equal(h.requests.length,requests);
+ }finally{await h.close();}
+});
+
+test('page navigation during delayed clear revalidation expires the frozen confirmation while navigation stays available',async()=>{
+ const h=await panelHarness({history:[record(A,'unknown')]});try{
+  await h.wait();arm(h);const requests=h.requests.length;h.holdHistory();h.click('confirm-clear-history');await pause();assert.equal(h.el('confirm-clear-history').disabled,true);
+  for(const page of ['create','history']){assert.equal(!!h.el('nav-'+page).disabled,false);h.click('nav-'+page);assert.equal(h.el('view-'+page).style.display,'block');}h.releaseHistory();await h.wait();
+  assert.deepEqual(h.records().map(item=>item.id),[A]);assert.equal(h.files['history-cleanup.json'],undefined);assert.equal(h.el('history-id').value,A);assert.equal(h.el('history-selected-count').textContent,'已勾选 1 条');assert.equal(h.el('history-clear-confirmation').style.display,'none');h.click('confirm-clear-history');await h.wait();assert.equal(h.records().length,1);h.click('clear-history');h.click('confirm-clear-history');await h.wait();assert.deepEqual(h.records(),[]);assert.equal(h.requests.length,requests);
+ }finally{h.releaseHistory();await h.close();}
+});

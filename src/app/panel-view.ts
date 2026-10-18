@@ -62,15 +62,17 @@ export function setCandidateCardState(card:HTMLElement,selected:boolean,busy:boo
   status.textContent=selected?t(' · 已选中'):'';
 }
 
-/** All business controls remain mounted. Navigation only changes visibility. */
+/** All controls remain mounted; actual view changes also expire page-bound actions. */
 export class PanelViews {
-  constructor(private root:Document){
+  private page:PanelPage='create';
+  constructor(private root:Document,private changed:(page:PanelPage)=>void=()=>{}){
     for(const node of Array.from(root.querySelectorAll<HTMLElement>('[data-panel-nav]'))){
       node.addEventListener('click',()=>this.show(node.getAttribute('data-panel-nav') as PanelPage));
     }
     this.show('create');
   }
   show(page:PanelPage):void {
+    const previous=this.page;this.page=page;
     for(const node of Array.from(this.root.querySelectorAll<HTMLElement>('[data-panel-page]'))){
       const active=node.getAttribute('data-panel-page')===page;
       node.style.display=active?'block':'none';node.setAttribute('aria-hidden',String(!active));
@@ -82,6 +84,7 @@ export class PanelViews {
     for(const node of Array.from(this.root.querySelectorAll<HTMLElement>('[data-panel-action]'))){
       node.style.display=node.getAttribute('data-panel-action')===page?'flex':'none';
     }
+    if(page!==previous)this.changed(page);
   }
 }
 
