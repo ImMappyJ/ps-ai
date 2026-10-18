@@ -329,12 +329,82 @@
       "control": "semantic lighting instructions; no per-light provider API or physical renderer",
       "lightTypes": ["point", "spot", "directional"],
       "maxLights": 8,
-      "source": "Frozen visible composite and effective grayscale mask; native-depth source retained separately from sRGB8 model input",
+      "source": "Frozen visible composite and native-bound effective grayscale mask; lighting analysis is bounded separately from native 8/16-bit source strips and sRGB8 model input",
       "outputs": {
-        "default": "NORMAL complete-result layer with editable mask through the existing safe apply path",
+        "default": "New sessions: lighting-layers, experimental editable influence-field group over a frozen native source base",
+        "legacyHistory": "Records without outputKind retain full-result NORMAL image-layer behavior; never relabel old candidates as lighting layers",
+        "fullResult": "Explicit full-result choice retains the existing safe color/alpha application path; changing output kind requires reread; failed field extraction never falls back automatically",
+        "lightingLayers": "NORMAL isolated group: native source base, then available Shadow/Multiply, Cast Shadow/Multiply, Color Atmosphere/Color, Light/Screen, Rim Light/Screen; editable channel masks plus exact effective group mask applied once; opacity/fill 100%; neutral Multiply white, Screen black, Color alpha 0; absent channels omitted, no empty groups",
+        "export": "Successful lighting composite PNG/new document use saved analysis dimensions; rejected extraction retains actual model-reference dimensions. Full-resolution delivery requires native apply and PSD or Photoshop export",
         "compensation": "Mathematical opaque encoded-sRGB Multiply then Screen diagnostics only; apply disabled pending both native composition and real-image visual acceptance"
       },
+      "lightingFieldSupport": {
+        "status": "experimental; conservative single-target estimates, not physically isolated channels or a detail-fidelity guarantee",
+        "source": "Tagged sRGB RGB8/16 with opaque pixels throughout the effective edit mask; native strips recheck opacity and roll back unsupported writes",
+        "unsupported": "Other ICC profiles, grayscale and editable transparency reject explicitly; Full redraw must be chosen explicitly",
+        "analysis": "One ordinary model request; source/reference structural confidence, log luminance, source-guided filtering, coarse chroma and bounded gains; local face/text/material contamination remains a visual acceptance concern",
+        "geometry": "Cast Shadow needs an observed dark receiver downstream of a stable source edge; Rim Light needs an enabled rim-role light plus observed edge response; no recovered 3D occlusion"
+      },
+      "processingLimits": {
+        "documentPixels": 45000000,
+        "documentSide": 30000,
+        "analysisPixels": 1048576,
+        "analysisSide": 1536,
+        "stripPixels": 262144,
+        "estimatedWorkingSetBytes": 512000000,
+        "estimateScope": "Image buffers, old/new capture overlap, analysis/filter arrays, strips and retained panel buffers; not measured total Photoshop RAM or a guarantee every document within 45MP fits",
+        "example45MP": {
+          "source": "9000x5000; no additional retained panel buffers",
+          "analysis": "1373x763",
+          "rgb8EstimatedPeakBytes": 382765492,
+          "rgb16EstimatedPeakBytes": 399530984,
+          "measuredMemoryPeak": false
+        },
+        "ordinaryRoi": "Existing 16M full-resolution ROI cap plus separate byte gate; may reject before the pixel cap",
+        "validation": "PNG CRC/inflation/color and model output budgets remain enforced; source/session/history/profile/mask identity revalidated independently at apply"
+      },
+      "sourceLifecycle": {
+        "observation": "Only while workbench visible; coalesced documented Photoshop events trigger lightweight metadata checks, no pixel capture per event or closed-workbench background reads",
+        "automaticRefresh": "Visible/reopen changed source may refresh once only when document geometry/profile/scope/output capture policy match and there are no results, active/pending tasks or other interactions; failed refresh remains stale without retry loop",
+        "explicitActions": "Reread always targets the bound source and retains lights; other documents require Bind current document; geometry/profile/scope/output changes require explicit reread/rebind",
+        "safety": "Visible owned output must be hidden or undone before reread; prior candidates stay bound to exact submitted snapshot IDs and gain no new apply permission",
+        "closing": "Dispose source listeners, timers, preview/cache/image references and obsolete renders; keep submitted-job recovery/cancellation semantics"
+      },
+      "previewScheduling": {
+        "dragEdge": 240,
+        "finalEdge": 480,
+        "queue": "One active render plus at most one latest pending render; stale checks before PNG encode; reusable per-light geometry maps; time-budget yielding",
+        "interaction": "Stable marker nodes, pointer-cancel/blur/released-button fallbacks, one undo per gesture; no source reads, draft writes or inference during dragging",
+        "dragPng": "Bounded UI-only uncompressed tagged sRGB PNG; larger local data URL trades compression work for lower encoding time"
+      },
+      "nodePreviewBenchmark": {
+        "scope": "Offline core only, not native event-to-paint, installed-panel latency or FPS",
+        "machine": "Windows x64, AMD Ryzen 7 9850X3D 8C16T, Node 24.21.0",
+        "fixture": "4000x3000 RGB8 plus mask, eight mixed lights, moving one light; source/mask arrays 60000000 bytes",
+        "coldRuns": 1,
+        "warmRuns": 12,
+        "percentileMethod": "Arithmetic median; nearest-rank p95 equals max for 12 warm samples",
+        "prior480x360": {
+          "medianMs": { "calculation": 90.8431, "pngEncode": 33.8982, "total": 124.89845 },
+          "p95Ms": { "calculation": 91.8889, "pngEncode": 37.7436, "total": 129.4074 },
+          "totalIncludesBase64": false
+        },
+        "current480x360": {
+          "medianMs": { "calculation": 27.43475, "pngEncode": 35.6971, "base64": 0.48805, "total": 64.28305 },
+          "p95Ms": { "calculation": 40.1556, "pngEncode": 38.1714, "base64": 1.1309, "total": 77.1552 },
+          "pngBytes": 76835
+        },
+        "current240x180Drag": {
+          "medianMs": { "calculation": 3.80105, "pngEncode": 0.5957, "base64": 1.6345, "total": 6.0636 },
+          "p95Ms": { "calculation": 7.3398, "pngEncode": 1.2222, "base64": 2.295, "total": 10.414 },
+          "pngBytes": 173081
+        },
+        "weightMapCapacityBytes": 6912000,
+        "memoryScope": "Array capacity for both eight-light caches, not measured process peak",
+        "excludes": "Native capture, image load/painting, network and inference"
+      },
       "nativeProbe": {
+        "scope": "Historical container/API and exact compensation probes, predating the current lighting-field pipeline",
         "host": "Windows Photoshop 27.0.0",
         "container": "1040x740 resizable UXP dialog, PNG data URL and DOM pointer capture verified on a disposable synthetic document",
         "writes": "Close dialog before native capture/write and reopen; apply inside open dialog failed",
@@ -344,12 +414,12 @@
       "liveModelProbe": {
         "backend": "Local ComfyUI 0.37.4 / existing Qwen-Image 2.1 GGUF",
         "settings": "512x512, 25 steps, seed 23491, source plus grayscale guide",
-        "scope": "Final compiler: three synthetic sphere/cube cases and three public NASA/scikit-image astronaut photo cases; left/right warm key and cool key with stronger fill",
+        "scope": "Historical compiler before the current lighting-field pipeline: three synthetic sphere/cube cases and three public NASA/scikit-image astronaut photo cases; left/right warm key and cool key with stronger fill",
         "observed": "Distinguishable lighting direction on synthetic objects and warm/cool photo results; broad pose and environment retained",
         "limits": "Semantic control only. Small text, fine texture, exact multi-light intensity and physical shadows not accepted as faithful. Raw outputs are not strictly opaque. Not Photoshop UI or platform API acceptance."
       },
       "nativePreviewBaseline": {
-        "scope": "Real core functions in PS27 PSJS, not final workbench dragging or installed-panel FPS",
+        "scope": "Historical prior preview core in PS27 PSJS, not the current scheduler, dragging or installed-panel FPS",
         "fixture": "4096x3072 sRGB8 capture, eight mixed point/spot/directional lights, 480x360 cached illustration",
         "captureMs": 6606,
         "prepareCacheMs": 11,
@@ -361,7 +431,7 @@
         "preexistingDocumentsUnchanged": true
       },
       "nativeWorkbench": {
-        "scope": "Final source modules in a PS27 native script; not installed-panel acceptance",
+        "scope": "Historical source modules before the current preview/source-sync/lighting-field paths; PS27 native script, not installed-panel acceptance",
         "interaction": "Actual point, spot-target and directional dragging, consecutive gestures, internal undo/redo, resize and off-image find verified",
         "resize": "1040x740 to1160x820; fit recalculated without changing the scene fingerprint",
         "preview": { "source": "4096x3072", "cache": "480x360", "lights": 8, "samples": 10, "minMs": 111, "medianMs": 116.5, "p50NearestRankMs": 115, "p95NearestRankMs": 124, "maxMs": 124 },
@@ -378,7 +448,7 @@
         "reference": "https://developer.adobe.com/photoshop/uxp/2022/scripting/how-it-works/"
       },
       "nativeSavedResultApply": {
-        "scope": "Final workbench and Photoshop adapter with controlled host callbacks and an already saved real Qwen result; not panel storage/network end-to-end",
+        "scope": "Historical full-result workbench and Photoshop adapter with controlled host callbacks and an already saved real Qwen result; not current lighting fields or panel storage/network end-to-end",
         "fixture": "512x512 sRGB16 source with retained non-257 channel values, previously generated sRGB8 public astronaut result",
         "priorInferenceId": "aaa8ae77-97ec-4da0-9145-6124d9e6f5fc",
         "newInferencePosts": 0,
@@ -391,7 +461,26 @@
         "inputValidation": "Native keyboard invalid value retains scene; valid correction clears parameter error; unrelated export error remains",
         "preexistingDocumentsUnchanged": true
       },
-      "status": "development; core tests, native source workbench/API/composition/performance and limited real ComfyUI output recorded separately; installed panel, broader visual fidelity and platform acceptance pending"
+      "nativeLightingWriter": {
+        "localDate": "2026-10-19",
+        "utcStartedAt": "2026-10-18T16:44:24.855Z",
+        "host": "Windows Photoshop 27.0.0",
+        "scope": "Synthetic API only on disposable sRGB documents with local targets; writer behavior, no inference or installed-panel interaction",
+        "rgb8_1024x300": { "captureMs": 139, "writeMs": 182, "channels": ["shadow", "color-atmosphere", "light"], "originalLayerMaxDifference": 0, "hiddenGroupMaxDifference": 0, "singleUndoMaxDifference": 0, "restoredLayerCount": true },
+        "rgb16_1024x300": { "captureMs": 158, "writeMs": 157, "channels": ["shadow", "light"], "originalLayerMaxDifference": 0, "hiddenGroupMaxDifference": 0, "singleUndoMaxDifference": 0, "restoredLayerCount": true },
+        "rgb8_9000x5000": { "captureMs": 479, "analysis": "1373x763", "analysisBytes": 4190396, "nativeMaskBytes": 45000000, "writeMs": 11106, "channels": ["color-atmosphere", "light"], "progressCallbacks": 692, "groupCreated": true, "singleUndoRestoredLayerCountAndHistory": true },
+        "maskedPreviewFollowup": {
+          "utcStartedAt": "2026-10-18T16:48:12.869Z",
+          "scope": "After localized-structure guard update; synthetic 0/128/255 group mask plus coarse color target, not real-photo quality acceptance",
+          "rgb8_1024x300": { "captureMs": 138, "writeMs": 172, "channels": ["shadow", "color-atmosphere", "light"], "nativeVsLocalPreviewMaxDifference": "2/255", "protectedMaxDifference": 0, "originalLayerMaxDifference": 0, "hiddenGroupMaxDifference": 0, "singleUndoMaxDifference": 0, "restoredLayerCount": true },
+          "rgb16_1024x300": { "captureMs": 146, "writeMs": 170, "channels": ["shadow", "color-atmosphere", "light"], "nativeVsLocalPreviewMaxDifference": "3/65535", "protectedMaxDifference": 0, "originalLayerMaxDifference": 0, "hiddenGroupMaxDifference": 0, "singleUndoMaxDifference": 0, "restoredLayerCount": true },
+          "rgb8_9000x5000": { "captureMs": 475, "writeMs": 11044, "analysis": "1373x763", "channels": ["color-atmosphere", "light"], "progressCallbacks": 692, "singleUndoRestoredLayerCountAndHistory": true }
+        },
+        "preexistingDocumentsPreserved": "IDs, geometry, ICC, history and saved state unchanged",
+        "limits": "Single timings and stated synthetic masked-preview comparison, not memory peaks or real-photo acceptance; no 45MP RGB16, installed panel, source-sync UI, network inference or full 45MP workflow"
+      },
+      "currentAcceptancePending": ["Real-photo field quality and localized face/text/material protection", "New inference through lighting-field pipeline", "Installed-panel controls, source-sync and native drag latency", "Complete 45MP read/edit/generate/apply/export workflow", "45MP RGB16 native processing", "Platform lighting output"],
+      "status": "development; new sessions default experimental lighting fields; bounded core/mock and dated synthetic native writer evidence recorded separately from historical preview/full-result/model probes; installed panel, current real inference and visual quality pending"
     },
     "imageBlending": {
       "mode": "blend",

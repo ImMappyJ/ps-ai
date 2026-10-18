@@ -7,5 +7,6 @@
     "vae": "qwen_image_2.1_vae_bf16.safetensors"
   },
   "language": "zh-CN",
-  "outputDepth": 8
+  "outputDepth": 8,
+  "autoViewResults": true
 }
