@@ -2,6 +2,15 @@ import test from 'node:test';import assert from 'node:assert/strict';
 import {ComfyClient,uuid} from '../src/infrastructure/backends/client';
 import {diagnostic,DiagnosticError} from '../src/diagnostics/diagnostics';import {setLanguage} from '../src/localization/i18n';
 
+test('only exact local selection errors at capture are normalized after an ordinary Error boundary',()=>{
+  for(const message of ['请先建立编辑选区','选区为空','Make an edit selection first','The selection is empty']){
+    const d=diagnostic(new Error(message),'capture');assert.equal(d.code,'selection-required');assert.equal(d.stage,'capture');assert.match(d.action,/恢复上次选区|重新圈选/);
+    assert.equal(diagnostic(new Error(message),'inference').code,'unknown');
+  }
+  for(const error of [new Error('请先建立编辑选区: remote failure'),new Error('selection unavailable'),{code:'selection-required',stage:'capture',message:'请先建立编辑选区'},'请先建立编辑选区'])assert.equal(diagnostic(error,'capture').code,'unknown');
+  assert.equal(diagnostic(new DiagnosticError('timeout','connection','请先建立编辑选区'),'capture').code,'timeout');
+});
+
 test('selection-required diagnostics point to explicit relight scope in both languages',()=>{
   for(const language of ['zh-CN','en-US'] as const){
     setLanguage(language);

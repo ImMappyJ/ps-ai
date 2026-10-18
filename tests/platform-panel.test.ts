@@ -34,7 +34,7 @@ test('a completed managed output remains recoverable after its provider key is c
     assert.equal(h.records()[0].state,'ready');
     // Represent a previously interrupted output download; the mock server keeps its completed result.
     const record=h.records()[0];record.state='output-error';delete record.outputFile;
-    h.files['history.json']=JSON.stringify([record]);h.el('history').value=record.id;
+    h.files['history.json']=JSON.stringify([record]);h.selectHistory(record.id);
     h.click('clear-key');await h.wait();assert.equal(h.secrets.size,0);
     h.click('recover');await h.wait();
     assert.equal(h.records()[0].state,'ready','Recovering an already completed output must not require an upstream API key');

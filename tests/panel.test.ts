@@ -31,7 +31,7 @@ test('background and scene disable context color matching for new jobs and resto
       await h.wait();h.el('match-color').checked=true;h.click(tab);h.el('mode').value=mode;h.change('mode');
       assert.equal(h.el('match-color').checked,false);assert.equal(h.el('match-color').disabled,true);
       h.el('resolution').value='32';h.click('generate');await h.wait();assert.equal((h.records()[0].params as any).matchColor,false);
-      h.el('history').value=h.records()[0].id;h.click('repeat-history');await h.wait();assert.equal(h.el('match-color').checked,false);
+      h.selectHistory(h.records()[0].id);h.click('repeat-history');await h.wait();assert.equal(h.el('match-color').checked,false);
       h.el('mode').value=tab==='tab-local'?'edit':'costume';h.change('mode');assert.equal(h.el('match-color').checked,true);assert.equal(h.el('match-color').disabled,false);
     }finally{await h.close();}
   }
@@ -43,7 +43,7 @@ test('legacy background history still applies its saved color correction after t
     await h.wait();h.el('mode').value='background';h.change('mode');h.el('resolution').value='32';h.click('generate');await h.wait();
     const records=h.records(),record=records[0],name='ps-ai-'+record.id.slice(0,8)+'.png';h.click('export');await h.wait();
     assert.deepEqual([...decodePng(h.files[name] as Uint8Array).rgba.slice(0,4)],[120,120,120,255]);
-    delete (record.snapshot as any).backgroundComposite;(record.params as any).matchColor=true;h.files['history.json']=JSON.stringify(records);h.el('history').value=record.id;
+    delete (record.snapshot as any).backgroundComposite;(record.params as any).matchColor=true;h.files['history.json']=JSON.stringify(records);h.selectHistory(record.id);
     h.click('load-history');await h.wait();h.click('export');await h.wait();const legacy=decodePng(h.files[name] as Uint8Array);
     assert.equal(legacy.width,32);assert.deepEqual([...legacy.rgba.slice(0,4)],[100,100,100,255]);assert.equal((h.records()[0].params as any).matchColor,true);assert.equal(h.posts.length,1);
   }finally{await h.close();}
@@ -53,7 +53,7 @@ test('reusing corrected background history retains the ordinary edit checkbox pr
   const h=await panelHarness({selection:subjectSelection});try{
     await h.wait();for(const id of ['guide','preserve-alpha','align-subject'])h.el(id).checked=true;
     h.el('mode').value='background';h.change('mode');h.el('resolution').value='32';h.click('generate');await h.wait();
-    h.el('history').value=h.records()[0].id;h.click('repeat-history');await h.wait();
+    h.selectHistory(h.records()[0].id);h.click('repeat-history');await h.wait();
     h.el('mode').value='edit';h.change('mode');
     for(const id of ['guide','preserve-alpha','align-subject'])assert.equal(h.el(id).checked,true,id+' keeps the choice from ordinary editing');
   }finally{await h.close();}
@@ -69,7 +69,7 @@ test('old background history cannot restore conflicting settings or hide a trans
   const h=await panelHarness({selection:subjectSelection,output:{width:32,height:32,rgba:new Uint8Array(32*32*4)}});try{
     await h.wait();h.el('mode').value='background';h.change('mode');h.el('resolution').value='32';h.click('generate');await h.wait();
     const records=h.records(),id=records[0].id;Object.assign(records[0].params as Record<string,unknown>,{guide:true,preserveAlpha:true,alignSubject:true});delete (records[0].snapshot as any).backgroundComposite;delete h.files[id+'-subject-mask.bin'];delete h.files[id+'-protection-mask.bin'];h.files['history.json']=JSON.stringify(records);
-    h.el('history').value=id;h.click('repeat-history');await h.wait();
+    h.selectHistory(id);h.click('repeat-history');await h.wait();
     for(const key of ['guide','preserve-alpha','align-subject']){assert.equal(h.el(key).checked,false);assert.equal(h.el(key).disabled,true);}
     h.click('load-history');await h.wait();assert.equal(h.posts.length,1);assert.equal(h.el('apply').disabled,true);assert.equal(h.el('export').disabled,false);
     h.el('language').value='en-US';h.change('language');await h.wait();assert.match(h.el('candidate-warning').textContent,/transparent/);assert.match(h.el('mode-help').textContent,/selection controls/);
@@ -240,8 +240,8 @@ test('紧凑面板折叠配置和进阶参数，展开收起保留输入与模�
 test('生图新文档隐藏选区辅助，切回局部编辑恢复；无候选时禁用应用',async()=>{
   const h=await panelHarness({uxpSelect:true});try{assert.equal(h.el('apply').disabled,true);h.click('tab-t2i');assert.equal(h.el('selection-tools').style.display,'none');assert.equal(h.el('prompt').getAttribute('placeholder'),'描述要生成的画面、主体与风格');h.click('generate');await new Promise(r=>setTimeout(r,80));await h.wait();assert.equal(h.el('apply').disabled,true);assert.equal(h.el('new-document').disabled,false);h.click('tab-local');assert.equal(h.el('selection-tools').style.display,'block');}finally{await h.close();}
 });
-test('UXP 动态下拉框显式选择默认模式和首次历史记录',async()=>{
-  const h=await panelHarness({uxpSelect:true});try{assert.equal(h.el('mode').value,'edit');h.click('tab-t2i');assert.equal(h.el('mode').value,'generate');h.click('generate');await new Promise(r=>setTimeout(r,80));await h.wait();assert.equal(h.records().length,1);assert.equal(h.el('history').value,h.records()[0].id);}finally{await h.close();}
+test('UXP 动态模式下拉框显式选择默认项，生成后选中新历史行',async()=>{
+  const h=await panelHarness({uxpSelect:true});try{assert.equal(h.el('mode').value,'edit');h.click('tab-t2i');assert.equal(h.el('mode').value,'generate');h.click('generate');await new Promise(r=>setTimeout(r,80));await h.wait();assert.equal(h.records().length,1);assert.equal(h.historySelectedId(),h.records()[0].id);}finally{await h.close();}
 });
 test('UXP 未交互的参考用途有有效默认项并保存到任务参数',async()=>{
   const h=await panelHarness({uxpSelect:true});try{assert.equal(h.el('usage').value,'服装');h.click('tab-t2i');h.click('generate');await new Promise(r=>setTimeout(r,80));await h.wait();assert.equal((h.records()[0].params as Record<string,unknown>).usage,'服装');}finally{await h.close();}

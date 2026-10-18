@@ -60,7 +60,7 @@ The default directory is the current account's `~/.ps-ai/bailian`. Override it t
 | 429 | Check platform quota/rate limits; query existing task IDs first |
 | Untagged sRGB output | Establish the PNG's real color encoding first. Only then opt into `PSAI_BAILIAN_ASSUME_SRGB=1` and restart; it does not convert unknown ICC profiles |
 | Wrong canvas or missing transparency | Inspect raw output, mode and model. Do not force a stretched image or fabricate alpha |
-| `unknown` without a platform ID | Reconcile manually with platform records. Automatic reconciliation and abandonment UI are not implemented; do not delete metadata and recreate the task |
+| `unknown` without a platform ID | Reconcile manually with platform records; automatic reconciliation and platform-ID attachment remain unimplemented. Development History offers explicit two-step local stop tracking, retaining the original ID and unknown state; it does not cancel work or stop billing, and a new task may duplicate work. See the [user guide](../usage/USER_GUIDE.en.md). Do not delete metadata |
 | Locked data directory | Stop the old instance. After abnormal termination, confirm the PID in `gateway.lock` has exited before removing a stale lock |
 
 The server listens locally and is not an authenticated public service. For migration, stop it normally and back up the whole directory. It contains private images/prompts and must not be uploaded to Git or Issues. Server rewriting, persistence ordering and fields are documented in `BACKEND.en.md` and `AGENTS.md` in a source clone.

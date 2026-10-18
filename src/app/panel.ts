@@ -1,8 +1,8 @@
 import {RelayController} from '../infrastructure/backends/relay-controller';import {isPlatform,PLATFORMS} from '../infrastructure/backends/platforms';import type {PlatformId} from '../infrastructure/backends/platforms';import {connectionId,rememberConnection,switchConnection} from '../infrastructure/config/profile';import type {ConnectionId} from '../infrastructure/config/profile';
-import {ComfyClient,uuid,OutputFile} from '../infrastructure/backends/client';import {JobCoordinator,JobRecord,PENDING_STATES} from '../generation/jobs';
+import {ComfyClient,uuid,OutputFile} from '../infrastructure/backends/client';import {JobCoordinator,JobRecord,blocksGeneration} from '../generation/jobs';
 import {buildGraph,TEMPLATE_VERSION,templateForDepth} from '../generation/workflow';import {intent,Workspace,isBackgroundMode} from '../generation/intent';import {BackendSettings,defaultSettings,validateSettings} from '../infrastructure/config/profile';
 import {Raster,encodePng,decodePng,decodeModelPng,resize,maskRaster,makeMapping,rasterDepth} from '../imaging/image';
-import {PhotoshopAdapter,Capture,Protection,Snapshot} from '../infrastructure/photoshop/photoshop';import {Storage} from '../infrastructure/storage/storage';import {runHostProbe} from '../diagnostics/p0-host';
+import {PhotoshopAdapter,Capture,Protection,Snapshot,SelectionRange} from '../infrastructure/photoshop/photoshop';import {Storage} from '../infrastructure/storage/storage';import {runHostProbe} from '../diagnostics/p0-host';
 import {prepareEditCandidate,prepareBackgroundCandidate,backgroundEditMask} from '../imaging/composite';
 import {createSourceColorReader} from '../infrastructure/photoshop/source-color';
 import {editBehavior,editModelInput,backgroundCoverage} from '../features/editing/edit-behavior';
@@ -10,6 +10,7 @@ import {t,setLanguage,errorText,english} from '../localization/i18n';
 import {normalizeBaseUrl,DEFAULT_MODELS} from '../infrastructure/config/profile';
 import {rangePreview} from '../features/editing/range-preview';
 import {diagnostic,DiagnosticError} from '../diagnostics/diagnostics';import type {Stage} from '../diagnostics/diagnostics';import {checkEnvironment} from '../diagnostics/environment';
+import {BUILD_ID} from '../diagnostics/build';
 import {GatewayClient} from '../infrastructure/backends/gateway-client';
 import {DEFAULT_GATEWAY_MODEL,GATEWAY_TEMPLATE,validateGeneration} from '../infrastructure/backends/gateway-protocol';
 import type {GatewayCapabilities,GenerationRequest} from '../infrastructure/backends/gateway-protocol';
@@ -18,6 +19,7 @@ import {RelightWorkbench,type RelightResult} from '../features/relight/relight-w
 import {compileRelightScene,validateRelightScene,type RelightScene,type RelightCapabilities} from '../features/relight/relight-scene';
 import {decomposeRelightCompensation} from '../features/relight/relight-compensation';
 import {PanelViews,CandidatePreview,SourceCaption,localValidationMessage,createCandidateCard,setCandidateCardState,displayPreview as preview} from './panel-view';
+import {HistoryTable} from './history-table';
 declare const require:(name:string)=>any;
 const ps=require('photoshop'),uxp=require('uxp'),store=new Storage(uxp),sourceColorReader=createSourceColorReader(uxp,{storage:store,onPicker:()=>status(t('请选择当前文档的原文件，以读取保存的色彩信息')),onStatus:sourceAccessStatus}),adapter=new PhotoshopAdapter(ps,uuid(),stage=>store.trace(stage),sourceColorReader);
 let settings:BackendSettings=defaultSettings(),settingsReady=false,client:ComfyClient|GatewayClient=new ComfyClient(),coordinator=new JobCoordinator(client,store);
@@ -42,9 +44,12 @@ async function checkBackend(backend:ComfyClient|GatewayClient,value:BackendSetti
 }
 const el=(id:string):any=>document.getElementById(id);
 const views=new PanelViews(document),candidatePreview=new CandidatePreview(),sourceCaption=new SourceCaption(el('source-info'));
+el('build-id').textContent=BUILD_ID;
 const modes={local:[['edit','局部物体 / 材质修改'],['remove','移除杂物'],['background','换背景（选择主体）']],cosplay:[['effect','特效素材'],['costume','服装 / 道具修复'],['reference','角色参考辅助'],['scene','场景替换'],['atmosphere','氛围素材'],['relight','光影重塑'],['blend','溶图']],t2i:[['generate','文字生图']]};
 let workspace:Workspace='local',capture:Capture|undefined,protection:Protection|undefined,reference:Raster|undefined;
+let lastSelection:{range:SelectionRange;workspace:Workspace;mode:string}|undefined;
 let current:JobRecord|undefined,busy=false,stopBatch=false,zoomed=false;
+let historyRecords:JobRecord[]=[],detachAcknowledgedId:string|undefined;
 let applied:{documentId:number;layerId:number}|undefined;
 interface Candidate {job:JobRecord;image:Raster;bytes:Uint8Array;preview:string;snapshot?:Snapshot;warning?:string}
 let candidates:Candidate[]=[];
@@ -57,6 +62,7 @@ let promptKind:'ordinary'|'blend'='ordinary';
 const promptDrafts={ordinary:'',blend:''};
 const relightDrafts=new RelightDraftStore(store);
 let relightWorkbench:RelightWorkbench|undefined,relightSession:RelightSession|undefined,relightMargin=.15,relightReuse:RelightScene|undefined,relightReuseDescription:string|undefined;
+const historyTable=new HistoryTable(el('history-browser'),{busy:()=>busy,changed:()=>{detachAcknowledgedId=undefined;historyUi();},refresh:()=>void guarded(()=>configure(()=>refreshHistory()))});
 function outputDepth():8|16{return el('output-depth').value==='16'?16:8;}
 function draftSettings(id:ConnectionId=el('backend-kind').value):BackendSettings{return validateSettings({schemaVersion:1,baseUrl:el('backend-url').value,language:el('language').value,outputDepth:outputDepth(),connections:draftConnections,...(id!=='comfyui'?{backend:'gateway',gatewayModel:el('gateway-model').value}:{}),...(isPlatform(id)?{platform:id}:{}),models:{unet:el('model-unet').value,clip:el('model-clip').value,vae:el('model-vae').value}});}
 async function keyStatus(){const id=el('backend-kind').value,request=++keyRequest;if(!isPlatform(id))return;const saved=await relay.hasKey(id);if(request===keyRequest&&el('backend-kind').value===id)el('key-status').textContent=t(saved?'Key 已保存（加密）':'尚未保存 Key');}
@@ -87,6 +93,7 @@ function inputUi(){
   el('prompt-group').style.display=mode==='remove'||structuredRelight?'none':'block';el('prompt-label').textContent=t(blend?'补充要求（可选）':'描述修改或生成内容');
   el('relight-entry').style.display=structuredRelight?'block':'none';el('generate').textContent=t(structuredRelight?'打开布光工作台':'生成候选');
   const standalone=el('destination').value==='document'&&(workspace==='t2i'||['effect','atmosphere'].includes(mode));el('selection-tools').style.display=standalone?'none':'block';el('prompt').setAttribute('placeholder',blend?t('可选：补充光影、色彩或融合要求'):workspace==='t2i'?t("描述要生成的画面、主体与风格"):workspace==='cosplay'?t("描述服装道具、光影方向、角色参考或氛围效果"):t("描述选区中要修改的内容，及需要保留的细节"));
+  const restorable=workspace!=='t2i'&&mode!=='relight'&&el('destination').value==='selection';el('restore-selection').style.display=restorable?'block':'none';el('restore-selection').disabled=busy||!restorable||lastSelection?.workspace!==workspace||lastSelection?.mode!==mode;
   const platform=isPlatform(el('backend-kind').value),cloud=el('backend-kind').value!=='comfyui',model=gatewayCatalogBase===el('backend-url').value?gatewayCatalog?.models.find(m=>m.id===el('gateway-model').value):undefined;
   const background=isBackgroundMode(mode);
   for(const [id,forced] of [['preserve-alpha',background],['align-subject',background||blend||structuredRelight],['match-color',background||blend||structuredRelight],['guide',background&&!cloud]] as const){
@@ -102,9 +109,9 @@ function inputUi(){
   el('steps').disabled=busy||cloud;el('output-depth').disabled=busy||cloud;
   el('seed').disabled=busy||!!(cloud&&model?.seedMax===0);el('lock-seed').disabled=el('seed').disabled;
   el('generate').disabled=busy||!!(cloud&&model&&!model.operations.includes(kind));
-  el('cancel').textContent=t(cloud?'停止后续候选':'取消本任务');
   el('gateway-info').textContent=t('图像和提示词将上传 {0}。输出仅 8 位，步数由平台控制。',platformName())+(model&&!model.operations.includes('asset')?t(' 此模型不支持透明素材。'):'')+(model?.seedMax===0?t(' 此模型不支持设置随机种子。'):'')+(gatewayCatalog?.provider==='gemini'?t(' 使用方形上下文生成，再裁回原比例。'):'')+(gatewayCatalog?.provider==='openai'?t(' 开启范围辅助时使用平台蒙版；结果按请求比例还原。'):'');
   el('submission-info').textContent=cloud?el('gateway-info').textContent:t('图像和提示词将发送至 {0}；模型输入为 sRGB 8-bit。',el('backend-url').value);
+  historyUi();
 }
 function candidateUi(){
   const c=candidates[Number(el('candidate-select').value)],mode=c?.snapshot?adapter.applicationMode(c.snapshot):'unavailable';
@@ -121,12 +128,12 @@ function candidateUi(){
 }
 function invalidateCapture(){capture=undefined;const visible=el('selection-previews').style.display!=='none';el('selection-previews').style.display='none';if(visible)sourceCaption.show('范围参数已改变，请重新预览选区');}
 function setWorkspace(value:Workspace,mode=modes[value][0][0]){if(workspace!==value||el('mode').value!==mode)invalidateCapture();workspace=value;const select=el('mode');select.innerHTML='';for(const [id,label] of modes[value])option(select,id,label);select.value=mode;for(const w of ['local','cosplay','t2i'])el(`tab-${w}`).className=w===value?'active':'';if(value==='t2i')el('destination').value='document';else el('destination').value='selection';inputUi();}
-function lock(value:boolean){busy=value;for(const id of ['generate','capture','protect','clear-protection','reference','clear-reference','tab-local','tab-cosplay','tab-t2i','mode','prompt','output-depth','usage','guide','preserve-alpha','align-subject','match-color','destination','count','steps','resolution','seed','lock-seed','margin','p0','recover','load-history','repeat-history','apply','new-document','connect','scan-models','save-settings','import-settings','export-settings','model-unet','model-clip','model-vae','backend-url','backend-kind','gateway-model','api-key','save-key','clear-key','stop-relay','language','open-setup','close-setup','setup-connect','setup-check','setup-example','relight-scope','remember-source-access','forget-source-access'])el(id).disabled=value;el('cancel').disabled=!value&&!(current&&PENDING_STATES.includes(current.state));candidateUi();renderSetup();inputUi();relightWorkbench?.refreshAvailability();}
+function lock(value:boolean){busy=value;for(const id of ['generate','capture','restore-selection','protect','clear-protection','reference','clear-reference','tab-local','tab-cosplay','tab-t2i','mode','prompt','output-depth','usage','guide','preserve-alpha','align-subject','match-color','destination','count','steps','resolution','seed','lock-seed','margin','p0','recover','load-history','repeat-history','apply','new-document','connect','scan-models','save-settings','import-settings','export-settings','model-unet','model-clip','model-vae','backend-url','backend-kind','gateway-model','api-key','save-key','clear-key','stop-relay','language','open-setup','close-setup','setup-connect','setup-check','setup-example','relight-scope','remember-source-access','forget-source-access'])el(id).disabled=value;candidateUi();renderSetup();inputUi();relightWorkbench?.refreshAvailability();}
 function showGatewayModels(selected=settings.gatewayModel??DEFAULT_GATEWAY_MODEL){const select=el('gateway-model');select.innerHTML='';for(const id of new Set([selected,...(gatewayCatalogBase===el('backend-url').value?gatewayCatalog?.models.map(m=>m.id)??[]:[])]))option(select,id,id);select.value=selected;}
 function showSettings(available?:Record<'unet'|'clip'|'vae',string[]>,value=settings) {for(const key of ['unet','clip','vae'] as const){const select=el(`model-${key}`);select.innerHTML='';for(const name of new Set([value.models[key],...(available?.[key]??[])]))option(select,name,name);select.value=value.models[key];}displayedConnection=connectionId(value);draftConnections=value.connections;el('backend-kind').value=displayedConnection;el('backend-url').value=value.baseUrl;el('output-depth').value=String(value.outputDepth??8);showGatewayModels(value.gatewayModel??(isPlatform(displayedConnection)?PLATFORMS[displayedConnection].model:DEFAULT_GATEWAY_MODEL));el('api-key').value='';void keyStatus();inputUi();}
-async function saveSettings(value:unknown){const next=rememberConnection(validateSettings(value));await store.json('settings.json',next);settings=next;client=backendClient(settings);coordinator=new JobCoordinator(client,store);settingsReady=true;restoreSettingsLanguage();showSettings();connection('待检查');status(t(settings.backend==='gateway'?'平台配置已保存；请连接检查模型与 Key。':"模型配置已保存，请连接检查；文件名可迁移，模型权重需在后端准备"));}
+async function saveSettings(value:unknown){const next=rememberConnection(validateSettings(value));await store.json('settings.json',next);settings=next;client=backendClient(settings);coordinator=new JobCoordinator(client,store);settingsReady=true;restoreSettingsLanguage();showSettings();await refreshHistory();connection('待检查');status(t(settings.backend==='gateway'?'平台配置已保存；请连接检查模型与 Key。':"模型配置已保存，请连接检查；文件名可迁移，模型权重需在后端准备"));}
 async function configure(action:()=>Promise<void>){if(busy)return;lock(true);try{await action();}finally{lock(false);}}
-function assertBackend(record:JobRecord){const origin=normalizeBaseUrl(record.baseUrl??'http://localhost:8188',!!settings.platform);if(origin!==settings.baseUrl)throw new Error(t('任务属于后端 {0}；请切回该地址后恢复或取消',origin));if((record.backend??'comfyui')!==(settings.backend??'comfyui'))throw new Error(t('任务使用的后端类型不同，请切回原后端类型后恢复或取消'));}
+function assertBackend(record:JobRecord){const origin=normalizeBaseUrl(record.baseUrl??'http://localhost:8188',!!settings.platform);if(origin!==settings.baseUrl||(record.backend??'comfyui')!==(settings.backend??'comfyui'))throw new DiagnosticError('pending-backend','inference',t('任务 {0} 属于 {1} · {2}；请在设置中切回该类型和地址后恢复或取消',record.id,record.backend==='gateway'?t('平台适配服务'):'ComfyUI',origin));}
 function restoreSettingsLanguage(){el('output-depth').value=String(settings.outputDepth??8);renderLanguage();}
 function renderLanguage(){
   setLanguage(settings.language??'zh-CN');el('language').value=settings.language??'zh-CN';
@@ -154,14 +161,35 @@ function renderLanguage(){
   el('zoom').textContent=zoomed?t('适应预览'):t('100% 查看');inputUi();renderSetup();candidateUi();
 }
 function selected():Candidate {const c=candidates[Number(el('candidate-select').value)];if(!c)throw new Error(t("请先生成或读取一个候选"));return c;}
-async function guarded(action:()=>Promise<void>){try{await action();}catch(error){status(error instanceof Error?error.message:String(error));const d=diagnostic(error,operationStage,!!current&&PENDING_STATES.includes(current.state));el('diagnostic-box').style.display='block';const reason=localValidationMessage(error instanceof Error?error.message:String(error));el('diagnostic-summary').textContent=(reason?[reason,d.effect,d.retry,t('失败阶段：{0}',d.stageLabel)]:[d.title,d.effect,d.action,d.retry,t('失败阶段：{0}',d.stageLabel)]).join('\n');el('status').style.display='none';if(!taskActive)el('task-progress').style.display='none';el('diagnostic-details').value=JSON.stringify(d,null,2);el('diagnostic-details').style.display='none';console.error(error);await store.trace('operation.error');}}
+async function guarded(action:()=>Promise<void>){try{await action();}catch(error){status(error instanceof Error?error.message:String(error));const d=diagnostic(error,operationStage,historyRecords.some(blocksGeneration));el('diagnostic-box').style.display='block';const reason=localValidationMessage(error instanceof Error?error.message:String(error))??(error instanceof DiagnosticError&&['pending-task','pending-backend'].includes(error.code)?error.message:undefined);el('diagnostic-summary').textContent=(reason?[reason,d.action,d.effect,d.retry,t('失败阶段：{0}',d.stageLabel)]:[d.title,d.effect,d.action,d.retry,t('失败阶段：{0}',d.stageLabel)]).join('\n');el('status').style.display='none';if(!taskActive)el('task-progress').style.display='none';el('diagnostic-details').value=JSON.stringify(d,null,2);el('diagnostic-details').style.display='none';console.error(error);await store.trace('operation.error');}}
 function activeDocumentId():number|undefined{return ps.app.documents.length?ps.app.activeDocument?.id:undefined;}
+function clearCapturePreview(){capture=undefined;el('selection-previews').style.display='none';for(const id of ['source-preview','mask-preview'])el(id).removeAttribute('src');}
 async function captureArea(expectedDocumentId=activeDocumentId(),showPreview=true){
-  const mode=el('mode').value;
-  capture=await adapter.capture(Number(el('margin').value)/100,protection,expectedDocumentId,outputDepth(),isBackgroundMode(mode)?{context:'document',selection:'subject-background'}:mode==='blend'?{context:'document',selection:'edit'}:undefined);
-  const {snapshot:s,image}=capture;
-  if(protection&&capture.workingCopyOf===protection.documentId)protection={...protection,documentId:s.documentId};
-  sourceCaption.show({documentId:s.documentId,width:image.width,height:image.height,protectedArea:!!protection,profile:s.profile,colorReason:s.colorReason});el('source-preview').src=await preview(image);el('mask-preview').src=await preview(rangePreview(image,s.mask,capture.protectionMask));if(showPreview)el('selection-previews').style.display='flex';
+  const mode=el('mode').value,capturedWorkspace=workspace;
+  clearCapturePreview();
+  const captured=await adapter.capture(Number(el('margin').value)/100,protection,expectedDocumentId,outputDepth(),isBackgroundMode(mode)?{context:'document',selection:'subject-background'}:mode==='blend'?{context:'document',selection:'edit'}:undefined);
+  const {snapshot:s,image}=captured;
+  if(capturedWorkspace!=='t2i'&&mode!=='relight')lastSelection={workspace:capturedWorkspace,mode,range:{documentId:s.documentId,sessionId:s.sessionId,width:s.width,height:s.height,mode:s.mode,depth:s.depth,bounds:{...s.bounds},mask:(captured.subjectMask??captured.selectionMask).slice()}};
+  if(protection&&captured.workingCopyOf===protection.documentId)protection={...protection,documentId:s.documentId};
+  if(workspace!==capturedWorkspace||el('mode').value!==mode){inputUi();return;}
+  capture=captured;
+  sourceCaption.show({documentId:s.documentId,width:image.width,height:image.height,protectedArea:!!protection,profile:s.profile,colorReason:s.colorReason});el('source-preview').src=await preview(image);el('mask-preview').src=await preview(rangePreview(image,s.mask,captured.protectionMask));if(showPreview&&workspace===capturedWorkspace&&el('mode').value===mode)el('selection-previews').style.display='flex';
+  inputUi();
+}
+async function restoreSelectionArea(){
+  if(busy)return;
+  const saved=lastSelection;
+  if(!saved||saved.workspace!==workspace||saved.mode!==el('mode').value||workspace==='t2i'||saved.mode==='relight'||el('destination').value!=='selection')throw new Error(t('没有可用于当前模式的本次会话选区，请重新圈选后预览'));
+  lock(true);clearCapturePreview();let restored=false;
+  try{
+    await adapter.restoreSelection(saved.range);restored=true;
+    await captureArea(saved.range.documentId);
+    el('diagnostic-box').style.display='none';status(t('已恢复上次选区并读取当前像素；请检查范围预览，再明确生成'));
+  }catch(error){
+    clearCapturePreview();
+    if(restored){sourceCaption.show('选区已恢复，但原图读取未完成，请检查来源后重新预览');throw new DiagnosticError(diagnostic(error,'capture').code,'capture',t('选区已恢复，但原图读取失败：{0}',errorText(error instanceof Error?error.message:String(error))));}
+    throw error;
+  }finally{lock(false);}
 }
 async function captureRelight(expectedDocumentId=activeDocumentId(),scope:RelightScope=relightScope()):Promise<Capture>{
   const previous=activeDocumentId();
@@ -195,7 +223,7 @@ export async function openRelightWorkbench(reuse?:RelightScene,description?:stri
     relightWorkbench=new RelightWorkbench(el('relight-dialog'),session,{
       uuid,save:scene=>relightDrafts.save(scene),loadDraft:()=>relightDrafts.load(),busy:()=>busy,reportError:error=>void guarded(async()=>{throw error;}),
       prepare:async(frozen)=>{if(relightScope()!==frozen.scope)throw new Error(t('布光范围已改变，请重新读取原图；原有布光配置已保留'));if(Number(el('margin').value)/100!==relightMargin)throw new Error(t('范围参数已改变，请重新读取原图'));adapter.assertSourceCurrent(frozen.capture.snapshot);const fresh=await captureRelight(frozen.capture.snapshot.documentId,frozen.scope);session.assertCaptureMatches(fresh);},
-      generate:(frozen,onJob)=>generate(frozen,onJob),cancel:async()=>{stopBatch=true;},
+      generate:(frozen,onJob)=>generate(frozen,onJob),cancel:async()=>{stopBatch=true;},pendingTasks:()=>historyRecords.filter(blocksGeneration).length,openPendingTasks:()=>showPending(),
       reread:async()=>{const scope=relightScope(),fresh=await captureRelight(undefined,scope);session.rebind(fresh,uuid(),scope);capture=session.sourceCapture;relightMargin=Number(el('margin').value)/100;},
       apply:id=>apply(id),export:exportCandidate,results:relightResults,
       diagnostics:async(id)=>{const c=candidateById(id);try{const source=decodePng(await store.readBinary(`${id}-source.png`)),target=resize(c.image,source.width,source.height),result=decomposeRelightCompensation(source,target,{colorSpace:'encoded-srgb',documentProfile:c.snapshot?.profile??'',blend:{order:'multiply-screen',opacity:1,fillOpacity:1,group:'isolated-with-base',gamma:'encoded-srgb',mask:'none'}});return t('补偿诊断：encoded sRGB，{0} 位，先 Multiply 后 Screen，量化后 RGB 绝对误差（不含 Alpha）：max={1}，mean={2}，RMSE={3}；归一化 max={4}。这不代表仅改变光照，应用仍不可用。',rasterDepth(source),result.error.code.maxAbs,result.error.code.meanAbs,result.error.code.rmse,result.error.normalized.maxAbs);}catch(error){return t('无法可靠计算补偿，请使用完整结果：{0}',error instanceof Error?error.message:String(error));}}
@@ -203,7 +231,45 @@ export async function openRelightWorkbench(reuse?:RelightScene,description?:stri
     relightWorkbench.show();
   }finally{lock(false);}
 }
-async function refreshHistory(){const records=await store.history();const list=el('history'),old=list.value;list.innerHTML='';for(const r of records)option(list,r.id,`${r.createdAt.slice(0,16)} · ${r.state} · ${String(r.userPrompt??'').slice(0,22)}`);if(records.length)list.value=records.some(r=>r.id===old)?old:records[0].id;}
+function historyUi(){
+  historyTable.refresh();
+  const pending=historyRecords.filter(blocksGeneration),record=historyRecords.find(r=>r.id===historyTable.selectedId);
+  el('pending-notice').style.display=pending.length?'block':'none';el('pending-summary').textContent=t('{0} 个未确认任务；请按原 ID 处理后再生成',pending.length);el('open-pending').disabled=busy;
+  el('history-id').value=record?.id??'';
+  const source=record?.snapshot as {documentId?:number}|undefined;
+  el('history-details').textContent=record?[t('状态：{0}',record.state),t('后端：{0} · {1}',record.backend==='gateway'?t('平台适配服务'):'ComfyUI',String(record.baseUrl??'http://localhost:8188')),t('时间：{0}',record.createdAt),t('来源文档：{0}{1}',source?.documentId??t('未保存'),record.sourceName?` · ${record.sourceName}`:''),...(record.tracking==='detached'?[t('本地已停止跟踪；远端状态仍未知，可按原 ID 恢复')]:[])].join('\n'):t('请选择历史记录');
+  el('next-pending').style.display=pending.length>1?'block':'none';el('next-pending').disabled=busy;
+  el('recover').disabled=busy||!record;el('load-history').disabled=busy||!record?.outputFile;el('repeat-history').disabled=busy||!record?.params;
+  el('cancel').disabled=busy?!taskActive:!record||!blocksGeneration(record);
+  el('cancel').textContent=t((busy||!record?client instanceof GatewayClient:record.backend==='gateway')?'停止后续候选':'取消本任务');
+  const detachable=!!record&&record.state==='unknown'&&record.tracking!=='detached';
+  el('stop-tracking').style.display=detachable?'block':'none';el('stop-tracking').disabled=busy||!detachable;
+  const confirming=detachable&&detachAcknowledgedId===record.id;
+  el('detach-confirmation').style.display=confirming?'block':'none';el('confirm-stop-tracking').disabled=busy||!confirming;el('keep-tracking').disabled=busy;
+  el('detach-warning').textContent=confirming?t('仅停止本地跟踪任务 {0}。这不会取消远端任务、停止计费或证明失败。新生成可能重复执行并计费；原 ID、来源和结果全部保留，仍可恢复。',record.id):'';
+}
+async function refreshHistory(preferredId?:string,preferPending=false){
+  historyRecords=await store.history();detachAcknowledgedId=undefined;historyTable.setRecords(historyRecords,{selectId:preferredId,preferPending});
+  historyUi();relightWorkbench?.refreshAvailability();
+}
+function updateHistoryRecord(record:JobRecord){const index=historyRecords.findIndex(r=>r.id===record.id);if(index<0)historyRecords.unshift(record);else historyRecords[index]=record;historyTable.setRecords(historyRecords,{selectId:record.id});historyUi();relightWorkbench?.refreshAvailability();}
+async function showPending(next=false){
+  if(busy)return;const old=historyTable.selectedId;lock(true);
+  try{await refreshHistory();const pending=historyRecords.filter(blocksGeneration);
+    if(pending.length){const index=pending.findIndex(r=>r.id===old);historyTable.reveal(pending[next?(index+1)%pending.length:Math.max(0,index)].id);}
+    historyUi();views.show('history');
+  }finally{lock(false);}
+}
+async function stopTracking(confirm=false){
+  if(busy)return;const id=historyTable.selectedId;
+  if(confirm&&detachAcknowledgedId!==id)return;
+  lock(true);
+  try{const record=(await store.history()).find(r=>r.id===id);
+    if(historyTable.selectedId!==id||confirm&&detachAcknowledgedId!==id||!record||record.state!=='unknown'||record.tracking==='detached'){await refreshHistory(id);return;}
+    if(!confirm){detachAcknowledgedId=id;historyUi();return;}
+    detachAcknowledgedId=undefined;record.tracking='detached';await store.save(record);await store.trace('task.detach',id);await refreshHistory(id);status(t('已停止此任务的本地跟踪；远端状态仍未知，原 ID 保留'));
+  }finally{lock(false);}
+}
 function backgroundHistoryError(){return new DiagnosticError('invalid-output','output',t('背景历史的蒙版数据缺失或损坏，无法安全重建候选；原始输出已保留'));}
 async function restoreSnapshot(record:JobRecord):Promise<Snapshot|undefined> {
   if(!record.snapshot)return undefined;const saved=record.snapshot as Omit<Snapshot,'mask'>;
@@ -275,7 +341,7 @@ async function waitRecord(record:JobRecord):Promise<boolean> {
         const result=await coordinator.cancel(record);
         if(result.state==='ready'){await saveReady(record,result.images!);status(t("任务已完成，候选已保留；后续候选停止"));return false;}
         if(result.state==='cancelled'){status(t("本任务取消已确认；已有候选保留"));return false;}
-        if(result.state==='unknown')throw new Error(t("取消未确认，原任务 ID 已保留；请继续恢复或取消，不要重复生成"));
+        if(result.state==='unknown')throw new DiagnosticError('pending-task','inference',t("取消未确认，原任务 ID 已保留；请继续恢复或取消，不要重复生成"));
         if(result.state==='failed')throw new Error(result.detail||t("任务失败"));
         status(t(client instanceof GatewayClient?'后续候选已停止；当前平台任务继续，完成后保留结果':"已发送指定任务取消，等待后端终态…"));await new Promise(r=>setTimeout(r,2000));continue;
       }
@@ -286,18 +352,20 @@ async function waitRecord(record:JobRecord):Promise<boolean> {
         }
         if(result.state==='failed'||result.state==='cancelled'){record.state=result.state;record.detail=result.detail;await store.save(record);throw new DiagnosticError(result.code??'unknown','inference',result.detail||t("任务已取消"));}
         record.state=result.state;
-        if(result.state==='unknown') {if(++unknownReads>=15)throw new Error(t("未确认任务状态，已保留 ID；请使用“恢复任务”，不要重复提交"));}
+        updateHistoryRecord(record);
+        if(result.state==='unknown') {if(++unknownReads>=15)throw new DiagnosticError('pending-task','inference',t("未确认任务状态，已保留 ID；请使用“恢复任务”，不要重复提交"));}
         else unknownReads=0;
         if(result.state==='running'&&steps)showSteps();else{const phase=result.state==='running'?t(client instanceof GatewayClient?'平台生成中（无步数进度）':"模型加载／推理中，等待步数"):result.state==='queued'?t("已排队，等待执行"):t("按原 ID 查询任务");taskPhase(phase);status(`${phase} · ${record.id.slice(0,8)}`);}
       }catch(error){
         if(record.state==='output-error')throw error;
         if(record.state==='failed'||record.state==='cancelled'||unknownReads>=15)throw error;
+        if(++unknownReads>=15){record.state='unknown';throw new DiagnosticError('pending-task','inference',t('连续无法确认任务状态，已保留 ID；请按原 ID 重试恢复，或明确停止本地跟踪'));}
         taskPhase(t("连接中断，按原 ID 恢复…"));status(t("连接中断，正在按原 ID 恢复：{0}",record.id.slice(0,8)));
       }
       await new Promise(r=>setTimeout(r,2000));
     }
-    throw new Error(t("等待已超时；任务保留，请按 ID 恢复"));
-  } finally {closeSocket();await store.save(record);await refreshHistory();}
+    record.state='unknown';throw new DiagnosticError('pending-task','inference',t("等待已超时；任务保留，请按 ID 恢复"));
+  } finally {closeSocket();await store.save(record);await refreshHistory(record.id);}
 }
 async function generate(frozenRelight?:FrozenRelightSubmission,onRelightJob?:(id:string)=>void) {
   if(!frozenRelight&&el('mode').value==='relight'){await openRelightWorkbench();return;}
@@ -311,8 +379,8 @@ async function generate(frozenRelight?:FrozenRelightSubmission,onRelightJob?:(id
   lock(true);
   try {
   await store.trace('generate.start');
-  const pending=(await store.history()).find(r=>PENDING_STATES.includes(r.state));
-  if(pending){current=pending;assertBackend(pending);throw new Error(t("存在尚未确认的任务，请先恢复或取消本任务"));}
+  const pending=(await store.history()).find(blocksGeneration);
+  if(pending){await refreshHistory(pending.id);views.show('history');throw new DiagnosticError('pending-task','inference',t('任务 {0} 尚未确认，请在历史中按原 ID 恢复或取消',pending.id));}
   const mode=frozenRelight?'relight':el('mode').value,userPrompt=frozenRelight?frozenRelight.scene.supplement:mode==='remove'?'':el('prompt').value,destination=frozenRelight?'selection':el('destination').value,usage=el('usage').value;
   const behavior=editBehavior(mode,{guide:!!el('guide').checked,preserveAlpha:!!el('preserve-alpha').checked,alignSubject:frozenRelight?false:!!el('align-subject').checked,matchColor:frozenRelight?false:!!el('match-color').checked},settings.backend??'comfyui'),guide=behavior.guide;
   let request=intent(frozenRelight?'cosplay':workspace,mode,frozenRelight?'Structured relighting':userPrompt,!!reference,guide,usage,client instanceof GatewayClient?'semantic':'images');
@@ -367,22 +435,33 @@ async function generate(frozenRelight?:FrozenRelightSubmission,onRelightJob?:(id
       const graph=client instanceof GatewayClient?{}:buildGraph({requestId:id,prompt:request.prompt,seed,steps,resolution,source,guide:guideName,reference:referenceName,models:settings.models,outputDepth:outputDepth()});
       const {mask:ignored,...metadata}=snapshot??{mask:undefined};
       current={id,clientId,baseUrl:settings.baseUrl,state:'created',createdAt:new Date().toISOString(),graph,...(generationRequest?{backend:'gateway' as const,request:generationRequest}:{}),userPrompt,params:{workspace,mode,steps,resolution,seed,outputDepth:depth,guide,margin,usage,destination,outputKind:request.kind,modelSize,preserveAlpha:behavior.preserveAlpha,alignSubject:behavior.alignSubject,matchColor:behavior.matchColor},snapshot:snapshot?metadata:undefined,template:generationRequest?GATEWAY_TEMPLATE:templateForDepth(depth),...(generationRequest?{providerModel:generationRequest.model}:{models:{...settings.models}})};
+      if(captured?.documentName)current.sourceName=captured.documentName;
       if(frozenRelight&&relightCaps){current.relight={...relightTaskMetadata(frozenRelight,id,relightCaps,modelSize!,depth,seed),...(relightConflictResolution?{conflictResolution:relightConflictResolution}:{})};onRelightJob?.(id);}
-      operationStage='inference';await store.trace('task.submit',id);await coordinator.submit(current);await store.trace('task.wait',id);
+      operationStage='inference';await store.trace('task.submit',id);await coordinator.submit(current);await refreshHistory(id);await store.trace('task.wait',id);
       if(current.state==='failed')throw new Error(current.detail);
       if(!await waitRecord(current))break;
       if(index===count-1)taskSucceeded=true;
     }
-  }catch(error){status(error instanceof Error?error.message:String(error));throw error;}finally{endTask();lock(false);await refreshHistory();}
+  }catch(error){status(error instanceof Error?error.message:String(error));throw error;}finally{endTask();try{await refreshHistory();}finally{lock(false);}}
 }
 async function recover(){
-  if(busy)return;startTask();lock(true);
-  try {const records=await store.history();current=records.find(r=>r.id===el('history').value)||records.find(r=>PENDING_STATES.includes(r.state));
+  if(busy)return;const id=historyTable.selectedId;detachAcknowledgedId=undefined;stopBatch=false;startTask();lock(true);
+  try {const records=await store.history();current=records.find(r=>r.id===id);
   if(!current)throw new Error(t("没有可恢复的任务"));
-  assertBackend(current);if(settings.platform&&client instanceof GatewayClient){const ready=await connectDraft(settings) as GatewayClient;client.token=ready.token;}stopBatch=false;taskSucceeded=await waitRecord(current);}catch(error){status(error instanceof Error?error.message:String(error));throw error;}finally{endTask();lock(false);}
+  assertBackend(current);if(current.tracking==='detached'){delete current.tracking;await store.save(current);await refreshHistory(id);}if(settings.platform&&client instanceof GatewayClient){const ready=await connectDraft(settings) as GatewayClient;client.token=ready.token;}taskSucceeded=await waitRecord(current);}catch(error){status(error instanceof Error?error.message:String(error));throw error;}finally{endTask();try{await refreshHistory(id);}finally{lock(false);}}
+}
+async function cancelSelected(){
+  // Busy cancellation belongs to the active batch, regardless of visible history.
+  if(busy){if(taskActive)stopBatch=true;return;}
+  const id=historyTable.selectedId;detachAcknowledgedId=undefined;lock(true);
+  try{const record=(await store.history()).find(r=>r.id===id);if(!record||!blocksGeneration(record))return;
+    assertBackend(record);current=record;stopBatch=true;
+    if(settings.platform&&client instanceof GatewayClient){const ready=await connectDraft(settings) as GatewayClient;client.token=ready.token;}
+    const result=await coordinator.cancel(record);if(result.state==='ready'){await saveReady(record,result.images!);status(t("任务已完成，候选已保留"));}else status(result.state==='cancelled'?t("取消已确认；生成文件保留"):t(client instanceof GatewayClient?'后续候选已停止；当前平台任务继续，完成后保留结果':"取消尚未确认，请继续恢复或取消原任务"));
+  }finally{try{await refreshHistory(id);}finally{lock(false);}}
 }
 async function apply(jobId?:string){if(busy){if(jobId)throw new Error(t('已有任务正在进行，请等待完成后再生成或应用；可以继续编辑布光'));return;}lock(true);try{const c=jobId?candidateById(jobId):selected();if(c.warning)throw new DiagnosticError('invalid-output','output',c.warning);if(!c.snapshot)throw new Error(t("此候选没有来源选区，请使用新文档查看"));const params=c.job.params as any,behavior=editBehavior(params.mode,params,c.job.backend??'comfyui');const source=params.outputKind==='edit'&&behavior.preserveAlpha?decodePng(await store.readBinary(`${c.job.id}-source.png`)):undefined;const name=c.job.relight?t('PS-AI 光影重塑 · 完整结果 {0}',c.job.id.slice(0,8)):`PS-AI ${c.job.id.slice(0,8)}`;const layerId=await adapter.apply(c.snapshot,c.image,name,source);applied={documentId:c.snapshot.documentId,layerId};el('opacity').value=100;status(t("已应用为独立图层，蒙版可编辑；同次捕获切换候选替换此图层，Ctrl+Z 一次撤销"));}finally{lock(false);}}
-function on(id:string,action:()=>Promise<void>){el(id).addEventListener('click',()=>void guarded(async()=>{operationStage=['apply','new-document','opacity'].includes(id)?'apply':['capture','protect','reference'].includes(id)?'capture':['scan-models','setup-check'].includes(id)?'environment':['recover','generate','setup-example','cancel'].includes(id)?'inference':'connection';await action();}));}
+function on(id:string,action:()=>Promise<void>){el(id).addEventListener('click',()=>void guarded(async()=>{operationStage=['apply','new-document','opacity'].includes(id)?'apply':['capture','restore-selection','protect','reference'].includes(id)?'capture':['scan-models','setup-check'].includes(id)?'environment':['recover','generate','setup-example','cancel'].includes(id)?'inference':'connection';await action();}));}
 const foldLabels:Record<string,string>={settings:'模型与连接',reference:'参考图（可选）',advanced:'进阶参数',diagnostics:'宿主诊断'};
 function fold(name:string,open:boolean){el(`${name}-body`).style.display=open?'block':'none';el(`toggle-${name}`).textContent=t(foldLabels[name])+(open?' ▾':' ▸');el(`toggle-${name}`).setAttribute('aria-expanded',String(open));}
 for(const name of Object.keys(foldLabels)){fold(name,false);on(`toggle-${name}`,async()=>fold(name,el(`${name}-body`).style.display==='none'));}
@@ -431,7 +510,7 @@ on('setup-example',async()=>{
   const oldValues=fields.map(id=>el(id).value),oldChecks=checks.map(id=>el(id).checked);
   let completed=false;
   try{
-    if((await store.history()).some(r=>PENDING_STATES.includes(r.state)))throw new Error(t('存在尚未确认的任务，请先恢复或取消本任务'));
+    const pending=(await store.history()).find(blocksGeneration);if(pending){await refreshHistory(pending.id);views.show('history');throw new DiagnosticError('pending-task','inference',t('任务 {0} 尚未确认，请在历史中按原 ID 恢复或取消',pending.id));}
     const width=128,height=128,rgba=new Uint8Array(width*height*4);
     for(let y=0;y<height;y++)for(let x=0;x<width;x++)rgba.set(x>=32&&x<96&&y>=32&&y<96?[170,85,65,255]:[110,110,110,255],(y*width+x)*4);
     const id=await adapter.newDocument({width,height,rgba},'PS-AI setup example');
@@ -449,6 +528,7 @@ on('setup-example',async()=>{
 });
 on('toggle-error-details',async()=>{el('diagnostic-details').style.display=el('diagnostic-details').style.display==='none'?'block':'none';});
 on('capture',captureArea);
+on('restore-selection',restoreSelectionArea);
 on('protect',async()=>{protection=await adapter.protection();capture=undefined;el('selection-previews').style.display='none';sourceCaption.show('保护区已保存；请重新圈选编辑区，再捕获或生成');status(t("保护区保留原始像素，不依赖自动人脸识别"));});
 on('clear-protection',async()=>{protection=undefined;capture=undefined;el('selection-previews').style.display='none';sourceCaption.show('保护区已清除，请重新捕获');});
 on('reference',async()=>{const file=await uxp.storage.localFileSystem.getFileForOpening({types:['png','jpg','jpeg','webp']});if(!file)return;reference=await adapter.importReference(file);el('reference-info').textContent=`${file.name} · ${reference.width}×${reference.height} · sRGB 8-bit`;});
@@ -459,7 +539,8 @@ el('relight-scope').addEventListener('change',()=>{if(relightSession)relightWork
 el('remember-source-access').addEventListener('change',()=>void guarded(async()=>{const operation=++sourceAccessOperation,notice=sourceAccessNotice;await sourceColorReader.setRemember(!!el('remember-source-access').checked);if(operation!==sourceAccessOperation)return;el('remember-source-access').checked=sourceColorReader.remember;if(notice===sourceAccessNotice)sourceAccessStatus(sourceColorReader.remember?'已开启记住原图文件授权；仍会重新检查文件内容和颜色声明':'已关闭记住原图文件授权；已移除保存的授权，本次会话访问仍可使用');}));
 on('forget-source-access',async()=>{const operation=++sourceAccessOperation;await sourceColorReader.forget();if(operation===sourceAccessOperation)sourceAccessStatus('已清除保存和本次会话的原图文件授权；需要时请重新选择原图');});
 on('generate',generate);on('apply',apply);on('recover',recover);
-on('cancel',async()=>{stopBatch=true;if(!busy&&current){lock(true);try{assertBackend(current);const result=await coordinator.cancel(current);if(result.state==='ready'){await saveReady(current,result.images!);status(t("任务已完成，候选已保留"));}else status(result.state==='cancelled'?t("取消已确认；生成文件保留"):t(client instanceof GatewayClient?'后续候选已停止；当前平台任务继续，完成后保留结果':"取消尚未确认，请继续恢复或取消原任务"));await refreshHistory();}finally{lock(false);}}});
+on('cancel',cancelSelected);on('open-pending',()=>showPending());on('next-pending',()=>showPending(true));
+on('stop-tracking',()=>stopTracking());on('confirm-stop-tracking',()=>stopTracking(true));on('keep-tracking',async()=>{detachAcknowledgedId=undefined;historyUi();});
 el('mode').addEventListener('change',()=>{invalidateCapture();inputUi();if(workspace==='cosplay'&&el('mode').value==='reference'){fold('reference',true);el('guide').checked=false;status(t("角色参考默认使用原图 + 参考图；范围辅助可能影响颜色，请按需试验"));}});
 el('destination').addEventListener('change',inputUi);
 el('margin').addEventListener('change',()=>{capture=undefined;el('selection-previews').style.display='none';sourceCaption.show('范围参数已改变，请重新预览选区');});
@@ -468,10 +549,17 @@ on('zoom',async()=>{zoomed=!zoomed;el('zoom').textContent=zoomed?t("适应预览
 on('export',async()=>{const c=selected(),file=await uxp.storage.localFileSystem.getFileForSaving(`ps-ai-${c.job.id.slice(0,8)}.png`,{types:['png']});if(file)await file.write(new Uint8Array(c.bytes).buffer,{format:uxp.storage.formats.binary});});
 on('new-document',async()=>{const c=selected();await adapter.newDocument(c.image,`ps-ai ${c.job.id.slice(0,8)}`);});
 el('opacity').addEventListener('change',()=>void guarded(async()=>{if(!applied)throw new Error(t("请先应用一个候选"));await adapter.opacity(applied.documentId,applied.layerId,Number(el('opacity').value));}));
-on('load-history',async()=>{const record=(await store.history()).find(r=>r.id===el('history').value);if(!record?.outputFile)throw new Error(t("此记录尚未保存候选，请恢复任务"));await addCandidate(record,await store.readBinary(String(record.outputFile)));views.show('results');});
-on('repeat-history',async()=>{const r=(await store.history()).find(r=>r.id===el('history').value);if(!r)throw new Error(t("请选择历史记录"));const p=r.params as any;if(settings.backend==='gateway'&&p.outputDepth===16)throw new Error(t('此历史为 16 位输出，请切回 ComfyUI 后恢复参数；当前平台配置保留 8 位'));views.show('create');if(p.mode==='relight'){const metadata=r.relight as RelightTaskMetadata|undefined;relightReuse=metadata?validateRelightScene(metadata.scene):undefined;relightReuseDescription=metadata?undefined:String(r.userPrompt??'');setWorkspace('cosplay','relight');el('relight-reuse-history').style.display='block';status(t('历史光影参数已准备，请明确点击复用到当前原图；旧候选仍可读取、应用或导出'));return;}setWorkspace(p.workspace,p.mode);if(p.mode!=='remove')el('prompt').value=r.userPrompt;for(const name of ['steps','resolution','seed','destination'])el(name).value=p[name];el('output-depth').value=String(p.outputDepth??8);el('usage').value=['服装','道具','材质','场景'].includes(p.usage)?p.usage:'服装';el('guide').checked=p.guide;el('preserve-alpha').checked=p.preserveAlpha!==false;el('align-subject').checked=p.alignSubject!==false;el('match-color').checked=p.matchColor===true;el('margin').value=p.margin*100;el('lock-seed').checked=true;inputUi();status(t("参数已恢复；参考图和保护区请重新指定，提交时重新捕获"));});
+on('load-history',async()=>{if(busy)return;const id=historyTable.selectedId;lock(true);try{const record=(await store.history()).find(r=>r.id===id);if(!record?.outputFile)throw new Error(t("此记录尚未保存候选，请恢复任务"));await addCandidate(record,await store.readBinary(String(record.outputFile)));views.show('results');}finally{lock(false);}});
+on('repeat-history',async()=>{
+  if(busy)return;const id=historyTable.selectedId;lock(true);
+  try{const r=(await store.history()).find(r=>r.id===id);if(!r)throw new Error(t("请选择历史记录"));const p=r.params as any;
+    if(settings.backend==='gateway'&&p.outputDepth===16)throw new Error(t('此历史为 16 位输出，请切回 ComfyUI 后恢复参数；当前平台配置保留 8 位'));views.show('create');
+    if(p.mode==='relight'){const metadata=r.relight as RelightTaskMetadata|undefined;relightReuse=metadata?validateRelightScene(metadata.scene):undefined;relightReuseDescription=metadata?undefined:String(r.userPrompt??'');setWorkspace('cosplay','relight');el('relight-reuse-history').style.display='block';status(t('历史光影参数已准备，请明确点击复用到当前原图；旧候选仍可读取、应用或导出'));return;}
+    setWorkspace(p.workspace,p.mode);if(p.mode!=='remove')el('prompt').value=r.userPrompt;for(const name of ['steps','resolution','seed','destination'])el(name).value=p[name];el('output-depth').value=String(p.outputDepth??8);el('usage').value=['服装','道具','材质','场景'].includes(p.usage)?p.usage:'服装';el('guide').checked=p.guide;el('preserve-alpha').checked=p.preserveAlpha!==false;el('align-subject').checked=p.alignSubject!==false;el('match-color').checked=p.matchColor===true;el('margin').value=p.margin*100;el('lock-seed').checked=true;inputUi();status(t("参数已恢复；参考图和保护区请重新指定，提交时重新捕获"));
+  }finally{lock(false);}
+});
 on('p0',async()=>{if(busy)return;lock(true);const trace:string[]=[];try{const report=await runHostProbe(ps,adapter,trace);await store.json('p0-host-report.json',report);status(t("P0 宿主往返通过：选区外/保护区像素、原图层、蒙版、异文档与一次撤销"));}catch(error){await store.json('p0-host-report.json',{passed:false,date:new Date().toISOString(),trace,error:error instanceof Error?error.message:String(error),stack:error instanceof Error?error.stack:undefined});throw error;}finally{lock(false);}});
 on('report',async()=>{const r=await store.readJson('p0-host-report.json',null);if(!r)throw new Error(t("请先运行 P0 图像往返验证"));const f=await uxp.storage.localFileSystem.getFileForSaving('ps-ai-p0-host-report.json',{types:['json']});if(f)await f.write(JSON.stringify(r,null,2));});
 on('export-log',async()=>{const r=await store.readJson('runtime-trace.json',null);if(!r)throw new Error(t("尚无操作阶段日志"));const f=await uxp.storage.localFileSystem.getFileForSaving('ps-ai-runtime-trace.json',{types:['json']});if(f)await f.write(JSON.stringify(r,null,2));});
 uxp.entrypoints.setup({panels:{psai:{show(){}}}});
-void guarded(async()=>{lock(true);el('cancel').disabled=true;try{await sourceColorReader.ready();el('remember-source-access').checked=sourceColorReader.remember;const savedSettings=await store.readJson<unknown>('settings.json',null);settings=validateSettings(savedSettings??defaultSettings());client=backendClient(settings);coordinator=new JobCoordinator(client,store);settingsReady=true;el('backend-url').value=settings.baseUrl;restoreSettingsLanguage();showSettings();await refreshHistory();const records=await store.history();const pending=records.find(r=>PENDING_STATES.includes(r.state));if(pending){current=pending;status(t("找到未确认任务 {0}，请选择恢复或取消",pending.id.slice(0,8)));}try{await checkBackend(client,settings);showGatewayModels();connection('已连接');if(!savedSettings)showSetup();}catch(error){connection('未连接');showSetup();throw error;}}catch(error){showSetup();fold('settings',true);throw error;}finally{lock(false);}});
+void guarded(async()=>{lock(true);el('cancel').disabled=true;try{await sourceColorReader.ready();el('remember-source-access').checked=sourceColorReader.remember;const savedSettings=await store.readJson<unknown>('settings.json',null);settings=validateSettings(savedSettings??defaultSettings());client=backendClient(settings);coordinator=new JobCoordinator(client,store);settingsReady=true;el('backend-url').value=settings.baseUrl;restoreSettingsLanguage();showSettings();await refreshHistory(undefined,true);try{await checkBackend(client,settings);showGatewayModels();connection('已连接');if(!savedSettings)showSetup();}catch(error){connection('未连接');showSetup();throw error;}}catch(error){showSetup();fold('settings',true);throw error;}finally{lock(false);}});

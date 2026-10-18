@@ -12,7 +12,7 @@ export interface RelightWorkbenchHost {
   generate(frozen:FrozenRelightSubmission,onJob:(id:string)=>void):Promise<void>;
   cancel():Promise<void>;reread():Promise<void>;apply(jobId:string):Promise<void>;export(jobId:string):Promise<void>;
   results():RelightResult[];diagnostics(jobId:string):Promise<string>;
-  busy?():boolean;reportError?(error:Error):void;
+  busy?():boolean;pendingTasks?():number;openPendingTasks?():Promise<void>;reportError?(error:Error):void;
 }
 type Tab='original'|'illustration'|'result';
 type Drag={kind:'light'|'target'|'pan';id?:string;startX:number;startY:number;panX:number;panY:number;pointerId?:number;node?:any};
@@ -47,7 +47,7 @@ export class RelightWorkbench {
   private viewport:RelightViewport={clientRect:{left:0,top:0,width:1,height:1},fitScale:1,zoom:1,panX:0,panY:0};
   private visible=false;private transitioning=false;private pending=false;private nativeBusy=false;private lifecycle=0;
   private request?:RequestOwner;private selectedResult?:string;private lastStatus='';private parameterStatus=false;private warnings:string[]=[];private acknowledged=false;private sourceInvalid=false;private scopePending=false;
-  private pendingDraft?:RelightScene;private invalid=new Set<string>();private invalidLightId:string|null=null;private afterClose?:()=>Promise<void>;
+  private pendingDraft?:RelightScene;private invalid=new Set<string>();private invalidLightId:string|null=null;private afterClose?:()=>Promise<void>;private reopenAfterClose=true;
   private listeners:Array<()=>void>=[];private drag?:Drag;private preview?:RelightPreparedPreview;
   private originalUrl='';private illustrationUrl='';private resultUrl='';private resultUrlId='';
   private displayedImageUrl='';private displayedImageGeometry='';
@@ -108,8 +108,8 @@ export class RelightWorkbench {
       await closed;
     }catch(error){throw new Error(t('布光工作台打开失败，请关闭后重新加载插件：{0}',error instanceof Error?error.message:String(error)));}
     finally {this.visible=false;this.cleanup();}
-    const action=this.afterClose;this.afterClose=undefined;
-    if(action){this.transitioning=true;try{await action();}catch(error){this.message(error instanceof DiagnosticError&&error.code==='selection-required'?diagnostic(error,'capture').action:error instanceof Error?error.message:String(error));}finally{this.transitioning=false;this.show();}}
+    const action=this.afterClose,reopen=this.reopenAfterClose;this.afterClose=undefined;this.reopenAfterClose=true;
+    if(action){this.transitioning=true;try{await action();}catch(error){this.message(error instanceof DiagnosticError&&error.code==='selection-required'?diagnostic(error,'capture').action:error instanceof Error?error.message:String(error));this.host.reportError?.(error instanceof Error?error:new Error(String(error)));}finally{this.transitioning=false;if(reopen)this.show();}}
     else {this.lifecycle++;if(this.request)this.request.cancelled=true;await this.save().catch(error=>this.message(t('布光草稿保存失败，请重新打开后点击保存：{0}',error instanceof Error?error.message:String(error))));}
   }
   private closeForNative(action:()=>Promise<void>):void {
@@ -160,6 +160,12 @@ export class RelightWorkbench {
     for(const [id,range]of Object.entries(limits)){this.el(id).min=String(range.min);this.el(id).max=String(range.max);}
     this.el('name').maxLength=RELIGHT_LIMITS.maxName;this.el('supplement').setAttribute('maxlength',String(RELIGHT_LIMITS.maxSupplement));
     this.click('close',()=>this.dialog.close('user-close'));
+    this.click('pending-tasks',()=>{
+      if(this.pending||this.nativeBusy||this.host.busy?.())return;
+      this.finishDrag();this.reopenAfterClose=false;
+      this.afterClose=async()=>{this.lifecycle++;if(this.request)this.request.cancelled=true;await this.save();await this.host.openPendingTasks?.();};
+      this.dialog.close('pending-tasks');
+    });
     this.click('add',()=>{this.session.editor.add(this.host.uuid());this.changed();});
     this.click('duplicate',()=>{const id=this.session.editor.selectedId;if(id){this.session.editor.duplicate(id,this.host.uuid());this.changed();}});
     this.click('delete',()=>this.removeSelected());
@@ -248,6 +254,7 @@ export class RelightWorkbench {
     this.el('zoom-label').textContent=`${Math.round(this.viewport.zoom*100)}%`;
     for(const tab of ['original','illustration','result'])this.el(`tab-${tab}`).className=this.tab===tab?'active':'';
     const sharedBusy=!!this.host.busy?.();
+    const pendingTasks=this.host.pendingTasks?.()??0;this.el('pending-tasks').style.display=pendingTasks?'block':'none';this.el('pending-tasks').disabled=this.pending||this.nativeBusy||sharedBusy;this.el('pending-tasks').textContent=t('处理未确认任务（{0}）；保留布光并返回历史',pendingTasks);
     this.el('generate').disabled=this.pending||this.nativeBusy||this.sourceInvalid||this.scopePending||sharedBusy;this.el('cancel').disabled=!this.pending;
     const result=this.result();this.el('apply').disabled=this.pending||this.nativeBusy||this.sourceInvalid||sharedBusy||!result||!!result.warning;this.el('export').disabled=!result;this.el('compensation').disabled=!result;this.el('reread').disabled=this.pending||this.nativeBusy||sharedBusy;
     this.el('stale').textContent=result&&result.fingerprint!==this.session.fingerprint?t('布光已修改，当前结果尚未更新；应用仍使用该结果提交时的配置'):'';

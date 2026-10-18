@@ -326,7 +326,7 @@ test('language changes preserve scene and compiler text, including the ordinary 
 test('legacy relight history stays exportable and reusable only by an explicit fresh-scene action',async()=>{
   const h=await panelHarness();try{
     await h.wait();h.el('resolution').value='32';h.el('prompt').value='old lighting description';h.click('generate');await h.wait();const records=h.records(),job=records[0];(job.params as any).workspace='cosplay';(job.params as any).mode='relight';h.files['history.json']=JSON.stringify(records);
-    h.el('prompt').value='ordinary draft to retain';h.el('history').value=job.id;h.click('repeat-history');await h.wait();assert.equal(h.el('relight-dialog').hasAttribute('open'),false);assert.notEqual(h.el('relight-reuse-history').style.display,'none');assert.equal(h.posts.length,1);
+    h.el('prompt').value='ordinary draft to retain';h.selectHistory(job.id);h.click('repeat-history');await h.wait();assert.equal(h.el('relight-dialog').hasAttribute('open'),false);assert.notEqual(h.el('relight-reuse-history').style.display,'none');assert.equal(h.posts.length,1);
     h.click('load-history');await h.wait();h.click('export');await h.wait();assert.ok(h.files['ps-ai-'+job.id.slice(0,8)+'.png']);
     h.click('relight-reuse-history');await new Promise(r=>setTimeout(r,60));assert.equal(h.el('relight-supplement').value,'old lighting description');assert.equal(h.posts.length,1);h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.el('mode').value='costume';h.change('mode');assert.equal(h.el('prompt').value,'ordinary draft to retain');
   }finally{await h.close();}

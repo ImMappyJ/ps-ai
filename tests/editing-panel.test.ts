@@ -13,7 +13,7 @@ test('remove hides the whole prompt group, submits no hidden draft and restores 
     h.el('resolution').value='32';h.click('generate');await h.wait();
     assert.equal(h.posts.length,1);assert.equal(h.records()[0].userPrompt,'');
     assert.doesNotMatch(h.posts[0].prompt['4'].inputs.prompt,/PRIVATE DRAFT/);
-    h.el('history').value=h.records()[0].id;h.click('repeat-history');await h.wait();
+    h.selectHistory(h.records()[0].id);h.click('repeat-history');await h.wait();
     h.el('mode').value='edit';h.change('mode');
     assert.notEqual(h.el('prompt-group').style.display,'none');
     assert.equal(h.el('prompt').value,'PRIVATE DRAFT: preserve this ordinary edit');
@@ -102,7 +102,7 @@ test('new background history persists native subject and protection masks as bin
     h.click('export');await h.wait();const name='ps-ai-'+record.id.slice(0,8)+'.png',before=(h.files[name] as Uint8Array).slice(),prepared=decodePng(before);
     assert.equal(prepared.width,2);assert.equal(prepared.height,2);assert.equal(prepared.rgba[11],255);
     h.setSelection({bounds:{left:0,top:0,right:2,bottom:2},mask:new Uint8Array(4).fill(255)});
-    h.el('history').value=record.id;h.click('load-history');await h.wait();h.click('export');await h.wait();
+    h.selectHistory(record.id);h.click('load-history');await h.wait();h.click('export');await h.wait();
     assert.deepEqual(h.files[name],before);assert.equal(h.posts.length,1);
   }finally{await h.close();}
 });
@@ -112,7 +112,7 @@ test('old background history retains its stored edit direction without requiring
     await h.wait();h.el('resolution').value='32';h.click('generate');await h.wait();
     const records=h.records(),record=records[0];(record.params as any).mode='background';delete (record.snapshot as any).backgroundComposite;
     h.files['history.json']=JSON.stringify(records);const saved=(h.files[record.id+'-mask.bin'] as Uint8Array).slice();
-    h.el('history').value=record.id;h.click('load-history');await h.wait();
+    h.selectHistory(record.id);h.click('load-history');await h.wait();
     assert.deepEqual(h.files[record.id+'-mask.bin'],saved);assert.equal(h.files[record.id+'-subject-mask.bin'],undefined);
     assert.equal(h.errors.length,0);assert.equal(h.el('export').disabled,false);assert.equal(h.posts.length,1);
   }finally{await h.close();}
@@ -122,7 +122,7 @@ test('a new background history with missing or damaged mask data fails explicitl
   const h=await panelHarness({selection:{bounds:{left:0,top:0,right:1,bottom:2},mask:new Uint8Array([255,0,255,0])}});try{
     await h.wait();h.el('resolution').value='32';h.click('generate');await h.wait();
     const records=h.records(),record=records[0];(record.params as any).mode='background';(record.snapshot as any).backgroundComposite='subject-background-v1';h.files['history.json']=JSON.stringify(records);
-    h.el('history').value=record.id;h.click('load-history');await h.wait();
+    h.selectHistory(record.id);h.click('load-history');await h.wait();
     assert.match(h.el('status').textContent,/背景历史.*蒙版/);assert.ok(h.files[record.outputFile as string]);
     h.files[record.id+'-subject-mask.bin']=new Uint8Array([0]);h.files[record.id+'-protection-mask.bin']=new Uint8Array(4);
     h.click('load-history');await h.wait();assert.match(h.el('status').textContent,/背景历史.*蒙版/);assert.equal(h.posts.length,1);
@@ -144,7 +144,7 @@ test('reusing Image Blending history retains supplemental text without overwriti
     h.click('tab-cosplay');h.el('mode').value='blend';h.change('mode');const extra='  补充暖光，保留标签 <image9>  ';h.el('prompt').value=extra;h.el('resolution').value='32';h.click('generate');await h.wait();
     const record=h.records()[0];assert.equal(record.userPrompt,extra);assert.equal((record.params as any).mode,'blend');
     h.el('mode').value='costume';h.change('mode');h.el('prompt').value='new ordinary edit draft';
-    h.el('history').value=record.id;h.click('repeat-history');await h.wait();assert.equal(h.el('prompt').value,extra);
+    h.selectHistory(record.id);h.click('repeat-history');await h.wait();assert.equal(h.el('prompt').value,extra);
     h.el('language').value='en-US';h.change('language');await h.wait();h.click('load-history');await h.wait();assert.equal(h.el('prompt').value,extra);
     h.el('mode').value='costume';h.change('mode');assert.equal(h.el('prompt').value,'new ordinary edit draft');
     for(const id of ['align-subject','match-color'])assert.equal(h.el(id).checked,true);assert.equal(h.posts.length,1);
@@ -167,7 +167,7 @@ test('new background history retains native 16-bit source alpha even for 8-bit g
     await h.wait();h.el('mode').value='background';h.change('mode');h.el('resolution').value='32';h.click('generate');await h.wait();
     const record=h.records()[0],saved=decodePng(h.files[record.id+'-source.png'] as Uint8Array);assert.ok(saved.rgba instanceof Uint16Array);assert.equal(saved.rgba[3],65534);
     assert.equal((h.files[record.id+'-mask.bin'] as Uint8Array)[0],255);assert.ok(h.uploads[0].image.rgba instanceof Uint8Array);
-    h.el('history').value=record.id;h.click('load-history');await h.wait();assert.equal(h.errors.length,0);assert.equal(h.posts.length,1);
+    h.selectHistory(record.id);h.click('load-history');await h.wait();assert.equal(h.errors.length,0);assert.equal(h.posts.length,1);
   }finally{await h.close();}
 });
 
@@ -175,7 +175,7 @@ test('new background history rejects a missing or inconsistent application mask'
   const h=await panelHarness({selection:{bounds:{left:0,top:0,right:1,bottom:2},mask:new Uint8Array([255,0,255,0])}});try{
     await h.wait();h.el('mode').value='background';h.change('mode');h.el('resolution').value='32';h.click('generate');await h.wait();
     const record=h.records()[0],name=record.id+'-mask.bin',saved=(h.files[name] as Uint8Array).slice();delete h.files[name];
-    h.el('history').value=record.id;h.click('load-history');await h.wait();assert.match(h.el('status').textContent,/背景历史.*蒙版/);
+    h.selectHistory(record.id);h.click('load-history');await h.wait();assert.match(h.el('status').textContent,/背景历史.*蒙版/);
     h.files[name]=saved.slice();(h.files[name] as Uint8Array)[0]=255;h.click('load-history');await h.wait();assert.match(h.el('status').textContent,/背景历史.*蒙版/);
     assert.ok(h.files[record.outputFile as string]);assert.equal(h.posts.length,1);
   }finally{await h.close();}

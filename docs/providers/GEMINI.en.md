@@ -48,7 +48,7 @@ Untagged PNGs are rejected by default. Only after confirming the provider's pixe
 This Gemini API returns an image directly. The adapter has no remote task ID for retrieving a lost result. The service persists a local UUID before making one background request; the plugin polls local state. A local UUID is not a Google task ID.
 
 - **Stop remaining candidates** lets the current request continue; it does not guarantee billing stops. Returned results are saved.
-- A timeout or process exit before output persistence can leave `unknown`. Automatic resubmission is prohibited. Check platform usage records; automatic reconciliation and an abandon-tracking UI are not implemented.
+- A timeout or process exit before output persistence can leave `unknown`. Automatic resubmission is prohibited. Check platform usage records; server reconciliation and platform-ID attachment remain unimplemented. Development History supports explicit two-step local stop tracking for `unknown`, retaining the original ID and all data. It does not cancel work or stop billing; a new task may duplicate work. See the [user guide](../usage/USER_GUIDE.en.md).
 - Once raw output is saved, transient output-write failures can recover using the same UUID. Normal Ctrl+C waits for current work; forced termination has no such guarantee.
 - For 401/403, check credentials, model access, region and account. For 429, check quota/rate limits. Do not create repeated uncertain tasks.
 - Refusals, missing images, non-PNG output and invalid dimensions/color produce errors. Do not bypass validation to force application.

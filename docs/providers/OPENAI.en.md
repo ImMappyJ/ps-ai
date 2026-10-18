@@ -57,7 +57,7 @@ Images returns the image directly; this adapter has no remote task ID for retrie
 | Narrow crop or prepared PNG over 10 MiB | Adjust the selection/context or resolution; over-budget inputs are not submitted |
 | Locked data directory | Stop the old instance; remove a stale lock only after confirming its recorded PID has exited |
 
-Each original or prepared input PNG is capped at 10 MiB; OpenAI response JSON at 32 MiB. Automatic reconciliation and an abandon-tracking UI are not implemented. Do not delete uncertain job records and generate again. Saved raw output can recover transient disk-write failures by UUID. Back up the whole private data directory when migrating; keep it out of Issues.
+Each original or prepared input PNG is capped at 10 MiB; OpenAI response JSON at 32 MiB. Server reconciliation and platform-ID attachment remain unimplemented. Development History permits explicit two-step local stop tracking only for `unknown`, retaining the original ID and all data; this does not cancel work or stop billing, and a new generation may duplicate work. See the [user guide](../usage/USER_GUIDE.en.md). Do not delete uncertain job records. Saved raw output can recover transient disk-write failures by UUID. Back up the whole private data directory when migrating; keep it out of Issues.
 
 ## Live acceptance
 

@@ -5,7 +5,8 @@ test('gateway background modes retain provider guide uploads while disabling sou
   for(const [tab,mode] of [['tab-local','background'],['tab-cosplay','scene']]){
     const h=await panelHarness({settings,selection:{bounds:{left:0,top:0,right:1,bottom:2},mask:new Uint8Array([255,0,255,0])}});try{
       await h.wait();h.click(tab);h.el('mode').value=mode;h.change('mode');assert.equal(h.el('guide').checked,true);assert.equal(h.el('guide').disabled,false);
-      h.el('prompt').value='少女站在舞台上';h.click('generate');await h.wait();assert.equal(h.gatewayPosts.length,1);
+      // This guide/parameter regression only needs the gateway's minimum 512px canvas.
+      h.el('resolution').value='512';h.el('prompt').value='少女站在舞台上';h.click('generate');await h.wait();assert.equal(h.gatewayPosts.length,1);
       const request=h.gatewayPosts[0].request;assert.ok(request.guide);assert.ok(h.uploads.some(u=>u.name.endsWith('-guide.png')));assert.doesNotMatch(request.prompt,/<image[123]>/);assert.match(request.prompt,/少女站在舞台上/);
       const params=h.records()[0].params as any;assert.equal(params.preserveAlpha,false);assert.equal(params.alignSubject,false);assert.equal(params.guide,true);
     }finally{await h.close();}
@@ -24,7 +25,7 @@ test('不支持透明素材的平台模型禁用该模式，仍保留局部编�
   const h=await panelHarness({settings:{...settings,gatewayModel:'qwen-image-3.0-pro'}});try{await h.wait();h.click('tab-cosplay');assert.equal(h.el('generate').disabled,true);h.el('mode').value='costume';h.change('mode');assert.equal(h.el('generate').disabled,false);}finally{await h.close();}
 });
 test('同地址不同后端的旧历史不被误查为网关任务',async()=>{
-  const h=await panelHarness({settings});try{await h.wait();h.files['history.json']=JSON.stringify([{id:uuid(),clientId:uuid(),graph:{},state:'queued',createdAt:'2026-10-17',baseUrl:settings.baseUrl}]);h.click('recover');await h.wait();assert.ok(h.errors.some(e=>String(e).includes('后端类型')));assert.equal(h.gatewayPosts.length,0);}finally{await h.close();}
+  const id=uuid(),h=await panelHarness({settings,history:[{id,clientId:uuid(),graph:{},state:'queued',createdAt:'2026-10-17',baseUrl:settings.baseUrl}]});try{await h.wait();assert.equal(h.historySelectedId(),id);h.click('recover');await h.wait();assert.equal(JSON.parse(h.el('diagnostic-details').value).code,'pending-backend');assert.equal(h.requests.some(r=>r.url.includes('/jobs/')),false);assert.equal(h.gatewayPosts.length,0);}finally{await h.close();}
 });
 test('英文百炼界面说明云端传输和停止后续候选，不改模型或提示词',async()=>{
   const h=await panelHarness({settings:{...settings,language:'en-US'}});try{await h.wait();assert.equal(h.el('cancel').textContent,'Stop remaining candidates');assert.match(h.el('gateway-info').textContent,/uploaded to Bailian/);assert.equal(h.el('gateway-model').value,'qwen-image-2.1-pro');assert.equal(h.el('prompt').value,'blue lightning');}finally{await h.close();}
@@ -34,7 +35,7 @@ test('后端类型或地址尚未保存时阻止生成，避免向界面以外�
 });
 
 test('百炼恢复16位本地历史前明确拒绝，保留可用的8位配置',async()=>{
-  const h=await panelHarness({settings});try{await h.wait();const id=uuid();h.files['history.json']=JSON.stringify([{id,clientId:uuid(),graph:{},state:'ready',createdAt:'2026-10-17',params:{workspace:'t2i',mode:'generate',outputDepth:16},userPrompt:'old prompt'}]);h.el('history').value=id;h.click('repeat-history');await h.wait();assert.equal(h.el('output-depth').value,'8');assert.ok(h.errors.some(e=>String(e).includes('16')));assert.equal(h.el('prompt').value,'blue lightning');}finally{await h.close();}
+  const h=await panelHarness({settings});try{await h.wait();const id=uuid();h.files['history.json']=JSON.stringify([{id,clientId:uuid(),graph:{},state:'ready',createdAt:'2026-10-17',params:{workspace:'t2i',mode:'generate',outputDepth:16},userPrompt:'old prompt'}]);await h.refreshHistory();h.selectHistory(id);h.click('repeat-history');await h.wait();assert.equal(h.el('output-depth').value,'8');assert.ok(h.errors.some(e=>String(e).includes('16')));assert.equal(h.el('prompt').value,'blue lightning');}finally{await h.close();}
 });
 
 test('Gemini 面板展示实际平台，禁用不支持的种子并可连续生成候选',async()=>{
@@ -47,7 +48,7 @@ test('网关停止期间不声称已发送平台取消，当前完成后保留�
 
 test('本地16位历史可作为任务参数复用，不要求改全局8位默认连接',async()=>{
   const h=await panelHarness({settings:{...defaultSettings(),outputDepth:8},save16Node:true,noDocuments:true,output:{width:2,height:2,rgba:new Uint16Array(16).fill(65535)}});
-  try{await h.wait();const id=uuid();h.files['history.json']=JSON.stringify([{id,clientId:uuid(),graph:{},state:'ready',createdAt:'2026-10-17',params:{workspace:'t2i',mode:'generate',outputDepth:16,steps:4,resolution:32,seed:42,destination:'document',margin:0.1},userPrompt:'white stockings'}]);h.el('history').value=id;h.click('repeat-history');await h.wait();h.click('generate');await h.wait();assert.equal(h.posts.length,1);assert.equal(h.records()[0].state,'ready');assert.equal(JSON.parse(String(h.files['settings.json'])).outputDepth,8);}finally{await h.close();}
+  try{await h.wait();const id=uuid();h.files['history.json']=JSON.stringify([{id,clientId:uuid(),graph:{},state:'ready',createdAt:'2026-10-17',params:{workspace:'t2i',mode:'generate',outputDepth:16,steps:4,resolution:32,seed:42,destination:'document',margin:0.1},userPrompt:'white stockings'}]);await h.refreshHistory();h.selectHistory(id);h.click('repeat-history');await h.wait();h.click('generate');await h.wait();assert.equal(h.posts.length,1);assert.equal(h.records()[0].state,'ready');assert.equal(JSON.parse(String(h.files['settings.json'])).outputDepth,8);}finally{await h.close();}
 });
 
 test('OpenAI 界面正确标记平台与缺Key说明，生成前不捕获或上传',async()=>{

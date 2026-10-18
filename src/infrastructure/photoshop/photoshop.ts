@@ -7,6 +7,8 @@ export interface Snapshot {documentId:number;width:number;height:number;profile:
 export interface Capture {snapshot:Snapshot;image:Raster;selectionMask:Uint8Array;protectionMask:Uint8Array;subjectMask?:Uint8Array;workingCopyOf?:number;documentName?:string}
 export interface CaptureOptions {context?:'selection'|'document';selection?:'edit'|'subject-background'|'document';preserveNativeDepth?:boolean}
 export interface Protection {documentId:number;width:number;height:number;bounds:Bounds;mask:Uint8Array;sessionId:string}
+/** Geometry only: restoring it grants no permission to apply an old candidate. */
+export interface SelectionRange {documentId:number;sessionId:string;width:number;height:number;mode:string;depth:unknown;bounds:Bounds;mask:Uint8Array}
 export class PhotoshopAdapter {
   private applications=new Map<string,{documentId:number;historyId:number;layerId:number}>();
   constructor(public ps:any,public sessionId:string,private checkpoint:(stage:string)=>Promise<void>=async()=>{},private readSourceColor:SourceColorReader=async()=>undefined){}
@@ -191,6 +193,30 @@ export class PhotoshopAdapter {
       const doc=this.document();if(doc.id!==expectedDocumentId)throw new Error('保护区来源文档已切换');const bounds=this.bounds(doc);const mask=await this.mask(doc.id,bounds);
       return {documentId:doc.id,width:doc.width,height:doc.height,bounds,mask,sessionId:this.sessionId};
     },{commandName:'ps-ai 读取人物保护区'});
+  }
+  async restoreSelection(range:SelectionRange):Promise<void> {
+    const b=range?.bounds;
+    if(!range||!b||![range.documentId,range.width,range.height,b.left,b.top,b.right,b.bottom].every(Number.isSafeInteger)||range.documentId<=0||range.width<=0||range.height<=0||b.left<0||b.top<0||b.right>range.width||b.bottom>range.height||b.right<=b.left||b.bottom<=b.top||!(range.mask instanceof Uint8Array)||range.mask.length!==(b.right-b.left)*(b.bottom-b.top)||!range.mask.some(v=>v>0))throw new Error('上次选区范围无效，请重新圈选后预览');
+    checkSize(b.right-b.left,b.bottom-b.top);
+    const saved:SelectionRange={...range,bounds:{...b},mask:range.mask.slice()};
+    const source=()=>{
+      if(saved.sessionId!==this.sessionId)throw new Error('上次选区属于已结束的会话，请重新圈选后预览');
+      const doc=this.document();
+      if(doc.id!==saved.documentId||doc.width!==saved.width||doc.height!==saved.height||doc.mode!==saved.mode||doc.bitsPerChannel!==saved.depth)throw new Error('上次选区的来源文档、尺寸、模式或位深已改变，请重新圈选后预览');
+      return doc;
+    };
+    source();
+    await this.ps.core.executeAsModal(async(context:any)=>{
+      const doc=source(),sixteen=doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN;
+      const suspension=await context.hostControl.suspendHistory({documentID:doc.id,name:'ps-ai 恢复选区'});
+      let data:any,pending=true;
+      try{
+        data=await this.ps.imaging.createImageDataFromBuffer(sixteen?Uint16Array.from(saved.mask,v=>v*257):saved.mask,{width:saved.bounds.right-saved.bounds.left,height:saved.bounds.bottom-saved.bounds.top,components:1,colorSpace:'Grayscale',colorProfile:'Gray Gamma 2.2',...(sixteen?{fullRange:true}:{})});
+        await this.ps.imaging.putSelection({documentID:doc.id,imageData:data,replace:true,targetBounds:{left:saved.bounds.left,top:saved.bounds.top}});
+        await context.hostControl.resumeHistory(suspension,true);pending=false;
+      }catch(error){if(pending)await context.hostControl.resumeHistory(suspension,false);throw error;}
+      finally{data?.dispose();}
+    },{commandName:'ps-ai 恢复选区'});
   }
   private key(s:Snapshot):string {
     let hash=2166136261;for(const v of s.mask)hash=Math.imul(hash^v,16777619);
