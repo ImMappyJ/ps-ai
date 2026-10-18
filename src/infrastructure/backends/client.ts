@@ -3,7 +3,7 @@ import type {JobRecord} from '../../generation/jobs';
 import {DiagnosticError,backendFailureCode} from '../../diagnostics/diagnostics';import type {DiagnosticCode} from '../../diagnostics/diagnostics';
 export interface OutputFile {filename:string;subfolder:string;type:string}
 export type Status={state:'queued'|'running'|'ready'|'failed'|'cancelled'|'unknown';images?:OutputFile[];detail?:string;code?:DiagnosticCode};
-export class HttpError extends Error { constructor(public status:number,message:string){super(message);} }
+export class HttpError extends Error { constructor(public status:number,message:string,public code?:DiagnosticCode){super(message);} }
 export function uuid():string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.floor(Math.random()*16);return(c==='x'?r:(r&3)|8).toString(16);});
 }

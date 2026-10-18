@@ -112,6 +112,19 @@ test('同步平台明确无图是失败，断线才是不确定；两者都不�
   }
 });
 
+test('平台结构化失败原因跨状态查询和重启保留，不把超时变成可重提交失败',async()=>{
+  for(const [upstream,code,status,uncertain] of [['authentication','unauthorized',401,false],['rate-limit','rate-limited',429,false],['quota-exceeded','quota-exceeded',429,false],['timeout','timeout',504,true],['connection','unreachable',502,true]] as const){
+    const s=await fixture({inlineError:new ServiceError(status,upstream,'Safe platform failure',uncertain)}),record=s.record();
+    try{
+      await s.client.submitJob(record);
+      let result;for(let i=0;i<100;i++){result=await s.client.status(record.id);if(result.state!=='running')break;await new Promise(r=>setTimeout(r,10));}
+      assert.equal(result!.code,code);assert.equal(result!.state,uncertain?'unknown':'failed');
+      await s.close(false);const again=await fixture({root:s.root});
+      try{assert.equal((await again.client.status(record.id)).code,code);await again.client.submitJob(record);assert.equal(again.submits(),0);}finally{await again.close();}
+    }finally{await s.gateway.close();await fs.rm(s.root,{recursive:true,force:true});}
+  }
+});
+
 test('提交断开且首次落盘未完成时正常关闭，仍等待后续同步工作并持有数据锁',async()=>{
   const {createGateway}=await import('../server/http/gateway');const {BailianProvider}=await import('../server/providers/bailian');const root=await fs.mkdtemp(path.join(os.tmpdir(),'ps-ai-shutdown-'));
   let releaseSave!:()=>void,seenSave!:()=>void,seenProvider!:()=>void,releaseProvider!:(r:{image:Uint8Array})=>void;

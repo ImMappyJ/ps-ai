@@ -6,14 +6,15 @@ import {defaultSettings} from '../src/infrastructure/config/profile';
 import fs from 'node:fs/promises';
 import {sceneFingerprint} from '../src/features/relight/relight-scene';
 
-async function open(h:Awaited<ReturnType<typeof panelHarness>>){await h.wait();h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');h.el('resolution').value='32';h.click('open-relight');await new Promise(r=>setTimeout(r,80));}
+async function open(h:Awaited<ReturnType<typeof panelHarness>>){await h.wait();h.click('nav-create');h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');h.el('resolution').value='32';h.click('open-relight');await new Promise(r=>setTimeout(r,80));}
+async function useFullResult(h:Awaited<ReturnType<typeof panelHarness>>){h.el('relight-output').value='full-result';h.change('relight-output');h.click('relight-reread');await new Promise(r=>setTimeout(r,80));assert.equal(h.el('relight-output').value,'full-result');assert.equal(h.el('relight-generate').disabled,false);}
 async function draft(h:Awaited<ReturnType<typeof panelHarness>>){h.click('relight-save');await new Promise(r=>setTimeout(r,15));return JSON.parse(String(h.files['relight-draft.json'])).scene;}
 
 test('relight missing-selection guidance appears before file authorization and points at the explicit whole-image choice',async()=>{
   const h=await panelHarness({untaggedSource:{bytes:encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)})}});try{
-    await h.wait();h.setSelection({bounds:null as any,mask:new Uint8Array(4)});h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');
+    await h.wait();h.click('nav-create');h.setSelection({bounds:null as any,mask:new Uint8Array(4)});h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');
     assert.equal(h.el('relight-scope')?.value,'selection');h.click('open-relight');await h.wait();
-    assert.equal(h.sourceAccessEvents.length,0);assert.match(h.el('diagnostic-summary').textContent,/整张图像/);assert.equal(JSON.parse(h.el('diagnostic-details').value).code,'selection-required');
+    assert.equal(h.sourceAccessEvents.length,0);assert.equal(h.el('diagnostic-box').style.display,'block');assert.match(h.el('diagnostic-title').textContent,/选区/);assert.match(h.el('diagnostic-action').textContent,/整张图像/);assert.equal(JSON.parse(h.el('diagnostic-details').value).code,'selection-required');
     assert.equal(h.uploads.length,0);assert.equal(h.ps.app.documents.length,1);
   }finally{await h.close();}
 });
@@ -121,14 +122,14 @@ test('workbench edits, view changes and empty AI tab never submit a request',asy
 test('generation closes for recapture, reopens for network, uploads the clean source and applies the matching result once',async()=>{
   const source={width:2,height:2,rgba:new Uint16Array([12345,23456,34567,65535,21000,31000,41000,65535,1000,3000,5000,65535,60000,50000,40000,65535])};
   const h=await panelHarness({source});try{
-    await open(h);h.el('relight-intensity').value='2';h.change('relight-intensity');h.click('relight-generate');await h.wait();
+    await open(h);await useFullResult(h);const eventStart=h.nativeEvents.length;h.el('relight-intensity').value='2';h.change('relight-intensity');h.click('relight-generate');await h.wait();
     assert.equal(h.posts.length,1);assert.equal(h.el('relight-dialog').hasAttribute('open'),true);
-    assert.deepEqual(h.nativeEvents.slice(0,5),['native','dialog-open','dialog-close','native','dialog-open']);
+    assert.deepEqual(h.nativeEvents.slice(eventStart,eventStart+3),['dialog-close','native','dialog-open']);
     const job=h.records()[0],metadata=job.relight as any,saved=decodePng(h.files[job.id+'-source.png'] as Uint8Array);
     assert.ok(saved.rgba instanceof Uint16Array);assert.equal(saved.rgba[0],12345);
     const upload=h.uploads.find(u=>u.name.endsWith('-source.png'))!.image;
     assert.deepEqual([...upload.rgba],[...convertDepth(resize(source,32,32),8).rgba]);
-    assert.equal(metadata.requestId,job.id);assert.equal(metadata.result.jobId,job.id);assert.equal(metadata.scene.lights[0].intensity,2);
+    assert.equal(metadata.requestId,job.id);assert.equal(metadata.result.jobId,job.id);assert.equal(metadata.scene.lights[0].intensity,2);assert.equal(metadata.outputKind,'full-result');
     assert.equal(metadata.color.documentDepth,16);assert.equal(metadata.color.modelInput,'sRGB8');
     assert.equal(h.el('relight-apply').disabled,false);h.click('relight-apply');await new Promise(r=>setTimeout(r,80));
     assert.equal(h.appliedLayers.length,1);assert.match(h.appliedLayers[0].layer.name,/光影重塑.*完整结果/);
@@ -264,8 +265,8 @@ test('correcting light parameters dismisses validation status only after every i
 test('valid parameter edits preserve visible source, generation and application failures',async()=>{
   for(const kind of ['source','generation','application']){
     const h=await panelHarness();try{
-      await open(h);
-      if(kind==='source'){h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.ps.app.activeDocument.activeHistoryState={id:9};h.click('open-relight');await new Promise(r=>setTimeout(r,40));assert.match(h.el('relight-status').textContent,/来源.*重新读取/);}
+      await open(h);await useFullResult(h);
+      if(kind==='source'){h.click('relight-generate');await h.wait();assert.equal(h.records()[0].state,'ready');h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.ps.app.activeDocument.activeHistoryState={id:9};h.click('open-relight');await new Promise(r=>setTimeout(r,40));assert.match(h.el('relight-status').textContent,/来源.*重新读取/);assert.equal(h.el('relight-generate').disabled,true);}
       else if(kind==='generation'){h.el('backend-url').value='http://localhost:8199';h.click('relight-generate');await h.wait();assert.match(h.el('relight-status').textContent,/后端配置已改变/);}
       else {h.click('relight-generate');await h.wait();h.ps.app.activeDocument.activeHistoryState={id:99};h.click('relight-apply');await new Promise(r=>setTimeout(r,80));assert.match(h.el('relight-status').textContent,/改变|重新捕获/);}
       const failure=h.el('relight-status').textContent;h.el('relight-intensity').value='2';h.change('relight-intensity');assert.equal(h.el('relight-status').textContent,failure,kind+' error must remain actionable after editing');
@@ -340,7 +341,7 @@ test('unsupported dialog and fully transparent source fail before uploads with a
 
 test('source document switching never redirects capture or apply, and compensation remains unavailable',async()=>{
   const h=await panelHarness();try{
-    await open(h);h.switchDocument(22);h.click('relight-generate');await h.wait();assert.equal((h.records()[0].snapshot as any).documentId,11);assert.equal(h.ps.app.activeDocument.id,22);
+    await open(h);await useFullResult(h);h.switchDocument(22);h.click('relight-generate');await h.wait();assert.equal((h.records()[0].snapshot as any).documentId,11);assert.equal(h.ps.app.activeDocument.id,22);
     h.click('relight-compensation');await new Promise(r=>setTimeout(r,20));assert.match(h.el('relight-compensation-info').textContent,/encoded sRGB|完整结果/);assert.equal(h.el('relight-output').querySelector('option[value="compensation"]').disabled,true);
     h.click('relight-apply');await new Promise(r=>setTimeout(r,50));assert.equal(h.appliedLayers[0].documentId,11);assert.equal(h.ps.app.activeDocument.id,22);
     const before=h.appliedLayers.length;h.ps.app.documents.find((d:any)=>d.id===11).activeHistoryState={id:99};h.click('relight-apply');await new Promise(r=>setTimeout(r,50));assert.equal(h.appliedLayers.length,before);assert.match(h.el('relight-status').textContent,/改变|重新捕获/);
@@ -348,10 +349,10 @@ test('source document switching never redirects capture or apply, and compensati
   }finally{await h.close();}
 });
 
-test('reopening a source changed while closed shows an actionable warning and blocks new generation',async()=>{
+test('reopening an ungenerated same-source edit refreshes pixels and history while preserving the lighting design',async()=>{
   const h=await panelHarness();try{
-    await open(h);h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.ps.app.activeDocument.activeHistoryState={id:9};h.click('open-relight');await new Promise(r=>setTimeout(r,40));
-    assert.equal(h.el('relight-generate').disabled,true);assert.match(h.el('relight-status').textContent,/重新读取/);assert.equal(h.el('relight-reread').disabled,false);
+    await open(h);h.el('relight-intensity').value='2.6';h.change('relight-intensity');const before=await draft(h),reads=h.pixelRequests.length;h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.ps.app.activeDocument.activeHistoryState={id:9};h.click('open-relight');await new Promise(r=>setTimeout(r,80));
+    const after=await draft(h);assert.equal(h.el('relight-generate').disabled,false);assert.notEqual(after.source.snapshotId,before.source.snapshotId);assert.equal(after.source.historyId,9);assert.equal(after.lights[0].intensity,2.6);assert.ok(h.pixelRequests.length>reads);assert.equal(h.el('relight-reread').disabled,false);assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);
   }finally{await h.close();}
 });
 
@@ -378,9 +379,9 @@ test('global recovery busy disables workbench submission and application without
 test('synchronous and asynchronous native dialog opening failures reach the visible main panel with an action',async()=>{
   for(const rejected of [false,true]){
     const h=await panelHarness();try{
-      await h.wait();h.el('relight-dialog').uxpShowModal=()=>{if(rejected)return Promise.reject(Error('native open failed'));throw Error('native open failed');};
+      await h.wait();h.click('nav-create');h.el('relight-dialog').uxpShowModal=()=>{if(rejected)return Promise.reject(Error('native open failed'));throw Error('native open failed');};
       h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');h.click('open-relight');await new Promise(r=>setTimeout(r,60));
-      assert.equal(h.el('relight-dialog').hasAttribute('open'),false);assert.match(h.el('status').textContent,/打开失败.*重新加载/);assert.equal(h.el('diagnostic-box').style.display,'block');assert.equal(h.posts.length,0);
+      assert.equal(h.el('relight-dialog').hasAttribute('open'),false);assert.equal(h.el('view-create').style.display,'block');assert.match(h.el('diagnostic-summary').textContent,/打开失败.*重新加载/);assert.ok(h.el('diagnostic-title').textContent);assert.ok(h.el('diagnostic-action').textContent);assert.equal(h.el('diagnostic-box').style.display,'block');assert.equal(JSON.parse(h.el('diagnostic-details').value).page,'create');assert.equal(h.posts.length,0);
     }finally{await h.close();}
   }
 });

@@ -1,4 +1,15 @@
 import type {JobRecord} from '../../generation/jobs';
+export interface TraceMetrics {
+  operationId?:string;snapshotId?:string;documentId?:number;
+  width?:number;height?:number;analysisWidth?:number;analysisHeight?:number;depth?:number;
+  durationMs?:number;modalMs?:number;estimatedBytes?:number;discardedPreviews?:number;listeners?:number;
+}
+function traceMetrics(metrics:TraceMetrics):TraceMetrics {
+  const clean:Record<string,number|string>={};
+  for(const key of ['operationId','snapshotId'] as const){const value=metrics[key];if(typeof value==='string'&&/^[a-zA-Z0-9._:-]{1,128}$/.test(value))clean[key]=value;}
+  for(const key of ['documentId','width','height','analysisWidth','analysisHeight','depth','durationMs','modalMs','estimatedBytes','discardedPreviews','listeners'] as const){const value=metrics[key];if(typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=Number.MAX_SAFE_INTEGER)clean[key]=value;}
+  return clean;
+}
 export interface HistoryCleanupStatus {
   removedIds:string[];
   pendingFiles:number;
@@ -144,14 +155,14 @@ export class Storage {
     try{await this.json(CLEANUP,completed);}catch{metadataPending=true;}
     return {removedIds:[...journal.removedIds],pendingFiles,retainedSharedFiles,skippedUnsafeFiles:journal.skippedUnsafeFiles,metadataPending};
   }
-  trace(stage:string,taskId?:string):Promise<void> {
-    const event={at:new Date().toISOString(),stage,taskId};
+  trace(stage:string,taskId?:string,metrics?:TraceMetrics):Promise<void> {
+    const event={at:new Date().toISOString(),stage,taskId,...(metrics?{metrics:traceMetrics(metrics)}:{})};
     const operation=this.traceChain.catch(()=>{}).then(async()=>{
       const log=await this.readJson<{events:unknown[]}|null>('runtime-trace.json',{events:[]}).catch(()=>null);
       await this.json('runtime-trace.json',{schemaVersion:1,events:[...(Array.isArray(log?.events)?log.events:[]),event].slice(-80)});
     });
     this.traceChain=operation;
     // Diagnostics must not block editing when their own storage is unavailable.
-    return operation.catch(error=>console.warn('ps-ai diagnostic write failed',error));
+    return operation.catch(()=>console.warn('ps-ai diagnostic write failed'));
   }
 }

@@ -4,7 +4,7 @@ import {t} from '../localization/i18n';
 const PAGE_SIZE=20;
 const STATE_LABELS:Record<string,string>={created:'待提交',submitting:'提交中',queued:'已排队',running:'生成中',unknown:'状态未知',cancelling:'取消确认中',downloading:'下载中',ready:'候选就绪',failed:'生成失败',cancelled:'已取消','output-error':'输出异常'};
 const MODES:Record<string,string>={edit:'局部物体 / 材质修改',remove:'移除杂物',background:'换背景（选择主体）',effect:'特效素材',costume:'服装 / 道具修复',reference:'角色参考辅助',scene:'场景替换',atmosphere:'氛围素材',relight:'光影重塑',blend:'溶图',generate:'文字生图'};
-interface HistoryTableHost {busy():boolean;changed():void;refresh():void}
+interface HistoryTableHost {busy():boolean;changed():void;refresh():void;focused?():void}
 export function historyTaskType(record:JobRecord):string {
   const params=record.params as {mode?:string;workspace?:string}|undefined;
   return t(MODES[params?.mode??'']??(params?.workspace==='t2i'?'文字生图':'未保存任务类型'));
@@ -34,6 +34,7 @@ export class HistoryTable {
   private page=0;
   private revealId?:string;
   private revision=0;
+  private renderKey='';
   constructor(private root:HTMLElement,private host:HistoryTableHost){
     root.innerHTML='<div class="history-filters"><button id="history-all" type="button"></button><button id="history-unresolved" type="button"></button><button id="history-refresh" type="button"></button></div><div class="history-check-tools"><button id="history-check-all" type="button"></button><button id="history-check-none" type="button"></button><span id="history-selected-count" class="hint" role="status"></span></div><div id="history-table" role="table"><div class="history-row history-header" role="row"><span class="history-check-cell" role="columnheader"></span><span class="history-date" role="columnheader"></span><span class="history-type" role="columnheader"></span><span class="history-prompt" role="columnheader"></span></div><div id="history-rows" role="rowgroup"></div></div><p id="history-empty" class="hint" role="status"></p><div class="history-pagination"><button id="history-prev" type="button"></button><span id="history-page" class="hint" role="status"></span><button id="history-next" type="button"></button></div>';
     for(const filter of ['all','unresolved'] as const)this.el(`history-${filter}`).addEventListener('click',()=>{
@@ -55,7 +56,7 @@ export class HistoryTable {
       const target=event.target as HTMLElement;if(host.busy()||target?.closest?.('[data-history-check]'))return;
       const row=target?.closest?.('[data-history-id]');if(!row||!this.el('history-rows').contains(row))return;
       const id=row.getAttribute('data-history-id')!;if(!this.visible().some(record=>record.id===id))return;
-      this.selected=id;this.displayChanged();
+      this.selected=id;this.displayChanged();this.host.focused?.();
     });
     this.refresh();
   }
@@ -95,6 +96,8 @@ export class HistoryTable {
   }
   refresh():void {
     const busy=this.host.busy(),pending=this.records.filter(blocksGeneration).length,doc=this.root.ownerDocument;
+    const key=JSON.stringify([busy,this.selected,[...this.checked],this.filter,this.page,this.records.length,pending,t('历史记录'),this.visible().map(record=>[record.id,record.state,record.tracking,record.createdAt,(record.params as any)?.mode,(record.params as any)?.workspace,record.userPrompt])]);
+    if(key===this.renderKey)return;this.renderKey=key;
     for(const [filter,count,label] of [['all',this.records.length,'全部（{0}）'],['unresolved',pending,'未确认（{0}）']] as const){
       const button=this.el(`history-${filter}`) as HTMLButtonElement;button.textContent=t(label,count);button.disabled=busy;button.setAttribute('aria-pressed',String(this.filter===filter));button.classList.toggle('active',this.filter===filter);
     }
@@ -102,7 +105,7 @@ export class HistoryTable {
     this.el('history-selected-count').textContent=t('已勾选 {0} 条',this.checked.size);
     const table=this.el('history-table');table.setAttribute('aria-label',t('历史记录'));table.setAttribute('aria-busy',String(busy));
     const labels=['选择','保存时间','任务类型','提示词'];Array.from(table.querySelectorAll('[role="columnheader"]')).forEach((node,i)=>node.textContent=t(labels[i]));
-    const body=this.el('history-rows');body.innerHTML='';
+    const body=this.el('history-rows'),scrollTop=body.scrollTop;body.innerHTML='';
     for(const record of this.visible()){
       const row=doc.createElement('div'),selected=record.id===this.selected,pending=blocksGeneration(record);
       row.className='history-row'+(selected?' selected':'')+(pending?' pending':'')+(busy?' disabled':'');row.setAttribute('role','row');row.setAttribute('data-history-id',record.id);row.setAttribute('aria-selected',String(selected));
@@ -119,5 +122,6 @@ export class HistoryTable {
     const empty=this.el('history-empty');empty.style.display=this.filtered().length?'none':'block';empty.textContent=t(this.filter==='unresolved'?'没有未确认任务':'暂无历史记录');
     const previous=this.el('history-prev') as HTMLButtonElement,next=this.el('history-next') as HTMLButtonElement;previous.textContent=t('上一页');next.textContent=t('下一页');previous.disabled=busy||this.page===0;next.disabled=busy||this.page>=this.pages()-1;
     this.el('history-page').textContent=t('第 {0} / {1} 页 · {2} 条',this.page+1,this.pages(),this.filtered().length);
+    this.el('history-page').parentElement!.style.display=this.filtered().length?'flex':'none';body.scrollTop=scrollTop;
   }
 }

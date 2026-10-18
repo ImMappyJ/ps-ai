@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {renderRelightPreview,prepareRelightPreview} from '../src/features/relight/relight-preview';
 import {createRelightScene,type RelightSource} from '../src/features/relight/relight-scene';
 import type {Raster} from '../src/imaging/image';
+import {decodePng} from '../src/imaging/image';
 
 const sourceBinding=(width:number,height:number):RelightSource=>({documentId:1,layerIds:[2],sessionId:'a',historyId:3,sourceHash:'abcd',snapshotId:'snap',
   docWidth:width,docHeight:height,bounds:{left:0,top:0,right:width,bottom:height},profile:'sRGB IEC61966-2.1',documentMode:'RGBColor',documentDepth:8,maskRef:'mask'});
@@ -129,4 +130,34 @@ test('prepared preview handles native 16-bit independently, has a no-resize copy
   assert.notEqual(cache.image.rgba,image.rgba);assert.notEqual(cache.mask,mask);assert.ok(image.rgba instanceof Uint16Array);
   assert.throws(()=>prepare(image,mask,{cancelled:()=>true}),{name:'AbortError'});
   assert.throws(()=>prepare(image,mask,{maxEdge:1025}),/maxEdge/i);
+});
+
+test('a prepared renderer reuses unchanged light geometry and invalidates only the moved light',async()=>{
+  const module=await import('../src/features/relight/relight-preview') as any;
+  assert.equal(typeof module.RelightPreviewRenderer,'function');
+  const image=fixture(40,30),s=sceneFor(image);s.lights.push({...s.lights[0],id:'fill',x:.8});
+  const renderer=new module.RelightPreviewRenderer(prepareRelightPreview(image,new Uint8Array(1200).fill(255)));
+  const first=await renderer.render(s,{yield:async()=>{}});assert.equal(renderer.stats.fieldBuilds,2);
+  s.lights[0].name='Renamed';s.lights[1].positionLocked=true;
+  assert.deepEqual(await renderer.render(s,{yield:async()=>{}}),first);assert.equal(renderer.stats.fieldBuilds,2);assert.ok(renderer.stats.fieldCacheHits>=2);
+  s.lights[0].x=.6;assert.notDeepEqual((await renderer.render(s,{yield:async()=>{}})).rgba,first.rgba);assert.equal(renderer.stats.fieldBuilds,3);
+  assert.ok(renderer.stats.cachedBytes<=40*30*4*2);renderer.clear();assert.equal(renderer.stats.cachedBytes,0);
+});
+
+test('clearing an in-flight renderer cancels it before publishing and leaves no cached field',async()=>{
+  const module=await import('../src/features/relight/relight-preview') as any;
+  assert.equal(typeof module.RelightPreviewRenderer,'function');
+  const image=fixture(80,60),renderer=new module.RelightPreviewRenderer(prepareRelightPreview(image,new Uint8Array(4800).fill(255)));
+  await assert.rejects(renderer.render(sceneFor(image),{yield:async()=>{renderer.clear();}}),{name:'AbortError'});
+  assert.equal(renderer.stats.cachedBytes,0);assert.ok(renderer.stats.cancelled>0);
+});
+
+test('drag-only PNG encoding is bounded tagged sRGB and preserves exact straight alpha bytes',async()=>{
+  const module=await import('../src/features/relight/relight-preview') as any;
+  assert.equal(typeof module.encodeRelightDragPreview,'function');
+  const image:Raster={width:2,height:2,rgba:new Uint8Array([10,20,30,0,60,70,80,128,90,100,110,255,240,250,255,254])};
+  const original=image.rgba.slice(),bytes=module.encodeRelightDragPreview(image),decoded=decodePng(bytes);
+  assert.equal(bytes[24],8);assert.equal(bytes[25],6);assert.deepEqual(decoded,image);assert.deepEqual(image.rgba,original);
+  assert.throws(()=>module.encodeRelightDragPreview({width:241,height:1,rgba:new Uint8Array(964)}),/bounded|240/i);
+  assert.throws(()=>module.encodeRelightDragPreview({width:1,height:1,rgba:new Uint16Array(4)}),/8|RGBA/i);
 });

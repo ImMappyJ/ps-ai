@@ -2,14 +2,14 @@ import {UUID,validateGeneration} from '../../src/infrastructure/backends/gateway
 import {GatewayStore,requestFingerprint} from '../persistence/job-store';
 import type {DurableJob} from '../persistence/job-store';
 import type {ImageProvider} from '../providers/contract';
-import {ServiceError} from '../shared/errors';
+import {ServiceError,publicFailureCode} from '../shared/errors';
 import {validateInput,normalizeOutput} from '../shared/images';
 
 export interface JobServiceOptions {dataDir:string;provider:ImageProvider;assumeSrgb?:boolean}
 
 function submissionError(job:DurableJob,error:unknown){
   job.state=error instanceof ServiceError&&!error.outcomeUnknown?'failed':'unknown';
-  if(error instanceof ServiceError&&error.code==='invalid-output')job.code='invalid-output';
+  job.code=error instanceof ServiceError?publicFailureCode(error.code):undefined;
   job.detail=error instanceof ServiceError?error.message:'Platform submission interrupted; retain task ID and do not resubmit';
 }
 
@@ -28,7 +28,7 @@ export async function createJobService(options:JobServiceOptions){
     try{checked=provider.normalizeOutput?provider.normalizeOutput(bytes,job.request,options.assumeSrgb):normalizeOutput(bytes,job.request,options.assumeSrgb);}
     catch{job.state='failed';job.code='invalid-output';job.detail='Platform output failed PNG/color/depth/dimensions/transparency validation; raw result retained on server';await store.save(job);return;}
     // Storage failures are retryable; do not classify them as an invalid paid result.
-    await store.image(job.id,checked);job.state='ready';delete job.detail;await store.save(job);
+    await store.image(job.id,checked);job.state='ready';delete job.detail;delete job.code;await store.save(job);
   }
   async function runInline(job:DurableJob,images:Uint8Array[]){
     try{

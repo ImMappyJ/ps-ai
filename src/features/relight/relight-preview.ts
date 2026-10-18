@@ -1,4 +1,5 @@
 import type {Raster} from '../../imaging/image';
+import Pako from 'pako';
 import {validateRelightScene,type RelightColor,type RelightLight,type RelightScene} from './relight-scene';
 
 export interface RelightPreviewOptions {maxEdge?:number;cancelled?:()=>boolean;yield?:()=>Promise<void>}
@@ -22,7 +23,7 @@ function rgb(color:RelightColor):[number,number,number] {
   return [clamp(red,0,255)/255,clamp(green,0,255)/255,clamp(blue,0,255)/255];
 }
 
-interface Field {light:RelightLight;color:[number,number,number]}
+interface Field {weights:Float32Array;color:[number,number,number];intensity:number}
 function influence(l:RelightLight,x:number,y:number,aspectX:number,aspectY:number):number {
   if(l.type==='directional'){
     // A broad image-plane field expresses bearing. Position/range never supply
@@ -104,25 +105,85 @@ export function prepareRelightPreview(source:Raster,mask:Uint8Array,options:Reli
  * Native buffers are never changed or used as a model input replacement.
  */
 export async function renderRelightPreview(source:Raster,scene:RelightScene,mask:Uint8Array,options:RelightPreviewOptions={}):Promise<Raster> {
-  if(options.yield!==undefined&&typeof options.yield!=='function')throw new Error('Invalid preview yield callback');
-  const {image,mask:coverage}=prepareRelightPreview(source,mask,options),{width,height,rgba}=image;
-  const s=validateRelightScene(scene),check=()=>{if(options.cancelled?.())throw new RelightPreviewAbortError();};
-  const fields:Field[]=s.lights.filter(l=>l.enabled&&l.intensity>0).map(light=>({light,color:rgb(light.color)}));
-  const ambient=rgb({mode:'custom',hex:s.ambient.color}),short=Math.min(width,height),aspectX=width/short,aspectY=height/short;
-  const yieldWork=options.yield??(()=>new Promise<void>(resolve=>setTimeout(resolve,0)));
-  for(let start=0;start<width*height;start+=32768){
-    check();
-    for(let p=start;p<Math.min(start+32768,width*height);p++){
-      const amount=coverage[p]/255;if(amount===0||rgba[p*4+3]===0)continue;
-      const x=(p%width+.5)/width,y=(Math.floor(p/width)+.5)/height;
-      const energy=[ambient[0]*s.ambient.intensity,ambient[1]*s.ambient.intensity,ambient[2]*s.ambient.intensity];
-      for(const field of fields){const weight=influence(field.light,x,y,aspectX,aspectY);for(let c=0;c<3;c++)energy[c]+=field.color[c]*weight;}
-      for(let c=0;c<3;c++){
-        const base=rgba[p*4+c],lit=base+(255-base)*(1-Math.exp(-energy[c]*.65));
-        rgba[p*4+c]=Math.round(base+(lit-base)*amount);
-      }
-    }
-    await yieldWork();check();
+  const renderer=new RelightPreviewRenderer(prepareRelightPreview(source,mask,options));
+  try{return await renderer.render(scene,options);}finally{renderer.clear();}
+}
+const crcTable=Uint32Array.from({length:256},(_,value)=>{for(let bit=0;bit<8;bit++)value=value>>>1^((value&1)?0xedb88320:0);return value>>>0;});
+function previewChunk(kind:string,data:Uint8Array):Uint8Array {
+  const out=new Uint8Array(data.length+12),view=new DataView(out.buffer);view.setUint32(0,data.length);
+  for(let i=0;i<4;i++)out[4+i]=kind.charCodeAt(i);out.set(data,8);let crc=0xffffffff;
+  for(let i=4;i<out.length-4;i++)crc=crc>>>8^crcTable[(crc^out[i])&255];view.setUint32(out.length-4,(crc^0xffffffff)>>>0);return out;
+}
+/** Small UI-only PNG: avoid UPNG's filter/compression search during a gesture. */
+export function encodeRelightDragPreview(image:Raster):Uint8Array {
+  if(!Number.isSafeInteger(image.width)||!Number.isSafeInteger(image.height)||image.width<1||image.height<1||Math.max(image.width,image.height)>240)throw new Error('Drag preview must be bounded to 240 pixels per edge');
+  if(!(image.rgba instanceof Uint8Array)||image.rgba.length!==image.width*image.height*4)throw new Error('Drag preview requires an 8-bit RGBA buffer');
+  const head=new Uint8Array(13),view=new DataView(head.buffer);view.setUint32(0,image.width);view.setUint32(4,image.height);head[8]=8;head[9]=6;
+  const stride=image.width*4+1,scan=new Uint8Array(image.height*stride);
+  for(let y=0;y<image.height;y++)scan.set(image.rgba.subarray(y*image.width*4,(y+1)*image.width*4),y*stride+1);
+  const deflate=Pako.deflate as unknown as (data:Uint8Array,options:{level:0})=>Uint8Array;
+  const chunks=[new Uint8Array([137,80,78,71,13,10,26,10]),previewChunk('IHDR',head),previewChunk('sRGB',new Uint8Array([0])),previewChunk('IDAT',deflate(scan,{level:0})),previewChunk('IEND',new Uint8Array())];
+  const result=new Uint8Array(chunks.reduce((size,chunk)=>size+chunk.length,0));let offset=0;for(const chunk of chunks){result.set(chunk,offset);offset+=chunk.length;}return result;
+}
+
+export interface RelightPreviewRenderStats {renders:number;fieldBuilds:number;fieldCacheHits:number;cancelled:number;cachedBytes:number}
+function geometryKey(light:RelightLight):string {
+  if(light.type==='directional')return JSON.stringify([light.type,light.direction,light.elevation,light.softness]);
+  return JSON.stringify([light.type,light.x,light.y,light.z,light.range,light.softness,...(light.type==='spot'?[light.targetX,light.targetY,light.cone]:[])]);
+}
+/** Owns only small immutable preview buffers and at most one weight map per enabled light. */
+export class RelightPreviewRenderer {
+  private prepared:RelightPreparedPreview;
+  private fields=new Map<string,{key:string;weights:Float32Array}>();private revision=0;
+  private counters={renders:0,fieldBuilds:0,fieldCacheHits:0,cancelled:0};
+  constructor(prepared:RelightPreparedPreview){
+    validRaster(prepared.image);
+    if(Math.max(prepared.image.width,prepared.image.height)>1024||!(prepared.mask instanceof Uint8Array)||prepared.mask.length!==prepared.image.width*prepared.image.height)throw new Error('Renderer requires a bounded prepared preview and matching mask');
+    this.prepared={image:{...prepared.image,rgba:prepared.image.rgba.slice()},mask:prepared.mask.slice()};
   }
-  return {width,height,rgba};
+  get stats():RelightPreviewRenderStats {return {...this.counters,cachedBytes:[...this.fields.values()].reduce((sum,field)=>sum+field.weights.byteLength,0)};}
+  clear():void {this.revision++;this.fields.clear();}
+  async render(scene:RelightScene,options:RelightPreviewOptions={}):Promise<Raster> {
+    if(options.yield!==undefined&&typeof options.yield!=='function')throw new Error('Invalid preview yield callback');
+    if(options.cancelled!==undefined&&typeof options.cancelled!=='function')throw new Error('Invalid preview cancellation callback');
+    const revision=this.revision,s=validateRelightScene(scene),check=()=>{if(revision!==this.revision||options.cancelled?.())throw new RelightPreviewAbortError();};
+    check();this.counters.renders++;
+    const {image,mask:coverage}=this.prepared,{width,height}=image,rgba=image.rgba.slice() as Uint8Array,short=Math.min(width,height),aspectX=width/short,aspectY=height/short;
+    const yieldWork=options.yield??(()=>new Promise<void>(resolve=>setTimeout(resolve,0)));let lastYield=Date.now();
+    const checkpoint=async()=>{
+      check();
+      // A timer is a real host yield, with a nonzero scheduling cost on Windows.
+      // Yield by elapsed CPU budget, rather than once for every tiny fixed chunk.
+      if(options.yield||Date.now()-lastYield>=8){await yieldWork();lastYield=Date.now();check();}
+    };
+    try{
+      const active=s.lights.filter(light=>light.enabled&&light.intensity>0),ids=new Set(active.map(light=>light.id)),fields:Field[]=[];
+      for(const id of this.fields.keys())if(!ids.has(id))this.fields.delete(id);
+      for(const light of active){
+        check();const key=geometryKey(light),cached=this.fields.get(light.id);let weights:Float32Array;
+        if(cached?.key===key){weights=cached.weights;this.counters.fieldCacheHits++;}
+        else {
+          weights=new Float32Array(width*height);const unit={...light,intensity:1};
+          for(let start=0;start<weights.length;start+=8192){
+            for(let p=start;p<Math.min(start+8192,weights.length);p++)if(coverage[p]&&rgba[p*4+3])weights[p]=influence(unit,(p%width+.5)/width,(Math.floor(p/width)+.5)/height,aspectX,aspectY);
+            await checkpoint();
+          }
+          check();this.fields.set(light.id,{key,weights});this.counters.fieldBuilds++;
+        }
+        fields.push({weights,color:rgb(light.color),intensity:light.intensity});
+      }
+      const ambient=rgb({mode:'custom',hex:s.ambient.color}),ar=ambient[0]*s.ambient.intensity,ag=ambient[1]*s.ambient.intensity,ab=ambient[2]*s.ambient.intensity;
+      for(let start=0;start<width*height;start+=8192){
+        for(let p=start;p<Math.min(start+8192,width*height);p++){
+          const amount=coverage[p]/255;if(amount===0||rgba[p*4+3]===0)continue;
+          let er=ar,eg=ag,eb=ab;
+          for(const field of fields){const weight=field.weights[p]*field.intensity;er+=field.color[0]*weight;eg+=field.color[1]*weight;eb+=field.color[2]*weight;}
+          const energy=[er,eg,eb];
+          for(let c=0;c<3;c++){const base=rgba[p*4+c],lit=base+(255-base)*(1-Math.exp(-energy[c]*.65));rgba[p*4+c]=Math.round(base+(lit-base)*amount);}
+        }
+        await checkpoint();
+      }
+      check();return {width,height,rgba};
+    }catch(error){if(error instanceof RelightPreviewAbortError)this.counters.cancelled++;throw error;}
+  }
 }

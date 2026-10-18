@@ -4,6 +4,12 @@ import type {JobRecord} from '../../generation/jobs';
 import {normalizeBaseUrl} from '../config/profile';
 import {GATEWAY_PROTOCOL,UUID,UPLOAD,validateCapabilities,validateGeneration} from './gateway-protocol';
 import type {GatewayCapabilities} from './gateway-protocol';
+import {DiagnosticError} from '../../diagnostics/diagnostics';import type {DiagnosticCode} from '../../diagnostics/diagnostics';
+const PUBLIC_CODES:readonly DiagnosticCode[]=['unreachable','unauthorized','rate-limited','quota-exceeded','timeout','unsupported','invalid-output','image-budget','cancelled','incompatible-api'];
+function publicCode(value:unknown):DiagnosticCode|undefined {
+  const aliases:Record<string,DiagnosticCode>={authentication:'unauthorized','rate-limit':'rate-limited',connection:'unreachable','invalid-input':'unsupported'};
+  return typeof value==='string'?(aliases[value]??(PUBLIC_CODES.includes(value as DiagnosticCode)?value as DiagnosticCode:undefined)):undefined;
+}
 
 export class GatewayClient {
   readonly base:string;
@@ -14,10 +20,10 @@ export class GatewayClient {
     let timer:ReturnType<typeof setTimeout>|undefined;
     try{
       return await Promise.race([
-        (async()=>{const r=await this.transport(this.base+'/psai/v1'+path,{...init,...(this.token?{headers:{...init?.headers,Authorization:`Bearer ${this.token}`}}:{}),redirect:'error',signal:controller?.signal});
-          if(!r.ok){const body=await r.text();throw new HttpError(r.status,`PS-AI gateway ${r.status}: ${body.slice(0,1500)}`);}
+        (async()=>{let r:Response;try{r=await this.transport(this.base+'/psai/v1'+path,{...init,...(this.token?{headers:{...init?.headers,Authorization:`Bearer ${this.token}`}}:{}),redirect:'error',signal:controller?.signal});}catch(error){throw new DiagnosticError((error as Error)?.name==='TypeError'?'unreachable':'unknown','connection',error instanceof Error?error.message:String(error));}
+          if(!r.ok){const body=await r.text();let code:DiagnosticCode|undefined;try{code=publicCode(JSON.parse(body).code);}catch{/* Unstructured HTTP bodies do not establish provider causes. */}if(r.status===413)code='image-budget';throw new HttpError(r.status,`PS-AI gateway ${r.status}: ${body.slice(0,1500)}`,code);}
           return binary?new Uint8Array(await r.arrayBuffer()):await r.json();})(),
-        new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller?.abort();reject(new Error('Gateway request timed out; recover the saved task ID'));},this.timeoutMs);})
+        new Promise<never>((_,reject)=>{timer=setTimeout(()=>{reject(new DiagnosticError('timeout','connection','Gateway request timed out; recover the saved task ID'));controller?.abort();},this.timeoutMs);})
       ]);
     }finally{if(timer)clearTimeout(timer);}
   }
@@ -26,7 +32,7 @@ export class GatewayClient {
     const capabilities=await this.connect();
     if(!capabilities.models.some(m=>m.id===this.model))throw new Error('Gateway model is unavailable');
     if(depth!==8)throw new Error('Gateway supports 8-bit output only');
-    if(!capabilities.configured)throw new Error(capabilities.provider==='bailian'?'百炼服务未配置 DASHSCOPE_API_KEY；请在服务端设置后重启':capabilities.provider==='gemini'?'Gemini 服务未配置 GEMINI_API_KEY；请在服务端设置后重启':capabilities.provider==='openai'?'OpenAI 服务未配置 OPENAI_API_KEY；请在服务端设置后重启':'平台服务未配置 API Key；请在服务端设置后重启');
+    if(!capabilities.configured)throw new DiagnosticError('unauthorized','connection',capabilities.provider==='bailian'?'百炼服务未配置 DASHSCOPE_API_KEY；请在服务端设置后重启':capabilities.provider==='gemini'?'Gemini 服务未配置 GEMINI_API_KEY；请在服务端设置后重启':capabilities.provider==='openai'?'OpenAI 服务未配置 OPENAI_API_KEY；请在服务端设置后重启':'平台服务未配置 API Key；请在服务端设置后重启');
     return {stats:{protocol:GATEWAY_PROTOCOL,provider:capabilities.provider},nodeInfo:{},capabilities};
   }
   async upload(bytes:Uint8Array,name:string):Promise<string>{
@@ -45,7 +51,7 @@ export class GatewayClient {
     const r=await this.request(`/jobs/${id}`);
     if(!['queued','running','ready','failed','cancelled','unknown'].includes(r.state))throw new Error('Invalid gateway job state');
     if(r.state==='ready'&&(!Array.isArray(r.images)||r.images.length!==1||r.images[0].filename!==`${id}.png`||r.images[0].subfolder!==''||r.images[0].type!=='output'))throw new Error('Invalid gateway output record');
-    return {state:r.state,...(r.state==='ready'?{images:r.images}:{}),...(typeof r.detail==='string'?{detail:r.detail.slice(0,1500)}:{}),...(r.code==='invalid-output'?{code:r.code}:{})};
+    const code=publicCode(r.code);return {state:r.state,...(r.state==='ready'?{images:r.images}:{}),...(typeof r.detail==='string'?{detail:r.detail.slice(0,1500)}:{}),...(code?{code}:{})};
   }
   async output(file:OutputFile):Promise<Uint8Array>{
     if(file.type!=='output'||file.subfolder!==''||!file.filename.endsWith('.png')||!UUID.test(file.filename.slice(0,-4)))throw new Error('Invalid gateway output file');

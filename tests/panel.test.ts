@@ -95,11 +95,11 @@ test('a different source file fails color resolution before any upload or infere
 
 test('修正参数重新生成后清除上次诊断，新的失败仍显示详情',async()=>{
   const h=await panelHarness();try{
-    await h.wait();h.click('tab-t2i');h.el('count').value='0';h.click('generate');await h.wait();
+    await h.wait();h.click('nav-create');h.click('tab-t2i');h.el('count').value='0';h.click('generate');await h.wait();
     assert.equal(h.el('diagnostic-box').style.display,'block');
     h.el('count').value='1';h.click('generate');await h.wait();
     assert.equal(h.records()[0].state,'ready');assert.equal(h.el('diagnostic-box').style.display,'none');
-    h.el('count').value='0';h.click('generate');await h.wait();assert.equal(h.el('diagnostic-box').style.display,'block');
+    h.click('nav-create');h.el('count').value='0';h.click('generate');await h.wait();assert.equal(h.el('diagnostic-box').style.display,'block');
   }finally{await h.close();}
 });
 
@@ -113,9 +113,9 @@ test('复用16位历史后切换语言保留本次输出位深，不用旧偏好
   }finally{await h.close();}
 });
 
-test('连接失败可展开详情；修正地址并成功检查后清除旧错误',async()=>{
+test('连接失败直接复制技术详情；成功检查后清除对应旧错误',async()=>{
   const h=await panelHarness();try{await h.wait();h.el('backend-url').value='http://offline.invalid:9999';h.click('connect');await h.wait();assert.equal(h.el('diagnostic-box').style.display,'block');
-    h.click('toggle-error-details');await h.wait();assert.equal(h.el('diagnostic-details').style.display,'block');assert.equal(h.el('diagnostic-box').style.display,'block');
+    h.click('toggle-error-details');await h.wait();assert.equal(h.el('diagnostic-details').style.display,'none');assert.equal(h.clipboardWrites.length,1);assert.equal(JSON.parse(h.clipboardWrites[0]).code,'unreachable');assert.equal(h.el('diagnostic-box').style.display,'block');
     h.el('backend-url').value='http://localhost:8188';h.click('connect');await h.wait();assert.equal(h.el('connection').textContent,'已连接');assert.equal(h.el('diagnostic-box').style.display,'none');
   }finally{await h.close();}
 });
@@ -155,15 +155,15 @@ test('已有有效配置进入主界面；重新打开向导也不提交任务',
 });
 test('连接失败不覆盖有效设置，显示下一步和可复制详情',async()=>{
   const h=await panelHarness({settings:defaultSettings()});try{
-    h.el('backend-url').value='http://offline.invalid:9999';h.click('setup-connect');await h.wait();
+    h.click('open-setup');await h.wait();h.el('backend-url').value='http://offline.invalid:9999';h.click('setup-connect');await h.wait();
     assert.equal(JSON.parse(String(h.files['settings.json'])).baseUrl,'http://localhost:8188');assert.equal(h.posts.length,0);
-    assert.match(h.el('diagnostic-summary').textContent,/后端|地址|端口/);assert.equal(h.el('diagnostic-details').style.display,'none');h.click('toggle-error-details');assert.match(h.el('diagnostic-details').value,/unreachable/);
+    assert.match(h.el('diagnostic-title').textContent,/后端/);assert.match(h.el('diagnostic-action').textContent,/地址|端口/);assert.equal(h.el('diagnostic-details').style.display,'none');h.click('toggle-error-details');assert.match(h.el('diagnostic-details').value,/unreachable/);
   }finally{await h.close();}
 });
 test('英文向导和诊断给出操作建议，未知异常不猜测内存不足',async()=>{
   const h=await panelHarness({settings:{...defaultSettings(),language:'en-US'}});try{
     h.click('open-setup');await h.wait();assert.match(h.el('setup-step').textContent,/setup/i);assert.doesNotMatch(h.el('setup-help').textContent,/[一-龥]/);
-    h.el('backend-url').value='http://offline.invalid:9999';h.click('setup-connect');await h.wait();assert.doesNotMatch(h.el('diagnostic-summary').textContent,/[一-龥]/);assert.match(h.el('diagnostic-summary').textContent,/port|address/i);
+    h.el('backend-url').value='http://offline.invalid:9999';h.click('setup-connect');await h.wait();assert.doesNotMatch(h.el('diagnostic-summary').textContent,/[一-龥]/);assert.match(h.el('diagnostic-action').textContent,/port|address/i);
   }finally{await h.close();}
 });
 
@@ -189,7 +189,7 @@ test('英文界面翻译进度与宿主错误，保留用户提示词和参考�
 });
 test('单独切换语言保留已连接状态和未保存的地址草稿',async()=>{
   const h=await panelHarness();try{
-    assert.equal(h.el('connection').textContent,'已连接');h.el('backend-url').value='http://localhost:8199';h.el('language').value='en-US';h.change('language');await h.wait();
+    h.click('connect');await h.wait();assert.equal(h.el('connection').textContent,'已连接');h.el('backend-url').value='http://localhost:8199';h.el('language').value='en-US';h.change('language');await h.wait();
     assert.equal(h.el('connection').textContent,'Connected');assert.equal(h.el('backend-url').value,'http://localhost:8199');assert.equal(JSON.parse(String(h.files['settings.json'])).baseUrl,'http://localhost:8188');
   }finally{await h.close();}
 });
