@@ -46,6 +46,14 @@ function sameBinding(a:RelightSource,b:RelightSource):boolean {
 
 /** The native-depth clean capture never becomes an illustration or a mutable UI buffer. */
 export class RelightSession {
+  /** Stage a fresh session before a native exclusion commits, retaining one capture clone. */
+  static stageCreation(capture:Capture,snapshotId:string,lightId:string,scope:RelightScope='selection'):{session:RelightSession;commit(historyId:number):RelightSession} {
+    const session=new RelightSession(capture,snapshotId,lightId,scope);
+    return {session,commit:historyId=>{
+      const scene=session.editor.snapshot(),editor=new RelightEditor({...scene,source:{...scene.source,historyId}});
+      session.captured.snapshot.historyId=historyId;session.editor=editor;return session;
+    }};
+  }
   editor:RelightEditor;
   private captured:Capture;
   private snapshots=new Set<string>();

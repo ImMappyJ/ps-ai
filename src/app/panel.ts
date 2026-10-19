@@ -72,6 +72,7 @@ let promptKind:'ordinary'|'blend'='ordinary';
 const promptDrafts={ordinary:'',blend:''};
 const relightDrafts=new RelightDraftStore(store);
 let relightWorkbench:RelightWorkbench|undefined,relightSession:RelightSession|undefined,relightMargin=.15,relightReuse:RelightScene|undefined,relightReuseDescription:string|undefined;
+let relightInitialRecoveryDocument:number|undefined;
 let clearConfirmation:{ids:readonly string[];revision:number;signature:string;unresolved:number}|undefined;
 let cleanupStatus:HistoryCleanupStatus|undefined,historyNotice='',lastHistoryFocus:string|undefined;
 let pendingDetailReveal=false,historyRevealTimer:ReturnType<typeof setTimeout>|undefined;
@@ -178,7 +179,7 @@ function renderLanguage(){
   const mode=el('mode').value;el('mode').innerHTML='';for(const [id,label] of modes[workspace])option(el('mode'),id,label);el('mode').value=mode;
   for(const name of Object.keys(foldLabels))fold(name,el(`${name}-body`).style.display!=='none');
   const index=el('candidate-select').value;el('candidate-select').innerHTML='';candidates.forEach((c,i)=>option(el('candidate-select'),String(i),t('候选 {0} · {1}×{2}',i+1,c.image.width,c.image.height)));if(candidates.length)el('candidate-select').value=index;
-  el('zoom').textContent=zoomed?t('适应预览'):t('100% 查看');inputUi();renderSetup();candidateUi();
+  el('zoom').textContent=zoomed?t('适应预览'):t('100% 查看');inputUi();renderSetup();candidateUi();renderInitialRelightRecovery();
 }
 function selected():Candidate {const c=candidates[Number(el('candidate-select').value)];if(!c)throw new Error(t("请先生成或读取一个候选"));return c;}
 async function guarded(action:(operation:OperationContext)=>Promise<void>,options:Partial<Pick<OperationContext,'page'|'feature'|'stage'>>={}){
@@ -312,10 +313,18 @@ function relightSourceState(session:RelightSession):'current'|'changed'|'closed'
   if(activeDocumentId()!==s.documentId||doc.width!==s.width||doc.height!==s.height||doc.mode!==s.mode||doc.bitsPerChannel!==s.depth||doc.colorProfileName!==s.profile||relightScope()!==session.scope||Number(el('margin').value)/100!==relightMargin)return 'rebind-required';
   return adapter.sourceAvailability(s,true)==='current'?'current':adapter.hasVisibleApplication(s.documentId)?'applied-results':'changed';
 }
+function assertCleanRelightSource(documentId:number|undefined):void {
+  if(documentId!==undefined&&adapter.hasVisibleApplication(documentId))throw new DiagnosticError('source-changed','capture',t('来源中仍有已应用的 PS-AI 结果；请点击“排除已应用结果并重新读取”，或在 Photoshop 中撤销或隐藏这些结果。布光和可导出候选已保留。'));
+}
+function renderInitialRelightRecovery():void {
+  const button=el('open-relight'),key=relightInitialRecoveryDocument===undefined?'打开布光工作台':'排除已应用结果并重新读取';
+  button.setAttribute('data-i18n',key);button.textContent=t(key)+(relightInitialRecoveryDocument===undefined?'':` · ${relightInitialRecoveryDocument}`);
+  el('relight-initial-recovery-info').style.display=relightInitialRecoveryDocument===undefined?'none':'block';
+}
 async function rereadRelight(session:RelightSession,rebind=false,explicit=true,excludeResults=false):Promise<void>{
   await configure(async()=>{
     const bound=session.sourceCapture.snapshot,targetId=rebind?activeDocumentId():bound.documentId;
-    if(!excludeResults&&targetId!==undefined&&adapter.hasVisibleApplication(targetId))throw new DiagnosticError('source-changed','capture',t('来源中仍有已应用的 PS-AI 结果；请点击“隐藏 PS-AI 结果并重新读取”，或在 Photoshop 中撤销或隐藏这些结果。布光和可导出候选已保留。'));
+    if(!excludeResults)assertCleanRelightSource(targetId);
     if(!explicit&&relightSourceState(session)!=='changed')return;
     const scope=explicit?relightScope():session.scope;let commit:((historyId?:number)=>void)|undefined;
     const fresh=await captureRelight(targetId,scope,session.outputKind,excludeResults,captured=>{commit=session.stageRebind(captured,uuid(),scope);});
@@ -325,19 +334,28 @@ async function rereadRelight(session:RelightSession,rebind=false,explicit=true,e
 }
 function candidateById(id:string):Candidate {const candidate=candidates.find(c=>c.job.id===id);if(!candidate)throw new Error(t('此 AI 结果已离开内存，请从历史重新读取后应用'));return candidate;}
 async function exportCandidate(id:string):Promise<void>{if(busy)throw new Error(t('已有任务正在进行，请等待完成后再生成或应用；可以继续编辑布光'));await configure(async()=>{const c=candidateById(id),file=await uxp.storage.localFileSystem.getFileForSaving(`ps-ai-${c.job.id.slice(0,8)}.png`,{types:['png']});if(file)await file.write(new Uint8Array(c.bytes).buffer,{format:uxp.storage.formats.binary});});}
-export async function openRelightWorkbench(reuse?:RelightScene,description?:string):Promise<void>{
+export async function openRelightWorkbench(reuse?:RelightScene,description?:string,excludeDocumentId?:number):Promise<void>{
   if(relightWorkbench&&relightSession&&!reuse&&description===undefined){
     relightWorkbench.setSourceInvalid(relightSourceState(relightSession)!=='current');relightWorkbench.setScopePending(relightScope()!==relightSession.scope);relightWorkbench.show();return;
   }
   if(typeof el('relight-dialog')?.uxpShowModal!=='function')throw new Error(t('当前宿主无法打开布光对话框，请使用 Photoshop 27+ 并重新加载开发插件'));
   if(busy)throw new Error(t('请等待当前任务结束后重新读取原图'));
+  const targetId=activeDocumentId();
+  if(excludeDocumentId!==undefined&&excludeDocumentId!==targetId){relightInitialRecoveryDocument=undefined;renderInitialRelightRecovery();throw new Error(t('活动文档已切换，请在来源文档重新生成'));}
+  if(excludeDocumentId===undefined)try{assertCleanRelightSource(targetId);}catch(error){
+    if(relightWorkbench&&relightSession)relightWorkbench.showSourceRecovery(targetId!==relightSession.sourceCapture.snapshot.documentId,error instanceof Error?error.message:String(error));
+    else {relightInitialRecoveryDocument=targetId;renderInitialRelightRecovery();}
+    throw error;
+  }
   lock(true);
   try {
-    if(activeOperation)activeOperation.stage='capture';const scope=relightScope(),fresh=await captureRelight(undefined,scope);relightMargin=Number(el('margin').value)/100;
-    relightSession=new RelightSession(fresh,uuid(),uuid(),scope);
-    if(reuse)relightSession.restore(reuse,true);
-    if(description!==undefined)relightSession.editor.updateScene({supplement:description});
-    const session=relightSession;
+    if(activeOperation)activeOperation.stage='capture';const scope=relightScope();let staged:ReturnType<typeof RelightSession.stageCreation>|undefined;
+    const fresh=await captureRelight(targetId,scope,'lighting-layers',excludeDocumentId!==undefined,captured=>{
+      staged=RelightSession.stageCreation(captured,uuid(),uuid(),scope);
+      if(reuse)staged.session.restore(reuse,true);
+      if(description!==undefined)staged.session.editor.updateScene({supplement:description});
+    });
+    const session=staged!.commit(fresh.snapshot.historyId);relightSession=session;relightMargin=Number(el('margin').value)/100;relightInitialRecoveryDocument=undefined;renderInitialRelightRecovery();
     relightWorkbench=new RelightWorkbench(el('relight-dialog'),session,{
       uuid,save:scene=>relightDrafts.save(scene),loadDraft:()=>relightDrafts.load(),busy:()=>busy,reportError:error=>{if(!reportedRelightErrors.has(error))void guarded(async()=>{throw error;},{page:'create',feature:'relight',stage:'capture'});},
       sourceState:()=>relightSourceState(session),observeSource:invalidate=>observeRelightSource(ps.action,()=>{if(relightSourceState(session)!=='current')invalidate();},()=>void store.trace('relight.source-notifications.unavailable')),
@@ -769,7 +787,7 @@ on('protect',()=>configure(async()=>{protection=await adapter.protection();captu
 on('clear-protection',()=>configure(async()=>{protection=undefined;capture=undefined;el('selection-previews').style.display='none';sourceCaption.show('保护区已清除，请重新捕获');}));
 on('reference',()=>configure(async()=>{const file=await uxp.storage.localFileSystem.getFileForOpening({types:['png','jpg','jpeg','webp']});if(!file)return;reference=await adapter.importReference(file,retainedImageBytes(true));el('reference-info').textContent=`${file.name} · ${reference.width}×${reference.height} · sRGB 8-bit`;}));
 on('clear-reference',async()=>{reference=undefined;el('reference-info').setAttribute('data-i18n','未选择参考图');el('reference-info').textContent=t("未选择参考图");});
-on('open-relight',()=>openRelightWorkbench());
+on('open-relight',()=>openRelightWorkbench(undefined,undefined,relightInitialRecoveryDocument));
 on('relight-reuse-history',()=>openRelightWorkbench(relightReuse,relightReuseDescription));
 el('relight-scope').addEventListener('change',()=>{if(relightSession)relightWorkbench?.setScopePending(relightScope()!==relightSession.scope);});
 el('remember-source-access').addEventListener('change',()=>void guarded(async()=>{const operation=++sourceAccessOperation,notice=sourceAccessNotice;await sourceColorReader.setRemember(!!el('remember-source-access').checked);if(operation!==sourceAccessOperation)return;el('remember-source-access').checked=sourceColorReader.remember;if(notice===sourceAccessNotice)sourceAccessStatus(sourceColorReader.remember?'已开启记住原图文件授权；仍会重新检查文件内容和颜色声明':'已关闭记住原图文件授权；已移除保存的授权，本次会话访问仍可使用');}));

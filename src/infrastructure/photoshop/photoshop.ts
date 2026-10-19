@@ -227,8 +227,8 @@ export class PhotoshopAdapter {
       try {
       const results=options.excludeApplications?this.visibleApplications(doc):[];
       if(results.length){
-        exclusion=await context.hostControl.suspendHistory({documentID:doc.id,name:'PS-AI 隐藏已应用结果并重新读取'});exclusionPending=true;
-        for(const layer of results)layer.visible=false;
+        exclusion=await context.hostControl.suspendHistory({documentID:doc.id,name:'PS-AI 排除已应用结果并重新读取'});exclusionPending=true;
+        for(const layer of results)layer.opacity=0;
         state=this.sourceState(doc);
       }
       const guard=()=>{if(context.isCancelled)throw new DiagnosticError('cancelled','capture','原图读取已取消');if(state!==this.sourceState(doc)||!whole&&selectionState!==JSON.stringify(doc.selection.bounds))throw new Error('来源或选区已改变，请重新读取原图；原有布光配置已保留');};
@@ -281,7 +281,7 @@ export class PhotoshopAdapter {
         let hash=2166136261;for(const v of image.rgba)hash=Math.imul(hash^v,16777619);
         const clipBaseLayerId=editAnalysis?nativeScan?.clipBaseLayerId:background||analysis?undefined:await this.captureClippingBase(doc,bounds,image,mask);
         const sourceLayerIds:number[]=[];
-        const visible=(layers:any[])=>{for(const layer of Array.from(layers)){if(layer.visible===false)continue;if(Number.isSafeInteger(layer.id)&&layer.id>0)sourceLayerIds.push(layer.id);if(layer.layers)visible(layer.layers);}};
+        const visible=(layers:any[])=>{for(const layer of Array.from(layers)){if(layer.visible===false||layer.opacity===0)continue;if(Number.isSafeInteger(layer.id)&&layer.id>0)sourceLayerIds.push(layer.id);if(layer.layers)visible(layer.layers);}};
         visible(doc.layers);
         const snapshot:Snapshot={documentId:doc.id,width:doc.width,height:doc.height,profile:doc.colorProfileName,mode:doc.mode,depth:doc.bitsPerChannel,nativeDepth:doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,historyId:doc.activeHistoryState.id,sessionId:this.sessionId,bounds,mask,sourceHash:(hash>>>0).toString(16),sourceLayerIds,...(memory?{captureGeometry:{kind:editAnalysis?'edit-analysis' as const:'relight-analysis' as const,width:memory.width,height:memory.height}}:{}),...(editAnalysis?{requiresClipping:nativeScan!.requiresClipping}:{}),...(clipBaseLayerId===undefined?{}:{clipBaseLayerId}),...(color?.reason?{colorReason:color.reason}:{}),...(background?{backgroundComposite:'subject-background-v1' as const}:{})};
         const captured:Capture={snapshot,image,selectionMask,protectionMask,...(typeof doc.name==='string'?{documentName:doc.name}:{}),...(subjectMask?{subjectMask}:{}),...(copy?{workingCopyOf:original.id}:{})};
@@ -365,7 +365,7 @@ export class PhotoshopAdapter {
     const documentId=doc.id;
     const owned=new Set([...this.applications.values()].filter(a=>a.documentId===documentId).map(a=>a.layerId));
     const found:any[]=[];
-    const visible=(layers:any[])=>{for(const layer of Array.from(layers)){if(layer.visible===false)continue;if(owned.has(layer.id))found.push(layer);else if(layer.layers)visible(layer.layers);}};
+    const visible=(layers:any[])=>{for(const layer of Array.from(layers)){if(layer.visible===false||layer.opacity===0)continue;if(owned.has(layer.id))found.push(layer);else if(layer.layers)visible(layer.layers);}};
     visible(doc.layers);return found;
   }
   private sourceIdentity(s:Omit<Snapshot,'mask'>):string {return JSON.stringify([s.documentId,s.width,s.height,s.profile,s.mode,s.depth,s.historyId,s.sessionId,s.bounds,s.sourceHash,s.captureGeometry,s.nativeDepth,s.requiresClipping,s.clipBaseLayerId,s.backgroundComposite]);}
