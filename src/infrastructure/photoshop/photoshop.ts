@@ -9,7 +9,7 @@ import {validateRelightLayerFields,renderRelightLayerStrip,type RelightLayerFiel
 import {sha256} from '@noble/hashes/sha2.js';
 export interface Snapshot {documentId:number;width:number;height:number;profile:string;mode:string;depth:unknown;nativeDepth?:8|16;historyId:number;sessionId:string;bounds:Bounds;mask:Uint8Array;sourceHash:string;sourceLayerIds?:number[];clipBaseLayerId?:number;requiresClipping?:boolean;colorReason?:SourceColorReason;backgroundComposite?:'subject-background-v1';captureGeometry?:{kind:'relight-analysis'|'edit-analysis';width:number;height:number}}
 export interface Capture {snapshot:Snapshot;image:Raster;selectionMask:Uint8Array;protectionMask:Uint8Array;subjectMask?:Uint8Array;workingCopyOf?:number;documentName?:string}
-export interface CaptureOptions {context?:'selection'|'document';selection?:'edit'|'subject-background'|'document';preserveNativeDepth?:boolean;purpose?:'relight-analysis';analysisResolution?:number;retainedBytes?:number;excludeApplications?:boolean}
+export interface CaptureOptions {context?:'selection'|'document';selection?:'edit'|'subject-background'|'document';preserveNativeDepth?:boolean;purpose?:'relight-analysis'|'selection-asset';analysisResolution?:number;retainedBytes?:number;excludeApplications?:boolean}
 export interface EditAnalysisApplyOptions {preserveAlpha:boolean;assetContext?:'selection-v1';subjectMask?:Uint8Array;protectionMask?:Uint8Array;signal?:AbortSignal;onProgress?:(done:number,total:number)=>void;retainedBytes?:number}
 export interface Protection {documentId:number;width:number;height:number;bounds:Bounds;mask:Uint8Array;sessionId:string}
 /** Geometry only: restoring it grants no permission to apply an old candidate. */
@@ -278,8 +278,9 @@ export class PhotoshopAdapter {
   }
   async capture(margin=.15,protection?:Protection,expectedDocumentId=this.activeDocument()?.id,outputDepth:8|16=8,options:CaptureOptions={},beforeCommit?:(capture:Capture)=>void):Promise<Capture> {
     if(!Number.isFinite(margin)||margin<0||margin>1)throw new Error('上下文边距无效');
-    if(!options||typeof options!=='object'||Array.isArray(options)||Object.keys(options).some(k=>!['context','selection','preserveNativeDepth','purpose','analysisResolution','retainedBytes','excludeApplications'].includes(k))||options.context!==undefined&&!['selection','document'].includes(options.context)||options.selection!==undefined&&!['edit','subject-background','document'].includes(options.selection)||options.selection==='document'&&options.context==='selection'||options.preserveNativeDepth!==undefined&&typeof options.preserveNativeDepth!=='boolean'||options.purpose!==undefined&&options.purpose!=='relight-analysis'||options.purpose==='relight-analysis'&&options.selection==='subject-background'||options.analysisResolution!==undefined&&(!Number.isInteger(options.analysisResolution)||options.analysisResolution<32||options.analysisResolution>2048||options.analysisResolution%32)||options.retainedBytes!==undefined&&(!Number.isSafeInteger(options.retainedBytes)||options.retainedBytes<0)||options.excludeApplications!==undefined&&typeof options.excludeApplications!=='boolean'||![8,16].includes(outputDepth))throw new Error('捕获策略无效');
-    const analysis=options.purpose==='relight-analysis';
+    if(!options||typeof options!=='object'||Array.isArray(options)||Object.keys(options).some(k=>!['context','selection','preserveNativeDepth','purpose','analysisResolution','retainedBytes','excludeApplications'].includes(k))||options.context!==undefined&&!['selection','document'].includes(options.context)||options.selection!==undefined&&!['edit','subject-background','document'].includes(options.selection)||options.selection==='document'&&options.context==='selection'||options.preserveNativeDepth!==undefined&&typeof options.preserveNativeDepth!=='boolean'||options.purpose!==undefined&&!['relight-analysis','selection-asset'].includes(options.purpose)||options.purpose==='relight-analysis'&&options.selection==='subject-background'||options.analysisResolution!==undefined&&(!Number.isInteger(options.analysisResolution)||options.analysisResolution<32||options.analysisResolution>2048||options.analysisResolution%32)||options.retainedBytes!==undefined&&(!Number.isSafeInteger(options.retainedBytes)||options.retainedBytes<0)||options.excludeApplications!==undefined&&typeof options.excludeApplications!=='boolean'||![8,16].includes(outputDepth))throw new Error('捕获策略无效');
+    const analysis=options.purpose==='relight-analysis',asset=options.purpose==='selection-asset';
+    if(asset&&(options.selection!==undefined&&options.selection!=='edit'||options.context==='document'||options.preserveNativeDepth===false))throw new Error('捕获策略无效');
     const background=options.selection==='subject-background',whole=options.selection==='document',fullContext=background||whole||options.context==='document';
     await this.checkpoint('capture.start');
     const expected=this.document();
@@ -335,7 +336,7 @@ export class PhotoshopAdapter {
           await this.checkpoint('capture.pixels.getData');
           // The background matte must see native alpha, even for an 8-bit
           // provider: 65534 must not round up to an opaque, protected core.
-          const captureDepth=options.preserveNativeDepth||bounded?(doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8):background&&doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:outputDepth;
+          const captureDepth=asset||options.preserveNativeDepth||bounded?(doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8):background&&doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:outputDepth;
           const read=await this.rgbData(data,captureDepth);
           image=memory?mapCaptureRaster(read,result.sourceBounds,bounds,result.level??0,memory.width,memory.height,editAnalysis?IMAGE_BUDGETS.editPixels:IMAGE_BUDGETS.analysisPixels):expandPixels(read,result.sourceBounds,bounds,result.level??0);
         } finally {data.dispose();await this.checkpoint('capture.pixels.disposed');}
@@ -351,7 +352,7 @@ export class PhotoshopAdapter {
         if(background&&!mask.some(v=>v>0))throw new Error('编辑范围完全被保护区覆盖或没有可替换背景');
         if(!background&&fullContext&&!whole){const contextMask=bounded?downsampleSnapshotMask({bounds,mask:selectionMask},image.width,image.height):selectionMask;if(!contextMask.some((s,p)=>s===0&&image.rgba[p*4+3]>=16*rasterMax(image)/255))throw new Error('主体选区外没有可见环境，请保留可见背景作为溶图参考');}
         const visibleMask=bounded?downsampleSnapshotMask({bounds,mask},image.width,image.height):mask;
-        if(!background&&(options.preserveNativeDepth||analysis)&&!visibleMask.some((v,p)=>v>0&&image.rgba[p*4+3]>0))throw new Error('作用区域没有可见像素，请选择可见内容后重新读取原图');
+        if(!background&&!asset&&(options.preserveNativeDepth||analysis)&&!visibleMask.some((v,p)=>v>0&&image.rgba[p*4+3]>0))throw new Error('作用区域没有可见像素，请选择可见内容后重新读取原图');
         let hash=2166136261;for(const v of image.rgba)hash=Math.imul(hash^v,16777619);
         const clipBaseLayerId=editAnalysis?nativeScan?.clipBaseLayerId:background||analysis?undefined:await this.captureClippingBase(doc,bounds,image,mask);
         const sourceLayerIds:number[]=[];

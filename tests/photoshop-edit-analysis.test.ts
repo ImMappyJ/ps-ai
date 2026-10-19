@@ -219,3 +219,62 @@ test('8-bit asset strips use native offsets, premultiplied sampling and one 16-b
   const mask=h.calls.find(c=>c[0]==='mask')[1];assert.deepEqual(mask.targetBounds,{left:12,top:21});assert.deepEqual([...await mask.imageData.getData()],[0,16448,32896,65535]);
   assert.equal(h.calls.some(c=>c[0]==='pixels'),false);
 });
+
+for(const depth of [8,16] as const)test(`selection-asset purpose captures native${depth} transparent editable pixels with visible context or a transparent source`,async()=>{
+  for(const allTransparent of [false,true]){
+    const h=host(8,4,depth),selection={left:2,top:1,right:6,bottom:3};h.doc.selection.bounds=selection;
+    h.selected((x,y)=>x>=2&&x<6&&y>=1&&y<3?[64,128,255,255][x-2]:0);
+    h.alpha((x,y)=>allTransparent||x>=2&&x<6&&y>=1&&y<3?0:h.max);
+    const protection={documentId:7,sessionId:'s',width:8,height:4,bounds:{left:2,top:1,right:4,bottom:3},mask:new Uint8Array(4).fill(128)};
+    const before={history:h.doc.activeHistoryState.id,layers:[...h.doc.layers],selection:{...h.doc.selection.bounds}};
+    const capture=await h.adapter.capture(.5,protection,7,8,{purpose:'selection-asset',preserveNativeDepth:true} as any);
+    assert.deepEqual(capture.snapshot.bounds,{left:0,top:0,right:8,bottom:4});
+    assert.equal(capture.snapshot.nativeDepth,depth);assert.equal(capture.image.rgba instanceof Uint16Array,depth===16);
+    assert.equal(capture.image.rgba[0],depth===16?12345:48,'native source precision is not reduced to model depth');
+    assert.deepEqual([...capture.snapshot.mask.subarray(10,14)],[32,64,255,255]);
+    assert.deepEqual([...capture.selectionMask.subarray(10,14)],[64,128,255,255]);
+    assert.deepEqual([...capture.protectionMask.subarray(10,14)],[128,128,0,0]);
+    assert.equal(capture.image.rgba[(1*8+2)*4+3],0);assert.equal(capture.image.rgba[3],allTransparent?0:h.max);
+    assert.deepEqual({history:h.doc.activeHistoryState.id,layers:h.doc.layers,selection:h.doc.selection.bounds},before);
+    assert.ok(h.resources.every(r=>r.disposed));
+  }
+});
+
+test('selection-asset purpose itself freezes native depth while old visibility and ordinary capture rules remain',async()=>{
+  const h=host(8,4,16);h.alpha(()=>0);
+  const marked=await h.adapter.capture(0,undefined,7,8,{purpose:'selection-asset'} as any);
+  assert.equal(marked.image.rgba instanceof Uint16Array,true);
+  for(const options of [{preserveNativeDepth:true},{purpose:'relight-analysis',preserveNativeDepth:true}])await assert.rejects(h.adapter.capture(0,undefined,7,8,options as any),/可见像素/);
+  const ordinary=await h.adapter.capture(0,undefined,7,8);
+  assert.equal(ordinary.image.rgba instanceof Uint8Array,true,'unmarked small capture keeps its model-depth representation');
+  assert.equal(ordinary.image.rgba[3],0);assert.ok(h.resources.every(r=>r.disposed));
+});
+
+test('selection-asset capture retains selection, protection, ICC, history and cancellation guards',async()=>{
+  for(const failure of ['selection','protection','ICC','history','cancel']){
+    const h=host(8,4,16);h.alpha(()=>0);let protection:any;
+    if(failure==='selection')h.doc.selection.bounds=null;
+    if(failure==='protection')protection={documentId:7,sessionId:'s',width:8,height:4,bounds:{left:0,top:0,right:8,bottom:4},mask:new Uint8Array(32).fill(255)};
+    if(failure==='ICC')h.doc.colorProfileName='';
+    if(failure==='history'||failure==='cancel'){const read=h.ps.imaging.getPixels;h.ps.imaging.getPixels=async(o:any)=>{const result=await read(o);if(failure==='history')h.doc.activeHistoryState.id++;else h.context.isCancelled=true;return result;};}
+    await assert.rejects(h.adapter.capture(0,protection,7,8,{purpose:'selection-asset',preserveNativeDepth:true}),failure==='selection'?/选区/:failure==='protection'?/保护/:failure==='ICC'?/色彩|配置文件|来源/:failure==='history'?/改变/:/取消/);
+    assert.deepEqual(h.doc.layers,[h.original]);assert.ok(h.resources.every(r=>r.disposed));
+  }
+});
+
+test('invalid selection-asset purpose combinations reject before host reads',async()=>{
+  for(const patch of [{purpose:'selection-asset-v2'},{selection:'document'},{selection:'subject-background'},{context:'document'},{preserveNativeDepth:false}]){
+    const h=host(8,4,16);
+    await assert.rejects(h.adapter.capture(0,undefined,7,8,{purpose:'selection-asset',...patch} as any),/捕获策略/);
+    assert.equal(h.calls.length,0);assert.equal(h.resources.length,0);
+  }
+});
+
+test('large selection-asset capture keeps edit-analysis geometry and native masks for an entirely transparent source',async()=>{
+  const h=host(6000,3000,16);h.alpha(()=>0);
+  const c=await h.adapter.capture(0,undefined,7,8,{purpose:'selection-asset',preserveNativeDepth:true,analysisResolution:32} as any);
+  assert.equal(c.snapshot.captureGeometry?.kind,'edit-analysis');assert.equal(c.snapshot.mask.length,18_000_000);
+  assert.equal(c.snapshot.mask[17_999_999],128);assert.equal(c.image.rgba instanceof Uint16Array,true);
+  assert.equal(c.snapshot.requiresClipping,false);assert.equal(c.snapshot.clipBaseLayerId,undefined);
+  assert.ok(h.resources.every(r=>r.disposed));
+});
