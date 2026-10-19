@@ -1,11 +1,11 @@
 {
   "name": "ps-ai",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "type": "module",
   "description": "PS-AI — Photoshop local Qwen-Image 2.1 editing panel",
   "scripts": {
-    "test": "node --import tsx --test --test-timeout=15000 tests/*.test.ts",
+    "test": "node --import tsx --test --test-concurrency=4 --test-timeout=15000 tests/*.test.ts",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && node scripts/build.mjs",
     "p0": "node --import tsx scripts/p0-live.ts",

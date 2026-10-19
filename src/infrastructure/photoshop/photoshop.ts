@@ -107,10 +107,16 @@ export class PhotoshopAdapter {
     (analysis?checkDocumentSize:checkSize)(bounds.right-bounds.left,bounds.bottom-bounds.top);return bounds;
   }
   private async maskStrips(doc:any,bounds:Bounds,guard:()=>void):Promise<Uint8Array> {
-    const width=bounds.right-bounds.left,out=new Uint8Array(width*(bounds.bottom-bounds.top));
+    guard();const selection=this.bounds(doc,true),width=bounds.right-bounds.left,out=new Uint8Array(width*(bounds.bottom-bounds.top));
     for(const strip of imageStrips(bounds)){
-      guard();await this.checkpoint('capture.selection.read');
-      const result=await this.ps.imaging.getSelection({documentID:doc.id,sourceBounds:strip}),data=result.imageData;
+      guard();
+      // Context is not selected coverage. PS rejects a getSelection request
+      // wholly outside its bounding box; untouched output there stays zero.
+      // Keep gray values inside the box, including feathers and empty islands.
+      const readBounds={left:Math.max(strip.left,selection.left),top:Math.max(strip.top,selection.top),right:Math.min(strip.right,selection.right),bottom:Math.min(strip.bottom,selection.bottom)};
+      if(readBounds.right<=readBounds.left||readBounds.bottom<=readBounds.top)continue;
+      await this.checkpoint('capture.selection.read');
+      const result=await this.ps.imaging.getSelection({documentID:doc.id,sourceBounds:readBounds}),data=result.imageData;
       if(!data)throw new DiagnosticError('selection-required','capture','选区为空');
       try{
         if(data.components!==1||![8,16,32].includes(data.componentSize))throw new Error('选区没有返回可用的灰度数据');
@@ -119,11 +125,11 @@ export class PhotoshopAdapter {
         if(!actual||!Object.values(actual).every(Number.isSafeInteger)||actual.right<=actual.left||actual.bottom<=actual.top||!Number.isInteger(result.level??0)||(result.level??0)<0||(result.level??0)>10)throw new Error('选区缓存坐标无效');
         if(values.length!==data.width*data.height||data.width*data.height>IMAGE_BUDGETS.stripPixels)throw new Error('选区条带尺寸不符');
         if(scale===1&&data.componentSize===8&&Object.prototype.toString.call(values)==='[object Uint8Array]'&&data.width===actual.right-actual.left&&data.height===actual.bottom-actual.top){
-          const left=Math.max(strip.left,actual.left),right=Math.min(strip.right,actual.right);
-          if(right>left)for(let y=Math.max(strip.top,actual.top);y<Math.min(strip.bottom,actual.bottom);y++)out.set(values.subarray((y-actual.top)*data.width+left-actual.left,(y-actual.top)*data.width+right-actual.left),(y-bounds.top)*width+left-bounds.left);
+          const left=Math.max(readBounds.left,actual.left),right=Math.min(readBounds.right,actual.right);
+          if(right>left)for(let y=Math.max(readBounds.top,actual.top);y<Math.min(readBounds.bottom,actual.bottom);y++)out.set(values.subarray((y-actual.top)*data.width+left-actual.left,(y-actual.top)*data.width+right-actual.left),(y-bounds.top)*width+left-bounds.left);
           continue;
         }
-        for(let y=strip.top;y<strip.bottom;y++)for(let x=strip.left;x<strip.right;x++){
+        for(let y=readBounds.top;y<readBounds.bottom;y++)for(let x=readBounds.left;x<readBounds.right;x++){
           if(x<actual.left*scale||x>=actual.right*scale||y<actual.top*scale||y>=actual.bottom*scale)continue;
           const sx=Math.min(data.width-1,Math.max(0,(x+.5-actual.left*scale)*data.width/((actual.right-actual.left)*scale)-.5)),sy=Math.min(data.height-1,Math.max(0,(y+.5-actual.top*scale)*data.height/((actual.bottom-actual.top)*scale)-.5)),x0=Math.floor(sx),y0=Math.floor(sy),x1=Math.min(data.width-1,x0+1),y1=Math.min(data.height-1,y0+1),fx=sx-x0,fy=sy-y0;
           const value=(values[y0*data.width+x0]*(1-fx)+values[y0*data.width+x1]*fx)*(1-fy)+(values[y1*data.width+x0]*(1-fx)+values[y1*data.width+x1]*fx)*fy;
