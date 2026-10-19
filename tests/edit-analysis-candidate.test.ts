@@ -4,6 +4,7 @@ import * as preparation from '../src/app/candidate-preparation';
 import {backgroundEditMask} from '../src/imaging/composite';
 import {encodePng,type Raster} from '../src/imaging/image';
 import type {JobRecord} from '../src/generation/jobs';
+import UPNG from 'upng-js';
 
 const id='91000000-1111-4111-8111-111111111111';
 function fixture(mode='edit',depth:8|16=8){
@@ -169,4 +170,15 @@ test('bounded selection assets retain opaque output for export but every applica
   assert.match(candidate.warning??'',/透明|transparen/i);assert.deepEqual(candidate.image,f.model);
   await assert.rejects(preparation.prepareEditAnalysisApplication(f.record,bytes,f.read),(error:any)=>error.code==='invalid-output');
   await assert.rejects((preparation as any).prepareSelectionAssetApplication(f.record,bytes,f.read),(error:any)=>error.code==='invalid-output');
+});
+
+test('bounded selection assets reject output depth mismatches before any PNG decoding or local reads',async(t)=>{
+  const decode=t.mock.method(UPNG,'decode');
+  for(const prepare of [preparation.prepareCandidate,preparation.prepareEditAnalysisApplication,preparation.prepareSelectionAssetApplication])for(const expected of [8,16]){
+    const f=fixture('effect');Object.assign(f.record.params as any,{outputKind:'asset',assetContext:'selection-v1'});
+    f.record.template=expected===16?'qwen21-local-v3-rgba16':'qwen21-local-v2-rgba';
+    const bytes=encodePng({...f.model,rgba:expected===16?f.model.rgba:Uint16Array.from(f.model.rgba,value=>value*257)});
+    await assert.rejects(prepare(f.record,bytes,f.read));
+    assert.equal(decode.mock.callCount(),0,'budgeted model depth is checked before bounded source or model decoding');assert.deepEqual(f.reads,[]);
+  }
 });

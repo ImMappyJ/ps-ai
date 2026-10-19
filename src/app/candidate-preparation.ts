@@ -121,7 +121,7 @@ async function editAnalysisInputs(record:JobRecord,bytes:Uint8Array,read:ReadBin
   assertTaskNames(record);const expected=editAnalysisGeometry(record,retainedBytes,bytes.byteLength,application);
   if(bytes.length<33)throw editAnalysisHistoryError();
   const outputHeader=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
-  if(outputHeader.getUint32(16)!==expected.params.modelSize.width||outputHeader.getUint32(20)!==expected.params.modelSize.height)throw editAnalysisHistoryError();
+  if(outputHeader.getUint32(16)!==expected.params.modelSize.width||outputHeader.getUint32(20)!==expected.params.modelSize.height||expected.assetContext&&bytes[24]!==(record.template==='qwen21-local-v3-rgba16'?16:8))throw editAnalysisHistoryError();
   const snapshot:Snapshot={...expected.snapshot,mask:new Uint8Array()};
   const sourceBytes=await read(`${record.id}-source.png`),geometry=expected.geometry;
   if(sourceBytes.length<33)throw editAnalysisHistoryError();
@@ -230,6 +230,13 @@ export async function prepareCandidate(record:JobRecord,bytes:Uint8Array,read:Re
   const geometry=(record.snapshot as Snapshot|undefined)?.captureGeometry;
   if(geometry?.kind==='edit-analysis')return prepareEditAnalysisCandidate(record,bytes,read,retainedBytes);
   const assetGeometry=assetContext&&!geometry?smallAssetGeometry(record,bytes.byteLength,retainedBytes):undefined;
+  if(assetGeometry){
+    // The budget uses the saved model grid/depth. Reject a different compressed
+    // raster before inflation/decoding or loading any UUID-owned gray plane.
+    if(bytes.length<33)throw editAnalysisHistoryError();
+    const header=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),model=(record.params as any).modelSize;
+    if(header.getUint32(16)!==model.width||header.getUint32(20)!==model.height||bytes[24]!==(record.template==='qwen21-local-v3-rgba16'?16:8))throw editAnalysisHistoryError();
+  }
   const outputKind=candidateOutputKind(record),snapshot=await restoreSnapshot(record,read),params=record.params as any;
   if(snapshot&&(!params||typeof params.mode!=='string'||!['edit','asset','t2i'].includes(params.outputKind)))throw new DiagnosticError('invalid-output','output',t('历史编辑参数缺失或损坏，无法安全重建候选'));
   if(snapshot?.captureGeometry&&outputKind!=='lighting-layers')throw lightingHistoryError();
@@ -241,9 +248,9 @@ export async function prepareCandidate(record:JobRecord,bytes:Uint8Array,read:Re
     const sourceBytes=await read(`${record.id}-source.png`);
     if(sourceBytes.length<33)throw editAnalysisHistoryError();
     const header=new DataView(sourceBytes.buffer,sourceBytes.byteOffset,sourceBytes.byteLength);
-    if(header.getUint32(16)!==width||header.getUint32(20)!==height)throw editAnalysisHistoryError();
+    if(header.getUint32(16)!==width||header.getUint32(20)!==height||sourceBytes[24]!==s.nativeDepth)throw editAnalysisHistoryError();
     const source=decodePng(sourceBytes);let hash=2166136261;for(const value of source.rgba)hash=Math.imul(hash^value,16777619);
-    if((hash>>>0).toString(16)!==s.sourceHash)throw editAnalysisHistoryError();
+    if((hash>>>0).toString(16)!==s.sourceHash||rasterDepth(source)!==s.nativeDepth)throw editAnalysisHistoryError();
     await validateAssetMasks(record,s,read);
     return {image,snapshot:s,warning:assetTransparencyWarning(image)};
   }
