@@ -77,7 +77,7 @@ let relightWorkbench:RelightWorkbench|undefined,relightSession:RelightSession|un
 let relightInitialRecoveryDocument:number|undefined;
 // A successful recovery copy can outlive a failed read. It grants no snapshot
 // or application rights; only the matching explicit UI action may retry it.
-let pendingColorCapture:{sourceDocumentId:number;documentId:number;colorReason:NonNullable<Snapshot['colorReason']>;workspace:Workspace;mode:string;geometry:{width:number;height:number;mode:unknown;depth:unknown};protection?:Protection;session?:RelightSession;scope?:RelightScope}|undefined;
+let pendingColorCapture:{sourceDocumentId:number;documentId:number;colorReason:NonNullable<Snapshot['colorReason']>;workspace:Workspace;mode:string;geometry:{width:number;height:number;mode:unknown;depth:unknown};session?:RelightSession;scope?:RelightScope}|undefined;
 let clearConfirmation:{ids:readonly string[];revision:number;signature:string;unresolved:number}|undefined;
 let cleanupStatus:HistoryCleanupStatus|undefined,historyNotice='',lastHistoryFocus:string|undefined;
 let pendingDetailReveal=false,historyRevealTimer:ReturnType<typeof setTimeout>|undefined;
@@ -290,8 +290,7 @@ function retainedImageBytes(includeRelight=false):number {
   if(capture){count(capture.image.rgba);count(capture.snapshot.mask);count(capture.selectionMask);count(capture.protectionMask);count(capture.subjectMask);}
   if(includeRelight&&relightSession){const c=relightSession.sourceCapture;count(c.image.rgba);count(c.snapshot.mask);count(c.selectionMask);count(c.protectionMask);count(c.subjectMask);}
   count(reference?.rgba);count(lastSelection?.range.mask);
-  if(includeRelight)count(protection?.mask);
-  count(pendingColorCapture?.protection?.mask);
+  if(includeRelight||pendingColorCapture)count(protection?.mask);
   for(const c of candidates){count(c.image.rgba);count(c.bytes);count(c.snapshot?.mask);bytes+=c.preview.length*2;}
   bytes+=candidatePreview.retainedBytes;
   for(const id of ['source-preview','mask-preview','detail-preview','history-preview'])bytes+=(el(id).getAttribute('src')?.length??0)*2;
@@ -357,7 +356,7 @@ async function recoverSourceColor(documentId:number,session?:RelightSession):Pro
       const old=Array.from(ps.app.documents as any[]).find(doc=>doc.id===documentId),savedProtection=protection;
       if(savedProtection&&(!old||savedProtection.sessionId!==adapter.sessionId||savedProtection.documentId!==documentId||savedProtection.width!==old.width||savedProtection.height!==old.height))throw new DiagnosticError('source-changed','capture',t('保护区来源文档已改变，请重新指定'));
       const recovered=await adapter.createRecoveredColorCopy(documentId);
-      pendingColorCapture={sourceDocumentId:documentId,documentId:recovered.documentId,colorReason:recovered.colorReason,workspace,mode:el('mode').value,geometry:{width:old.width,height:old.height,mode:old.mode,depth:old.bitsPerChannel},session,...(session||el('mode').value==='relight'?{scope:relightScope()}:{}),...(savedProtection?{protection:{...savedProtection,documentId:recovered.documentId}}:{})};
+      pendingColorCapture={sourceDocumentId:documentId,documentId:recovered.documentId,colorReason:recovered.colorReason,workspace,mode:el('mode').value,geometry:{width:old.width,height:old.height,mode:old.mode,depth:old.bitsPerChannel},session,...(session||el('mode').value==='relight'?{scope:relightScope()}:{})};
     }
     const retry=pendingColorCapture!;
     // The diagnostic follows the actual read target after creation, while old
@@ -371,6 +370,10 @@ async function recoverSourceColor(documentId:number,session?:RelightSession):Pro
       const geometry=retry.geometry;
       if(target.width!==geometry.width||target.height!==geometry.height||target.mode!==geometry.mode||target.bitsPerChannel!==geometry.depth)throw new DiagnosticError('source-changed','capture',t('已恢复副本的尺寸、模式或位深已改变；请检查副本后明确重新读取来源。'));
       if(retry.scope!==undefined&&relightScope()!==retry.scope)throw new DiagnosticError('source-changed','capture',t('布光范围已改变，请重新读取原图；原有布光配置已保留'));
+      // Protection is a current user choice, not part of the retained read
+      // intent. A later clear/replacement must survive this exact-copy retry.
+      if(protection&&(protection.sessionId!==adapter.sessionId||![retry.sourceDocumentId,retry.documentId].includes(protection.documentId)||protection.width!==geometry.width||protection.height!==geometry.height))throw new DiagnosticError('source-changed','capture',t('保护区来源文档已改变，请重新指定'));
+      const captureProtection=protection?.documentId===retry.sourceDocumentId?{...protection,documentId:retry.documentId}:protection;
       if(activeDocumentId()!==target.id)await ps.core.executeAsModal(async()=>{ps.app.activeDocument=target;},{commandName:'PS-AI color recovered source'});
       const identifyCopy=(captured:Capture)=>{
         // A retry may follow a deliberate profile conversion in Photoshop.
@@ -384,10 +387,10 @@ async function recoverSourceColor(documentId:number,session?:RelightSession):Pro
           identifyCopy(captured);
           if(session)commit=session.stageRebind(captured,uuid(),scope);
           else staged=RelightSession.stageCreation(captured,uuid(),uuid(),scope);
-        },retry.protection);
+        },captureProtection);
         if(session){commit!(fresh.snapshot.historyId);relightMargin=Number(el('margin').value)/100;}
         else publishRelightSession(staged!.commit(fresh.snapshot.historyId));
-      }else await captureArea(retry.documentId,true,retry.protection,identifyCopy);
+      }else await captureArea(retry.documentId,true,captureProtection,identifyCopy);
     }catch(error){
       protection=priorProtection;
       throw new DiagnosticError(diagnostic(error,'capture').code,'capture',t('已恢复的色彩副本（文档 {0}）已保留，但读取未完成；请重试读取。原因：{1}',retry.documentId,errorText(error instanceof Error?error.message:String(error))));

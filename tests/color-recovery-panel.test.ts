@@ -177,3 +177,33 @@ test('a new busy operation during workbench close cannot turn a skipped recovery
     h.click('relight-recover-color');h.click('capture');await pause();assert.equal(native.duplicates.length,1);assert.equal(h.el('relight-generate').disabled,true);assert.doesNotMatch(h.el('relight-status').textContent,/色彩副本已恢复并读取/);assert.equal(h.posts.length,0);
   }finally{await h.close();}
 });
+
+for(const action of ['clear','replace'] as const)test(`retained main-panel recovery respects a later explicit protection ${action}`,async()=>{
+  const {h,native}=await harness();try{
+    h.setSelection({bounds:{left:1,top:1,right:2,bottom:2},mask:new Uint8Array([0,0,0,128])});h.click('protect');await h.wait();
+    const selection={bounds:{left:0,top:0,right:2,bottom:2},mask:new Uint8Array([255,128,255,255])};h.setSelection(selection);await profileFailure(h,native);
+    const read=h.ps.imaging.getPixels;h.ps.imaging.getPixels=async()=>{throw Error('read failed');};h.click('diagnostic-primary');await h.wait();const copy=h.ps.app.activeDocument;h.ps.imaging.getPixels=read;
+    if(action==='clear')h.click('clear-protection');else {h.setSelection({bounds:{left:0,top:0,right:1,bottom:1},mask:new Uint8Array([64,0,0,0])});h.click('protect');}await h.wait();h.setSelection(selection);
+    h.click('diagnostic-primary');await h.wait();assert.equal(h.ps.app.activeDocument.id,copy.id);assert.equal(native.duplicates.length,2);assert.equal(h.posts.length,0);
+    assert.match(h.el('source-info').textContent,action==='clear'?/未指定保护区/:/已扣除保护区/);
+    h.el('resolution').value='32';h.click('generate');await h.wait();const record=h.records()[0];assert.equal((record.snapshot as any).documentId,copy.id);assert.deepEqual([...h.files[record.id+'-mask.bin'] as Uint8Array],action==='clear'?[255,128,255,255]:[191,128,255,255]);assert.equal(native.duplicates.length,2);
+  }finally{await h.close();}
+});
+
+for(const action of ['clear','replace'] as const)test(`retained workbench recovery respects a later explicit protection ${action}`,async()=>{
+  const {h,native}=await harness();try{
+    h.setSelection({bounds:{left:1,top:1,right:2,bottom:2},mask:new Uint8Array([0,0,0,128])});h.click('protect');await h.wait();
+    const selection={bounds:{left:0,top:0,right:2,bottom:2},mask:new Uint8Array([255,128,255,255])};h.setSelection(selection);await openRelight(h);h.el('relight-output').value='full-result';h.change('relight-output');h.click('relight-reread');await pause();h.el('relight-intensity').value='2.4';h.change('relight-intensity');const before=await draft(h),old=h.ps.app.activeDocument;
+    h.click('relight-close');await pause();native.undo(old);h.click('open-relight');await pause();const read=h.ps.imaging.getPixels;h.ps.imaging.getPixels=async()=>{throw Error('read failed');};h.click('relight-recover-color');await pause();const copy=h.ps.app.activeDocument;h.ps.imaging.getPixels=read;
+    assert.equal((await draft(h)).source.snapshotId,before.source.snapshotId);h.click('relight-close');await pause();
+    if(action==='clear')h.click('clear-protection');else {h.setSelection({bounds:{left:0,top:0,right:1,bottom:1},mask:new Uint8Array([64,0,0,0])});h.click('protect');}await h.wait();h.setSelection(selection);h.click('open-relight');await pause();h.click('relight-recover-color');await pause();
+    const after=await draft(h);assert.equal(after.source.documentId,copy.id);assert.equal(after.lights[0].intensity,2.4);assert.equal(native.duplicates.length,2);assert.equal(h.posts.length,0);h.click('relight-generate');await h.wait();await pause();const record=h.records()[0];assert.deepEqual([...h.files[record.id+'-mask.bin'] as Uint8Array],action==='clear'?[255,128,255,255]:[191,128,255,255]);
+  }finally{await h.close();}
+});
+
+test('retained-copy retry rejects a later protection from an unrelated document without reviving the cached mask',async()=>{
+  const {h,native}=await harness();try{
+    await profileFailure(h,native);const read=h.ps.imaging.getPixels;h.ps.imaging.getPixels=async()=>{throw Error('read failed');};h.click('diagnostic-primary');await h.wait();const copy=h.ps.app.activeDocument;h.ps.imaging.getPixels=read;
+    h.ps.app.activeDocument=native.docs[0];h.click('protect');await h.wait();h.ps.app.activeDocument=copy;h.click('nav-create');const reads=h.pixelRequests.length;h.click('diagnostic-primary');await h.wait();assert.equal(h.pixelRequests.length,reads);assert.equal(h.el('selection-previews').style.display,'none');assert.equal(native.duplicates.length,2);assert.equal(h.posts.length,0);assert.equal(details(h).documentId,copy.id);
+  }finally{await h.close();}
+});
