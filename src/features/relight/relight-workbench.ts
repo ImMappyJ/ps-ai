@@ -6,15 +6,15 @@ import {RelightSession,relightOutputKind,type RelightOutputKind,type FrozenRelig
 import {t,errorText} from '../../localization/i18n';
 import {DiagnosticError,diagnostic} from '../../diagnostics/diagnostics';
 
-export interface RelightResult {jobId:string;fingerprint:string;image:Raster;warning?:string;outputKind?:RelightOutputKind}
+export interface RelightResult {jobId:string;fingerprint:string;sourceSnapshotId?:string;image:Raster;warning?:string;outputKind?:RelightOutputKind}
 export interface RelightWorkbenchHost {
   uuid():string;save(scene:RelightScene):Promise<void>;loadDraft():Promise<RelightScene|undefined>;
   prepare(frozen:FrozenRelightSubmission):Promise<void>;
   generate(frozen:FrozenRelightSubmission,onJob:(id:string)=>void):Promise<void>;
-  cancel():Promise<void>;reread(options?:{explicit?:boolean}):Promise<void>;rebindCurrent?():Promise<void>;apply(jobId:string):Promise<void>;export(jobId:string):Promise<void>;
+  cancel():Promise<void>;reread(options?:{explicit?:boolean;excludeResults?:boolean}):Promise<void>;rebindCurrent?(options?:{excludeResults?:boolean}):Promise<void>;appliedResults?(rebind?:boolean):boolean;apply(jobId:string):Promise<void>;export(jobId:string):Promise<void>;
   results():RelightResult[];diagnostics(jobId:string):Promise<string>;
   busy?():boolean;pendingTasks?():number;openPendingTasks?():Promise<void>;reportError?(error:Error):void;
-  sourceState?():'current'|'changed'|'closed'|'rebind-required';observeSource?(invalidate:()=>void):()=>void;
+  sourceState?():'current'|'changed'|'closed'|'rebind-required'|'applied-results';observeSource?(invalidate:()=>void):()=>void;
 }
 type Tab='original'|'illustration'|'result';
 type Drag={kind:'light'|'target'|'pan';id?:string;startX:number;startY:number;panX:number;panY:number;pointerId?:number;node?:any};
@@ -58,6 +58,7 @@ export class RelightWorkbench {
   private previewToken=0;private previewRequest?:PreviewRequest;private previewRun?:PreviewRequest;private lastRender=0;private previewTimer?:ReturnType<typeof setTimeout>;private resizeTimer?:ReturnType<typeof setTimeout>;private saveTimer?:ReturnType<typeof setTimeout>;
   private finalRenderer?:RelightPreviewRenderer;private dragRenderer?:RelightPreviewRenderer;
   private sourceSyncTimer?:ReturnType<typeof setTimeout>;private sourceSyncFailed=false;
+  private recoveryRebind=false;
   private previewCounters={requested:0,started:0,completed:0,discarded:0,encoded:0,renderMs:0,encodeMs:0};
   private lightListKey='';private resultListKey='';
   private markerNodes=new Map<string,any>();
@@ -77,7 +78,13 @@ export class RelightWorkbench {
     if(this.visible)this.refresh();
   }
   setSourceInvalid(invalid:boolean):void {if(invalid){this.invalidateSource();return;}const previous=this.sourceInvalid;this.sourceInvalid=false;this.sourceSyncFailed=false;if(previous)this.message(t('编辑布光不会发起 AI 请求；主动点击生成'));if(this.visible)this.refresh();}
-  invalidateSource(reason?:string):void {const previous=this.sourceInvalid;this.sourceInvalid=true;this.cancelPreview();if(reason||!previous)this.message(reason??t('来源已关闭或改变，请重新读取原图；布光配置和已有结果仍保留'));if(this.visible)this.refresh();}
+  private sourceMessage():string {
+    const state=this.host.sourceState?.();
+    if(state==='applied-results')return t('来源中仍有已应用的 PS-AI 结果；请点击“隐藏 PS-AI 结果并重新读取”，或在 Photoshop 中撤销或隐藏这些结果。布光和可导出候选已保留。');
+    if(state==='closed')return t('来源文档已关闭；请绑定当前文档。布光配置和可导出候选已保留。');
+    return t('来源已关闭或改变，请重新读取原图；布光配置和已有结果仍保留');
+  }
+  invalidateSource(reason?:string):void {const previous=this.sourceInvalid;this.sourceInvalid=true;this.cancelPreview();if(reason||!previous)this.message(reason??this.sourceMessage());if(this.visible)this.refresh();}
   setScopePending(pending:boolean):void {const previous=this.scopePending;this.scopePending=pending;if(pending)this.message(t('布光范围已改变，请重新读取原图；原有布光配置已保留'));else if(previous&&!this.sourceInvalid)this.message(t('编辑布光不会发起 AI 请求；主动点击生成'));if(this.visible)this.refresh();}
   private el(id:string):any{return this.dialog.querySelector(`#relight-${id}`);}
   private listen(node:any,name:string,fn:(event:any)=>void):void {node.addEventListener(name,fn);this.listeners.push(()=>node.removeEventListener(name,fn));}
@@ -201,6 +208,7 @@ export class RelightWorkbench {
     this.click('reuse-draft',()=>{if(this.pendingDraft){this.session.restore(this.pendingDraft,true);this.pendingDraft=undefined;this.selectedResult=undefined;this.changed();this.message(t('已明确将保存的布光复用到当前快照，请检查位置后生成'));}});
     this.click('reread',()=>this.rereadSource());
     if(this.el('rebind-current'))this.click('rebind-current',()=>this.rereadSource(true));
+    this.click('exclude-results',()=>this.rereadSource(this.recoveryRebind,true,true));
     this.listen(this.el('output'),'change',()=>void this.guard(()=>{
       const previous=this.session.outputKind;this.session.setOutputKind(this.el('output').value);
       if(this.session.outputKind===previous)return;
@@ -208,7 +216,7 @@ export class RelightWorkbench {
     }));
     this.click('generate',()=>this.generate());
     this.click('cancel',async()=>{if(this.request)this.request.cancelled=true;await this.host.cancel();this.message(t('已请求取消或停止后续候选；平台当前任务可能继续并计费，结果保留在历史中'));this.refresh();});
-    this.click('apply',()=>{this.assertHostIdle();const r=this.result();if(!r)throw new Error(t('请先选择实际 AI 结果'));const kind=relightOutputKind(r);this.closeForNative(async()=>{await this.host.apply(r.jobId);this.message(t(kind==='lighting-layers'?'光影层已应用；原图细节保留在来源图层，可编辑并一次撤销':'完整结果已应用；可编辑蒙版并一次撤销'));});});
+    this.click('apply',()=>{this.assertHostIdle();const r=this.result();if(!r)throw new Error(t('请先选择实际 AI 结果'));if(r.sourceSnapshotId!==undefined&&r.sourceSnapshotId!==this.session.editor.snapshot().source.snapshotId)throw new Error(t('此结果属于旧来源快照，仅可查看或导出；请对当前来源重新生成'));const kind=relightOutputKind(r);this.closeForNative(async()=>{await this.host.apply(r.jobId);this.message(t(kind==='lighting-layers'?'光影层已应用；原图细节保留在来源图层，可编辑并一次撤销':'完整结果已应用；可编辑蒙版并一次撤销'));});});
     this.click('export',async()=>{const r=this.result();if(!r)throw new Error(t('请先选择实际 AI 结果'));await this.host.export(r.jobId);});
     this.click('compensation',async()=>{const r=this.result();if(!r)throw new Error(t('请先选择实际 AI 结果'));this.el('compensation-info').textContent=await this.host.diagnostics(r.jobId);});
     this.listen(this.el('acknowledge'),'change',()=>{this.acknowledged=!!this.el('acknowledge').checked;});
@@ -242,23 +250,23 @@ export class RelightWorkbench {
     }
     catch(error){this.message(t('布光示意失败，请重试示意或重新读取原图：{0}',error instanceof Error?error.message:String(error)));this.tab='original';}
   }
-  private rereadSource(rebind=false,explicit=true):void {
+  private rereadSource(rebind=false,explicit=true,excludeResults=false):void {
     if(this.pending||this.nativeBusy||this.host.busy?.())return;
     if(rebind&&!this.host.rebindCurrent)return;
-    if(explicit)this.sourceSyncFailed=false;
+    if(explicit){this.sourceSyncFailed=false;this.recoveryRebind=rebind;}
     this.invalidateSource();
     this.closeForNative(async()=>{
-      try{if(rebind)await this.host.rebindCurrent!();else await this.host.reread({explicit});}
+      try{if(rebind)await this.host.rebindCurrent!(excludeResults?{excludeResults:true}:undefined);else await this.host.reread({explicit,...(excludeResults?{excludeResults:true}:{})});}
       catch(error){if(!explicit)this.sourceSyncFailed=true;throw error;}
-      this.sourceInvalid=false;this.scopePending=false;this.outputPending=false;this.sourceSyncFailed=false;this.selectedResult=undefined;this.pendingDraft=undefined;
-      this.message(t('原图已重新读取，布光已绑定新快照；请检查位置后生成'));await this.save();
+      this.sourceInvalid=false;this.scopePending=false;this.outputPending=false;this.sourceSyncFailed=false;this.recoveryRebind=false;this.selectedResult=undefined;this.pendingDraft=undefined;
+      this.message(t(excludeResults?'已隐藏可靠记录的 PS-AI 结果并读取当前编辑；隐藏可在 Photoshop 中一次撤销，撤销后须重新读取。布光已保留。':'原图已重新读取，布光已绑定新快照；请检查位置后生成'));await this.save();
     });
   }
   /** Metadata checks are cheap; the actual read runs only after the dialog closes. */
   private checkSourceState():void {
     if(!this.visible)return;
     const state=this.host.sourceState?.();if(!state||state==='current')return;
-    if(!this.sourceInvalid){this.sourceInvalid=true;this.cancelPreview();this.message(t('来源已关闭或改变，请重新读取原图；布光配置和已有结果仍保留'));}
+    if(!this.sourceInvalid){this.sourceInvalid=true;this.cancelPreview();this.message(this.sourceMessage());}
     if(state!=='changed'||!this.canSyncSource()||this.sourceSyncTimer)return;
     this.sourceSyncTimer=setTimeout(()=>{this.sourceSyncTimer=undefined;if(this.host.sourceState?.()==='changed'&&this.canSyncSource())this.rereadSource(false,false);},0);
   }
@@ -345,7 +353,8 @@ export class RelightWorkbench {
     const sharedBusy=!!this.host.busy?.();
     const pendingTasks=this.host.pendingTasks?.()??0;this.el('pending-tasks').style.display=pendingTasks?'block':'none';this.el('pending-tasks').disabled=this.pending||this.nativeBusy||sharedBusy;this.el('pending-tasks').textContent=t('处理未确认任务（{0}）；保留布光并返回历史',pendingTasks);
     this.el('generate').disabled=this.pending||this.nativeBusy||this.sourceInvalid||this.scopePending||this.outputPending||sharedBusy;this.el('cancel').disabled=!this.pending;
-    const result=this.result();this.el('apply').disabled=this.pending||this.nativeBusy||this.sourceInvalid||sharedBusy||!result||!!result.warning;this.el('export').disabled=!result;this.el('compensation').disabled=!result;this.el('reread').disabled=this.pending||this.nativeBusy||sharedBusy;
+    const result=this.result();this.el('apply').disabled=this.pending||this.nativeBusy||this.sourceInvalid||sharedBusy||!result||!!result.warning||result.sourceSnapshotId!==undefined&&result.sourceSnapshotId!==scene.source.snapshotId;this.el('export').disabled=!result;this.el('compensation').disabled=!result;this.el('reread').disabled=this.pending||this.nativeBusy||sharedBusy;
+    const recover=this.el('exclude-results');recover.style.display=this.host.appliedResults?.(this.recoveryRebind)?'block':'none';recover.disabled=this.pending||this.nativeBusy||sharedBusy;recover.textContent=t(this.recoveryRebind?'隐藏当前文档的 PS-AI 结果并绑定':'隐藏 PS-AI 结果并重新读取');this.el('recovery-info').style.display=recover.style.display;
     if(this.el('rebind-current')){this.el('rebind-current').style.display=this.host.rebindCurrent?'block':'none';this.el('rebind-current').disabled=this.pending||this.nativeBusy||sharedBusy;}
     this.el('apply').textContent=t(result&&relightOutputKind(result)==='lighting-layers'?'应用光影层组':'应用整图结果');
     this.el('output').value=this.session.outputKind;

@@ -281,7 +281,7 @@ function preflightLightingSource(captured:Capture):void {
   const mask=downsampleSnapshotMask(s,captured.image.width,captured.image.height),max=rasterDepth(captured.image)===16?65535:255;
   if(mask.some((value,p)=>value>0&&captured.image.rgba[p*4+3]!==max))throw new DiagnosticError('unsupported','capture',t('光影层暂不支持作用范围内的透明/半透明来源；请缩小到不透明区域，或明确使用整图重绘并检查透明度'));
 }
-async function captureRelight(expectedDocumentId=activeDocumentId(),scope:RelightScope=relightScope(),kind:RelightOutputKind='lighting-layers'):Promise<Capture>{
+async function captureRelight(expectedDocumentId=activeDocumentId(),scope:RelightScope=relightScope(),kind:RelightOutputKind='lighting-layers',excludeApplications=false,beforeCommit?:(capture:Capture)=>void):Promise<Capture>{
   return withImagePixels(async()=>{
   const previous=activeDocumentId();
   if(expectedDocumentId===undefined)throw new Error(t('请先打开 Photoshop 文档并建立选区'));
@@ -290,7 +290,7 @@ async function captureRelight(expectedDocumentId=activeDocumentId(),scope:Religh
   if(kind==='lighting-layers')planRelightMemory(target.width,target.height,target.bitsPerChannel===ps.constants.BitsPerChannelType.SIXTEEN?16:8,undefined,retainedImageBytes());
   if(previous!==expectedDocumentId)await ps.core.executeAsModal(async()=>{ps.app.activeDocument=target;},{commandName:'PS-AI relight source'});
   try {
-    const start=Date.now(),captured=await adapter.capture(Number(el('margin').value)/100,protection,expectedDocumentId,outputDepth(),{selection:scope==='document'?'document':'edit',preserveNativeDepth:true,analysisResolution:Number(el('resolution').value),retainedBytes:retainedImageBytes(kind!=='lighting-layers'),...(kind==='lighting-layers'?{purpose:'relight-analysis' as const}:{})});
+    const start=Date.now(),captured=await adapter.capture(Number(el('margin').value)/100,protection,expectedDocumentId,outputDepth(),{selection:scope==='document'?'document':'edit',preserveNativeDepth:true,...(excludeApplications?{excludeApplications:true}:{}),analysisResolution:Number(el('resolution').value),retainedBytes:retainedImageBytes(kind!=='lighting-layers'),...(kind==='lighting-layers'?{purpose:'relight-analysis' as const}:{})},beforeCommit);
     if(protection&&captured.workingCopyOf===protection.documentId)protection={...protection,documentId:captured.snapshot.documentId};
     await store.trace('relight.capture.complete',undefined,{documentId:captured.snapshot.documentId,width:captured.snapshot.width,height:captured.snapshot.height,analysisWidth:captured.image.width,analysisHeight:captured.image.height,depth:rasterDepth(captured.image),durationMs:Date.now()-start});
     return captured;
@@ -298,7 +298,7 @@ async function captureRelight(expectedDocumentId=activeDocumentId(),scope:Religh
   });
 }
 function relightResults():RelightResult[]{
-  return candidates.flatMap(c=>{const metadata=c.job.relight as RelightTaskMetadata|undefined;if(!metadata||metadata.schemaVersion!==1||!relightSession?.ownsSnapshot(metadata.scene?.source?.snapshotId))return [];return [{jobId:c.job.id,fingerprint:metadata.fingerprint,image:c.image,warning:c.warning,outputKind:c.outputKind}];});
+  return candidates.flatMap(c=>{const metadata=c.job.relight as RelightTaskMetadata|undefined;if(!metadata||metadata.schemaVersion!==1||!relightSession?.ownsSnapshot(metadata.scene?.source?.snapshotId))return [];return [{jobId:c.job.id,fingerprint:metadata.fingerprint,sourceSnapshotId:metadata.scene.source.snapshotId,image:c.image,warning:c.warning,outputKind:c.outputKind}];});
 }
 const reportedRelightErrors=new WeakSet<object>();
 async function relightOperation(feature:string,stage:Stage,action:()=>Promise<void>):Promise<void>{
@@ -306,28 +306,27 @@ async function relightOperation(feature:string,stage:Stage,action:()=>Promise<vo
   await guarded(async()=>{try{await action();}catch(error){failed=true;failure=error;if(error&&typeof error==='object')reportedRelightErrors.add(error);throw error;}},{page:'create',feature,stage});
   if(failed)throw failure;
 }
-function relightSourceState(session:RelightSession):'current'|'changed'|'closed'|'rebind-required'{
+function relightSourceState(session:RelightSession):'current'|'changed'|'closed'|'rebind-required'|'applied-results'{
   const s=session.sourceCapture.snapshot,doc=Array.from(ps.app.documents as any[]).find(d=>d.id===s.documentId);
   if(!doc)return 'closed';
   if(activeDocumentId()!==s.documentId||doc.width!==s.width||doc.height!==s.height||doc.mode!==s.mode||doc.bitsPerChannel!==s.depth||doc.colorProfileName!==s.profile||relightScope()!==session.scope||Number(el('margin').value)/100!==relightMargin)return 'rebind-required';
-  return adapter.sourceAvailability(s,true)==='current'?'current':'changed';
+  return adapter.sourceAvailability(s,true)==='current'?'current':adapter.hasVisibleApplication(s.documentId)?'applied-results':'changed';
 }
-async function rereadRelight(session:RelightSession,rebind=false,explicit=true):Promise<void>{
+async function rereadRelight(session:RelightSession,rebind=false,explicit=true,excludeResults=false):Promise<void>{
   await configure(async()=>{
     const bound=session.sourceCapture.snapshot,targetId=rebind?activeDocumentId():bound.documentId;
-    if(targetId!==undefined&&adapter.hasVisibleApplication(targetId))throw new DiagnosticError('source-changed','capture',t('请先撤销或隐藏已应用的 PS-AI 结果，再重新读取原图；已有结果仍可导出'));
+    if(!excludeResults&&targetId!==undefined&&adapter.hasVisibleApplication(targetId))throw new DiagnosticError('source-changed','capture',t('来源中仍有已应用的 PS-AI 结果；请点击“隐藏 PS-AI 结果并重新读取”，或在 Photoshop 中撤销或隐藏这些结果。布光和可导出候选已保留。'));
     if(!explicit&&relightSourceState(session)!=='changed')return;
-    const scope=explicit?relightScope():session.scope,fresh=await captureRelight(targetId,scope,session.outputKind);
+    const scope=explicit?relightScope():session.scope;let commit:((historyId?:number)=>void)|undefined;
+    const fresh=await captureRelight(targetId,scope,session.outputKind,excludeResults,captured=>{commit=session.stageRebind(captured,uuid(),scope);});
     if(!explicit&&(JSON.stringify(fresh.snapshot.bounds)!==JSON.stringify(bound.bounds)||fresh.selectionMask.length!==session.sourceCapture.selectionMask.length||fresh.selectionMask.some((v,i)=>v!==session.sourceCapture.selectionMask[i])||fresh.protectionMask.some((v,i)=>v!==session.sourceCapture.protectionMask[i])))throw new DiagnosticError('source-changed','capture',t('来源范围已改变，请明确重新读取或绑定；布光配置已保留'));
-    session.rebind(fresh,uuid(),scope);relightMargin=Number(el('margin').value)/100;
+    commit!(fresh.snapshot.historyId);relightMargin=Number(el('margin').value)/100;
   });
 }
 function candidateById(id:string):Candidate {const candidate=candidates.find(c=>c.job.id===id);if(!candidate)throw new Error(t('此 AI 结果已离开内存，请从历史重新读取后应用'));return candidate;}
 async function exportCandidate(id:string):Promise<void>{if(busy)throw new Error(t('已有任务正在进行，请等待完成后再生成或应用；可以继续编辑布光'));await configure(async()=>{const c=candidateById(id),file=await uxp.storage.localFileSystem.getFileForSaving(`ps-ai-${c.job.id.slice(0,8)}.png`,{types:['png']});if(file)await file.write(new Uint8Array(c.bytes).buffer,{format:uxp.storage.formats.binary});});}
 export async function openRelightWorkbench(reuse?:RelightScene,description?:string):Promise<void>{
   if(relightWorkbench&&relightSession&&!reuse&&description===undefined){
-    const state=relightSourceState(relightSession);
-    if(state==='changed'&&!relightResults().length&&!busy)await rereadRelight(relightSession,false,false);
     relightWorkbench.setSourceInvalid(relightSourceState(relightSession)!=='current');relightWorkbench.setScopePending(relightScope()!==relightSession.scope);relightWorkbench.show();return;
   }
   if(typeof el('relight-dialog')?.uxpShowModal!=='function')throw new Error(t('当前宿主无法打开布光对话框，请使用 Photoshop 27+ 并重新加载开发插件'));
@@ -344,7 +343,8 @@ export async function openRelightWorkbench(reuse?:RelightScene,description?:stri
       sourceState:()=>relightSourceState(session),observeSource:invalidate=>observeRelightSource(ps.action,()=>{if(relightSourceState(session)!=='current')invalidate();},()=>void store.trace('relight.source-notifications.unavailable')),
       prepare:frozen=>relightOperation('relight-prepare','capture',()=>configure(async()=>{if(relightScope()!==frozen.scope)throw new Error(t('布光范围已改变，请重新读取原图；原有布光配置已保留'));if(Number(el('margin').value)/100!==relightMargin)throw new Error(t('范围参数已改变，请重新读取原图'));adapter.assertSourceCurrent(frozen.capture.snapshot);const fresh=await captureRelight(frozen.capture.snapshot.documentId,frozen.scope,frozen.outputKind);session.assertCaptureMatches(fresh);if(frozen.outputKind==='lighting-layers')preflightLightingSource(fresh);})),
       generate:(frozen,onJob)=>relightOperation('generate','inference',()=>generate(frozen,onJob)),cancel:async()=>{stopBatch=true;},pendingTasks:()=>historyRecords.filter(blocksGeneration).length,openPendingTasks:()=>showPending(),
-      reread:options=>relightOperation('relight-reread','capture',()=>rereadRelight(session,false,options?.explicit!==false)),rebindCurrent:()=>relightOperation('relight-rebind','capture',()=>rereadRelight(session,true)),
+      reread:options=>relightOperation('relight-reread','capture',()=>rereadRelight(session,false,options?.explicit!==false,options?.excludeResults===true)),rebindCurrent:options=>relightOperation('relight-rebind','capture',()=>rereadRelight(session,true,true,options?.excludeResults===true)),
+      appliedResults:rebind=>adapter.hasVisibleApplication(rebind?activeDocumentId()??-1:session.sourceCapture.snapshot.documentId),
       apply:id=>relightOperation('apply','apply',()=>apply(id)),export:exportCandidate,results:relightResults,
       diagnostics:async(id)=>{const c=candidateById(id);try{const source=decodePng(await store.readBinary(`${id}-source.png`)),target=resize(c.image,source.width,source.height),result=decomposeRelightCompensation(source,target,{colorSpace:'encoded-srgb',documentProfile:c.snapshot?.profile??'',blend:{order:'multiply-screen',opacity:1,fillOpacity:1,group:'isolated-with-base',gamma:'encoded-srgb',mask:'none'}});return t('补偿诊断：encoded sRGB，{0} 位，先 Multiply 后 Screen，量化后 RGB 绝对误差（不含 Alpha）：max={1}，mean={2}，RMSE={3}；归一化 max={4}。这不代表仅改变光照，应用仍不可用。',rasterDepth(source),result.error.code.maxAbs,result.error.code.meanAbs,result.error.code.rmse,result.error.normalized.maxAbs);}catch(error){return t('无法可靠计算补偿，请使用完整结果：{0}',error instanceof Error?error.message:String(error));}}
     });

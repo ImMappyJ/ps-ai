@@ -457,3 +457,69 @@ test('image-load resize feedback settles while tab changes and fresh previews st
     h.click('relight-close');await new Promise(r=>setTimeout(r,20));assert.equal(image.getAttribute('src'),null);h.click('open-relight');await new Promise(r=>setTimeout(r,40));assert.equal(image.getAttribute('src'),result);
   }finally{await h.close();}
 });
+
+test('applied results never prevent reopening the retained workbench through either entry',async()=>{
+  for(const entry of ['open-relight','diagnostic-primary']){
+    const h=await panelHarness();try{
+      await open(h);await useFullResult(h);h.el('relight-intensity').value='2.7';h.change('relight-intensity');h.click('relight-generate');await h.wait();h.click('relight-apply');await new Promise(r=>setTimeout(r,70));
+      h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.click('nav-history');h.click('history-check-all');h.click('clear-history');h.click('confirm-clear-history');await h.wait();h.click('nav-create');
+      h.ps.app.activeDocument.activeHistoryState={id:90};
+      if(entry==='diagnostic-primary'){h.click('open-relight');await new Promise(r=>setTimeout(r,40));if(h.el('relight-dialog').hasAttribute('open')){h.click('relight-reread');await new Promise(r=>setTimeout(r,40));h.click('relight-close');await new Promise(r=>setTimeout(r,20));}}
+      const reads=h.pixelRequests.length,posts=h.posts.length;h.click(entry);await new Promise(r=>setTimeout(r,80));
+      assert.equal(h.el('relight-dialog').hasAttribute('open'),true,entry+' opens even when reread is blocked');assert.equal(h.el('relight-intensity').value,'2.7');assert.equal(h.el('relight-generate').disabled,true);assert.match(h.el('relight-status').textContent,/隐藏.*PS-AI/);assert.notEqual(h.el('relight-exclude-results')?.style.display,'none');
+      assert.equal(h.pixelRequests.length,reads);assert.equal(h.posts.length,posts);
+    }finally{await h.close();}
+  }
+});
+
+test('explicit result exclusion rereads current edits, commits the final baseline and leaves old candidates exportable',async()=>{
+  const h=await panelHarness();try{
+    await open(h);await useFullResult(h);h.el('relight-intensity').value='2.8';h.change('relight-intensity');h.click('relight-generate');await h.wait();h.click('relight-apply');await new Promise(r=>setTimeout(r,70));
+    const applied=h.appliedLayers[0].layer;applied.visible=true;h.ps.app.activeDocument.activeHistoryState={id:90};h.click('relight-reread');await new Promise(r=>setTimeout(r,60));assert.match(h.el('relight-status').textContent,/隐藏.*PS-AI/);
+    const before=await draft(h),read=h.ps.imaging.getPixels;let excludes=false;
+    h.ps.imaging.getPixels=async(o:any)=>{excludes=applied.visible===false;const result=await read(o);const get=result.imageData.getData;result.imageData.getData=async()=>{const values=(await get()).slice();values[0]=37;return values;};return result;};
+    assert.ok(h.el('relight-exclude-results'),'a concrete recovery action is available');h.click('relight-exclude-results');await new Promise(r=>setTimeout(r,80));
+    const next=await draft(h);assert.equal(excludes,true);assert.equal(applied.visible,false);assert.equal(next.source.historyId,h.ps.app.activeDocument.activeHistoryState.id);assert.notEqual(next.source.snapshotId,before.source.snapshotId);assert.equal(next.lights[0].intensity,2.8);assert.equal(h.el('relight-generate').disabled,false);
+    const result=h.el('relight-result-list').querySelector('button');result.id='old-result';h.click('old-result');assert.equal(h.el('relight-apply').disabled,true);assert.equal(h.el('relight-export').disabled,false);assert.equal(h.posts.length,1);
+    h.click('relight-generate');await h.wait();assert.equal(h.posts.length,2);const sources=h.uploads.filter(u=>u.name.includes('source'));assert.equal(sources[sources.length-1]?.image.rgba[0],37);
+  }finally{await h.close();}
+});
+
+test('a failed automatic refresh still reopens the frozen editor and does not retry until explicit reread',async()=>{
+  const h=await panelHarness();try{
+    await open(h);h.el('relight-intensity').value='3.1';h.change('relight-intensity');const before=await draft(h);h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.ps.app.activeDocument.activeHistoryState={id:40};
+    const read=h.ps.imaging.getPixels;let attempts=0;h.ps.imaging.getPixels=async()=>{attempts++;throw Error('source read failed');};h.click('open-relight');await new Promise(r=>setTimeout(r,130));
+    assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.equal(attempts,1);assert.equal(h.el('relight-intensity').value,'3.1');assert.equal(h.el('relight-generate').disabled,true);assert.match(h.el('relight-status').textContent,/source read failed/);assert.equal((await draft(h)).source.snapshotId,before.source.snapshotId);
+    h.el('relight-intensity').value='3.2';h.change('relight-intensity');h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.click('diagnostic-primary');await new Promise(r=>setTimeout(r,100));assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.equal(attempts,1);assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);
+    h.ps.imaging.getPixels=read;h.click('relight-reread');await new Promise(r=>setTimeout(r,80));assert.equal(h.el('relight-generate').disabled,false);assert.equal(h.el('relight-intensity').value,'3.2');
+  }finally{await h.close();}
+});
+
+test('failed result exclusion preserves the frozen source, lighting and exportable candidate, then a later explicit retry succeeds',async()=>{
+  const h=await panelHarness();try{
+    await open(h);await useFullResult(h);h.el('relight-intensity').value='3.3';h.change('relight-intensity');h.click('relight-generate');await h.wait();h.click('relight-apply');await new Promise(r=>setTimeout(r,60));
+    const applied=h.appliedLayers[0].layer;applied.visible=true;h.ps.app.activeDocument.activeHistoryState={id:50};const before=await draft(h),read=h.ps.imaging.getPixels;
+    // Preserve the native transaction's visibility rollback in this panel mock.
+    const modal=h.ps.core.executeAsModal;h.ps.core.executeAsModal=(fn:any)=>modal((context:any)=>{const resume=context.hostControl.resumeHistory;const visible=applied.visible;context.hostControl.resumeHistory=async(id:number,commit:boolean)=>{await resume(id,commit);if(!commit)applied.visible=visible;};return fn(context);});
+    h.ps.imaging.getPixels=async()=>{assert.equal(applied.visible,false);throw Error('source read failed');};h.click('relight-exclude-results');await new Promise(r=>setTimeout(r,80));
+    assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.equal(applied.visible,true);assert.equal((await draft(h)).source.snapshotId,before.source.snapshotId);assert.equal(h.el('relight-intensity').value,'3.3');assert.equal(h.el('relight-generate').disabled,true);assert.equal(h.el('relight-export').disabled,false);assert.equal(h.posts.length,1);assert.equal(h.ps.app.activeDocument.activeHistoryState.id,50);
+    h.ps.imaging.getPixels=read;h.click('relight-exclude-results');await new Promise(r=>setTimeout(r,80));assert.equal(applied.visible,false);assert.equal(h.el('relight-generate').disabled,false);assert.equal(h.posts.length,1);
+  }finally{await h.close();}
+});
+
+test('explicit binding of another document offers result exclusion for that document and keeps the original source frozen on failure',async()=>{
+  const h=await panelHarness();try{
+    await open(h);await useFullResult(h);h.el('relight-intensity').value='3.4';h.change('relight-intensity');h.click('relight-generate');await h.wait();h.click('relight-apply');await new Promise(r=>setTimeout(r,60));const applied=h.appliedLayers[0].layer;applied.visible=true;
+    h.switchDocument(22);h.click('relight-rebind-current');await new Promise(r=>setTimeout(r,60));assert.equal((await draft(h)).source.documentId,22);assert.equal(applied.visible,true);
+    h.switchDocument(11);h.ps.app.activeDocument.activeHistoryState={id:80};h.click('relight-rebind-current');await new Promise(r=>setTimeout(r,60));assert.equal((await draft(h)).source.documentId,22);assert.match(h.el('relight-exclude-results').textContent,/当前文档/);
+    h.click('relight-exclude-results');await new Promise(r=>setTimeout(r,80));const after=await draft(h);assert.equal(after.source.documentId,11);assert.equal(after.source.historyId,81);assert.equal(applied.visible,false);assert.equal(h.el('relight-intensity').value,'3.4');assert.equal(h.posts.length,1);
+  }finally{await h.close();}
+});
+
+test('a closed source still opens its frozen editor and an explicit bind retains lights',async()=>{
+  const h=await panelHarness();try{
+    await open(h);h.el('relight-intensity').value='3.5';h.change('relight-intensity');const before=await draft(h);h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.setDocument(22);h.click('open-relight');await new Promise(r=>setTimeout(r,70));
+    assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.match(h.el('relight-status').textContent,/已关闭.*绑定/);assert.equal((await draft(h)).source.snapshotId,before.source.snapshotId);assert.equal(h.el('relight-generate').disabled,true);assert.equal(h.el('relight-intensity').value,'3.5');
+    h.click('relight-rebind-current');await new Promise(r=>setTimeout(r,70));assert.equal((await draft(h)).source.documentId,22);assert.equal(h.el('relight-intensity').value,'3.5');assert.equal(h.el('relight-generate').disabled,false);assert.equal(h.posts.length,0);
+  }finally{await h.close();}
+});

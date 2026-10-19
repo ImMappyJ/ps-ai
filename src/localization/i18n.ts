@@ -3,6 +3,13 @@ import type {Language} from '../infrastructure/config/profile';
 // Chinese source messages are stable keys. Model prompts and saved parameter values
 // are deliberately independent of the display language.
 export const english:Record<string,string>={
+  '隐藏 PS-AI 结果并重新读取':'Hide PS-AI results and reread',
+  '隐藏当前文档的 PS-AI 结果并绑定':'Hide current document PS-AI results and bind',
+  '恢复只隐藏本次插件会话可靠记录的结果图层／组，保留其他编辑；成功后保持隐藏并产生一次 Photoshop 撤销，失败恢复可见性。合并或无法识别的结果请手动处理。':'Recovery hides only result layers/groups recorded by this plugin session and keeps other edits. Success leaves them hidden as one Photoshop undo step; failure restores visibility. Handle merged or unrecognized results manually.',
+  '来源中仍有已应用的 PS-AI 结果；请点击“隐藏 PS-AI 结果并重新读取”，或在 Photoshop 中撤销或隐藏这些结果。布光和可导出候选已保留。':'Applied PS-AI results are still visible. Choose “Hide PS-AI results and reread”, or hide/undo them in Photoshop. Lighting and exportable candidates are retained.',
+  '来源文档已关闭；请绑定当前文档。布光配置和可导出候选已保留。':'The source document is closed. Bind the current document. Lighting and exportable candidates are retained.',
+  '此结果属于旧来源快照，仅可查看或导出；请对当前来源重新生成':'This result belongs to an earlier source snapshot and can only be viewed or exported. Generate a new result for the current source.',
+  '已隐藏可靠记录的 PS-AI 结果并读取当前编辑；隐藏可在 Photoshop 中一次撤销，撤销后须重新读取。布光已保留。':'Recorded PS-AI results are hidden and current edits have been read. Photoshop can undo the hiding in one step; reread after undo. Lighting is retained.',
   '大区域历史的来源尺寸、原生蒙版或位深不一致；原始输出已保留':'Saved large-area source dimensions, native masks or depth do not match. Raw output is retained.',
   '原文档 {0}×{1} · 原坐标回填 {2}×{3} · 工作图 {4}×{5}':'Document {0}×{1} · Native write {2}×{3} · Working image {4}×{5}',
   '送模 {0}×{1}':'Model input {0}×{1}','PNG／新文档 {0}×{1}':'PNG / new document {0}×{1}',
