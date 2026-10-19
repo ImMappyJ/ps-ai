@@ -35,9 +35,10 @@ test('large ordinary edit passes bounded source through generation, history and 
     assert.equal(maskReads(),before,'changing display selection does not reload native masks');
     assert.match(h.el('candidate-target').textContent,/同次捕获.*替换/);
     native.doc.activeHistoryState={id:native.doc.activeHistoryState.id+1};h.el('candidate-select').value='0';h.change('candidate-select');await h.wait();
-    assert.equal(h.el('apply').disabled,true);assert.equal(h.el('export').disabled,false);
+    assert.equal(h.el('apply').disabled,false);assert.equal(h.el('apply').getAttribute('data-candidate-action'),'inspect');assert.equal(h.el('export').disabled,false);
+    h.click('apply');await h.wait();assert.equal(native.writes.length,0);assert.equal(h.appliedLayers.length,0);assert.equal(h.errors[0]?.code,'source-changed');
     h.selectHistory(record.id);await h.wait();assert.match(h.el('history-details').textContent,/工作图/);
-    assert.equal(h.errors.length,0,JSON.stringify(h.errors));
+    assert.equal(h.errors.length,1,JSON.stringify(h.errors));
   }finally{await h.close();}
 });
 
@@ -66,6 +67,7 @@ test('bounded history application reloads native mask, replaces owned output and
     for(const record of records){h.selectHistory(record.id);await h.wait();h.click('load-history');await h.wait();assert.equal(h.el('apply').disabled,false);h.click('apply');await h.wait();}
     assert.equal(h.ps.app.activeDocument.layers.length,2);assert.equal(h.appliedLayers.length,2);assert.equal(h.posts.length,2);
     h.ps.app.activeDocument.activeHistoryState={id:99};h.change('candidate-select');await h.wait();
-    assert.equal(h.el('apply').disabled,true);assert.equal(h.el('export').disabled,false);assert.equal(h.errors.length,0,JSON.stringify(h.errors));
+    assert.equal(h.el('apply').disabled,false);assert.equal(h.el('apply').getAttribute('data-candidate-action'),'inspect');assert.equal(h.el('export').disabled,false);
+    h.click('apply');await h.wait();assert.equal(h.appliedLayers.length,2);assert.equal(h.posts.length,2);assert.equal(h.errors.length,1,JSON.stringify(h.errors));assert.equal(h.errors[0]?.code,'source-changed');
   }finally{await h.close();}
 });

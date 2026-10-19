@@ -70,6 +70,7 @@ test('new relight submissions freeze an explicit output choice while legacy meta
   const metadata=module!.relightTaskMetadata(frozen,'job-1',{provider:'comfyui',model:'qwen',edit:true,maxInputImages:3,maskMode:'guide',seed:true},{width:512,height:512},8,7);
   assert.equal(metadata.outputKind,'lighting-layers');assert.equal(module!.relightOutputKind({schemaVersion:1}),'full-result');
   assert.throws(()=>session.setOutputKind('compensation'),/output/i);
+  assert.throws(()=>module!.relightOutputKind({outputKind:'compensation'}),/output/i);
   assert.throws(()=>module!.relightOutputKind({outputKind:'unknown'}),/output/i);
   assert.throws(()=>module!.relightOutputKind({outputKind:null}),/output/i);
 });
@@ -117,4 +118,12 @@ test('session accepts host enum depth only through the validated numeric capture
   const ambiguous=sample();ambiguous.snapshot.depth='unknown-depth';assert.throws(()=>new module!.RelightSession(ambiguous,'bad','light-1'),/depth/i);
   const mismatch=sample();mismatch.snapshot.depth='bitDepth16';mismatch.snapshot.nativeDepth=16;mismatch.snapshot.captureGeometry={kind:'relight-analysis',width:2,height:2};mismatch.image.rgba=new Uint8Array(16).fill(255);
   assert.throws(()=>new module!.RelightSession(mismatch,'mismatch','light-1'),/depth/i);
+});
+
+test('staging a reread validates without changing the session and commits only the final native history baseline',async()=>{
+  const module=await api(),session=new module!.RelightSession(sample(),'old-source','light-1'),old=session.freeze();session.editor.updateLight('light-1',{intensity:2.9});
+  assert.equal(typeof session.stageRebind,'function');const captured=sample(),commit=session.stageRebind(captured,'new-source');
+  assert.equal(session.sourceCapture,old.capture);assert.equal(session.ownsSnapshot('new-source'),false);commit(77);
+  assert.equal(session.sourceCapture.snapshot.historyId,77);assert.equal(session.editor.snapshot().source.historyId,77);assert.equal(session.editor.snapshot().lights[0].intensity,2.9);assert.equal(old.capture.snapshot.historyId,5);
+  const before=session.freeze(),invalid=sample();invalid.snapshot.sourceLayerIds=[];assert.throws(()=>session.stageRebind(invalid,'bad-source'));assert.equal(session.sourceCapture,before.capture);assert.equal(session.ownsSnapshot('bad-source'),false);
 });

@@ -46,6 +46,14 @@ function sameBinding(a:RelightSource,b:RelightSource):boolean {
 
 /** The native-depth clean capture never becomes an illustration or a mutable UI buffer. */
 export class RelightSession {
+  /** Stage a fresh session before a native exclusion commits, retaining one capture clone. */
+  static stageCreation(capture:Capture,snapshotId:string,lightId:string,scope:RelightScope='selection'):{session:RelightSession;commit(historyId:number):RelightSession} {
+    const session=new RelightSession(capture,snapshotId,lightId,scope);
+    return {session,commit:historyId=>{
+      const scene=session.editor.snapshot(),editor=new RelightEditor({...scene,source:{...scene.source,historyId}});
+      session.captured.snapshot.historyId=historyId;session.editor=editor;return session;
+    }};
+  }
   editor:RelightEditor;
   private captured:Capture;
   private snapshots=new Set<string>();
@@ -73,9 +81,16 @@ export class RelightSession {
     this.editor=new RelightEditor({...scene,source:reuseOnCurrentSource?source:scene.source});
   }
   rebind(capture:Capture,snapshotId:string,scope:RelightScope=this.capturedScope):void {
+    this.stageRebind(capture,snapshotId,scope)();
+  }
+  /** Validate and allocate before native recovery commits; publish only its final history baseline. */
+  stageRebind(capture:Capture,snapshotId:string,scope:RelightScope=this.capturedScope):(historyId?:number)=>void {
     if(!this.snapshots.has(snapshotId)&&this.snapshots.size>=100)throw new Error('本次布光的来源记录已达上限，请从历史明确复用布光到新会话；已有结果仍可导出');
     const old=this.editor.snapshot(),next=cloneCapture(capture),source=binding(next,snapshotId),editor=new RelightEditor({...old,source});
-    this.captured=next;this.capturedScope=scope;this.editor=editor;this.snapshots.add(snapshotId);
+    return (historyId=next.snapshot.historyId)=>{
+      const committed=historyId===source.historyId?editor:new RelightEditor({...old,source:{...source,historyId}});
+      next.snapshot.historyId=historyId;this.captured=next;this.capturedScope=scope;this.editor=committed;this.snapshots.add(snapshotId);
+    };
   }
 }
 

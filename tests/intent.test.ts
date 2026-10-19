@@ -57,3 +57,34 @@ test('平台语义意图不规定图像编号，原始提示中的字面标记�
   const raw='把服装换成白色，保留标签 <image9>';
   const edit=intent('cosplay','reference',raw,true,true,'服装','semantic');assert.equal(edit.kind,'edit');assert.equal(edit.referenceSlot,undefined);assert.doesNotMatch(edit.prompt,/<image[123]>/);assert.ok(edit.prompt.includes(raw));assert.match(edit.prompt,/服装参考图/);
 });
+
+test('selection-context assets use the photo and guide for independent transparent effects and atmosphere',()=>{
+  const raw='  蓝色电弧，保留字面标签 <image9>  ';
+  for(const mode of ['effect','atmosphere'])for(const binding of ['images','semantic'] as const){
+    const request=intent('cosplay',mode,raw,false,true,'道具',binding,false,'selection-v1');
+    assert.equal(request.kind,'asset');assert.equal(request.assetContext,'selection-v1');assert.equal(request.referenceSlot,undefined);
+    assert.ok(request.prompt.includes(raw.trim()));assert.match(request.prompt,/独立.*素材/);assert.match(request.prompt,/transparent background.*RGBA/);
+    assert.match(request.prompt,/位置.*尺度.*透视.*色调.*光线/);assert.match(request.prompt,/范围.*放置|放置.*范围/);
+    assert.doesNotMatch(request.prompt,/编辑.*局部内容|保持原画布|未指定内容|原人物面部/);
+    if(binding==='semantic')assert.doesNotMatch(request.prompt,/<image[123]>/);
+    else {assert.match(request.prompt,/<image1>/);assert.match(request.prompt,/<image2>/);}
+  }
+});
+
+test('selection-context intent cannot omit its guide or accept imported references and unsupported markers',()=>{
+  const contextual=(mode:string,guide:boolean,hasReference=false,context:unknown='selection-v1')=>(intent as any)('cosplay',mode,'蓝色电弧',hasReference,guide,'道具','semantic',false,context);
+  assert.throws(()=>contextual('effect',false),/范围|guide/);
+  assert.throws(()=>contextual('atmosphere',true,true),/参考/);
+  assert.throws(()=>contextual('effect',true,false,'selection-v2'),/素材|context/);
+  assert.throws(()=>contextual('relight',true),/素材|context/);
+  assert.throws(()=>(intent as any)('t2i','generate','森林',false,true,'场景','semantic',false,'selection-v1'),/素材|context/);
+});
+
+test('assets without a context marker keep their existing text-only meaning',()=>{
+  for(const mode of ['effect','atmosphere']){
+    const request=intent('cosplay',mode,'蓝色电弧',false,true,'道具');
+    assert.equal(request.kind,'asset');assert.equal(request.assetContext,undefined);
+    assert.equal(request.prompt,'蓝色电弧 独立可合成的特效/氛围素材，transparent background, RGBA image，保留自然半透明边缘，不要实心黑底、白底、文字或场景。');
+    assert.doesNotMatch(request.prompt,/<image[123]>/);
+  }
+});

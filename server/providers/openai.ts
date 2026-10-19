@@ -55,10 +55,11 @@ export class OpenAIImagesProvider implements ImageProvider {
     this.configured=!!this.apiKey;this.transport=options.transport??fetch;this.timeoutMs=options.timeoutMs??180000;
   }
   capabilities():GatewayCapabilities {
-    return {protocol:GATEWAY_PROTOCOL,provider:this.id,configured:this.configured,cancellation:'none',progress:'stages',models:MODELS.map(id=>({id,label:id,operations:['t2i','edit','asset'],maxInputImages:3,outputDepths:[8],seedMax:0,minPixels:512*512,maxPixels:2048*2048,maxAspectRatio:id==='gpt-image-1.5'?8:3}))};
+    return {protocol:GATEWAY_PROTOCOL,provider:this.id,configured:this.configured,cancellation:'none',progress:'stages',models:MODELS.map(id=>({id,label:id,operations:['t2i','edit','asset'],assetContexts:['selection-v1'],maxInputImages:3,outputDepths:[8],seedMax:0,minPixels:512*512,maxPixels:2048*2048,maxAspectRatio:id==='gpt-image-1.5'?8:3}))};
   }
   async submit(request:GenerationRequest,images:Uint8Array[]):Promise<{image:Uint8Array}>{
     if(!this.configured)throw new ServiceError(401,'authentication','Server OPENAI_API_KEY is not configured');
+    const imageInput=request.kind==='edit'||request.assetContext==='selection-v1';
     let body:Record<string,unknown>;
     try{
       validateGeneration(request,this.capabilities());
@@ -71,13 +72,13 @@ export class OpenAIImagesProvider implements ImageProvider {
         if(role==='guide')mask={image_url:dataUrl(encodePng(padded(image,box,true)))};
         else inputs.push({image_url:dataUrl(role==='source'?encodePng(padded(image,box,false)):images[i])});
       }
-      const context=request.kind==='edit'?`Edit the first image and preserve its framing and subject scale.${request.reference?' The next image is a reference, not another edit target.':''}${mask?' Use the supplied mask as editing guidance.':''}\n`:'';
-      body={model:request.model,prompt:context+request.prompt,n:1,size:`${box.canvasWidth}x${box.canvasHeight}`,quality:'medium',output_format:'png',background:request.kind==='asset'?'transparent':'opaque',...(request.kind==='edit'?{images:inputs,...(mask?{mask}:{})}:{})};
+      const context=request.assetContext==='selection-v1'?'Use the first image only as a reference for placement, scale, perspective, color and lighting. Use the supplied mask to place a standalone transparent effect or atmosphere asset. Return only the independent asset, excluding people and scenery from the source.\n':request.kind==='edit'?`Edit the first image and preserve its framing and subject scale.${request.reference?' The next image is a reference, not another edit target.':''}${mask?' Use the supplied mask as editing guidance.':''}\n`:'';
+      body={model:request.model,prompt:context+request.prompt,n:1,size:`${box.canvasWidth}x${box.canvasHeight}`,quality:'medium',output_format:'png',background:request.kind==='asset'?'transparent':'opaque',...(imageInput?{images:inputs,...(mask?{mask}:{})}:{})};
     }catch(error){if(error instanceof ServiceError)throw error;throw new ServiceError(400,'invalid-input','Invalid OpenAI image request; check model, canvas, seed and PNG inputs');}
     const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
     try{
       return await Promise.race([(async()=>{
-        const response=await this.transport(this.baseUrl+(request.kind==='edit'?'/images/edits':'/images/generations'),{method:'POST',headers:{Authorization:`Bearer ${this.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal,redirect:'error'});
+        const response=await this.transport(this.baseUrl+(imageInput?'/images/edits':'/images/generations'),{method:'POST',headers:{Authorization:`Bearer ${this.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal,redirect:'error'});
         if(!response.ok){
           const status=response.status;await response.body?.cancel();
           const uncertain=status===408||status>=500;

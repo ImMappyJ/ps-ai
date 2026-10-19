@@ -1,6 +1,20 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {panelHarness} from './uxp-harness';import {defaultSettings} from '../src/infrastructure/config/profile';import {uuid} from '../src/infrastructure/backends/client';
 const settings={...defaultSettings(),backend:'gateway',baseUrl:'http://localhost:8190',gatewayModel:'qwen-image-2.1-pro',outputDepth:8};
+
+test('selection asset capability is required before any upload or generation POST',async()=>{
+  for(const language of ['zh-CN','en-US']){const h=await panelHarness({settings:{...settings,language}});try{
+    await h.wait();h.click('tab-cosplay');h.el('resolution').value='512';h.el('destination').value='document';h.change('destination');h.click('generate');await h.wait();
+    assert.equal(h.uploads.length,0);assert.equal(h.gatewayPosts.length,0);assert.equal(h.records().length,0);assert.match(h.el('status').textContent,language==='zh-CN'?/不支持参考当前图片与选区/:/current image and selection/);assert.equal(JSON.parse(h.el('diagnostic-details').value).code,'unsupported');
+  }finally{await h.close();}}
+});
+
+test('supported gateway selection assets send paired source and guide for new-document output',async()=>{
+  const h=await panelHarness({settings:{...settings,gatewayModel:'gpt-image-2.5-sunburst'},gateway:{provider:'openai',assetContexts:['selection-v1']}});try{
+    await h.wait();h.click('tab-cosplay');h.el('resolution').value='512';h.el('guide').checked=false;h.el('destination').value='document';h.change('destination');h.click('generate');await h.wait();
+    assert.equal(h.gatewayPosts.length,1);const request=h.gatewayPosts[0].request;assert.equal(request.assetContext,'selection-v1');assert.equal(request.kind,'asset');assert.equal(request.seed,0);assert.equal(request.reference,undefined);assert.ok(request.source);assert.ok(request.guide);assert.equal(h.uploads.length,2);assert.doesNotMatch(request.prompt,/<image[123]>/);assert.equal((h.records()[0].params as any).destination,'document');
+  }finally{await h.close();}
+});
 test('gateway background modes retain provider guide uploads while disabling source silhouette restoration',async()=>{
   for(const [tab,mode] of [['tab-local','background'],['tab-cosplay','scene']]){
     const h=await panelHarness({settings,selection:{bounds:{left:0,top:0,right:1,bottom:2},mask:new Uint8Array([255,0,255,0])}});try{
@@ -58,7 +72,7 @@ test('OpenAI 界面正确标记平台与缺Key说明，生成前不捕获或上�
 
 test('OpenAI 英文素材模式可提交，不误报方形1K上下文或支持种子',async()=>{
   const h=await panelHarness({settings:{...settings,gatewayModel:'gpt-image-2.5-sunburst',language:'en-US'},gateway:{provider:'openai'},noDocuments:true});
-  try{await h.wait();h.click('connect');await h.wait();assert.match(h.el('gateway-info').textContent,/OpenAI Images/);assert.doesNotMatch(h.el('gateway-info').textContent,/square context/);assert.equal(h.el('seed').disabled,true);h.click('tab-cosplay');h.el('destination').value='document';h.change('destination');h.click('generate');await h.wait();assert.equal(h.gatewayPosts.length,1);assert.equal(h.gatewayPosts[0].request.kind,'asset');assert.equal(h.gatewayPosts[0].request.seed,0);}finally{await h.close();}
+  try{await h.wait();h.click('connect');await h.wait();assert.match(h.el('gateway-info').textContent,/OpenAI Images/);assert.doesNotMatch(h.el('gateway-info').textContent,/square context/);assert.equal(h.el('seed').disabled,true);h.click('tab-cosplay');h.el('asset-input').value='text';h.change('asset-input');h.click('generate');await h.wait();assert.equal(h.gatewayPosts.length,1);assert.equal(h.gatewayPosts[0].request.kind,'asset');assert.equal(h.gatewayPosts[0].request.seed,0);assert.equal(h.captured.length,0);assert.equal(h.uploads.length,0);assert.equal(h.gatewayPosts[0].request.assetContext,undefined);}finally{await h.close();}
 });
 
 test('面板平台请求使用无编号语义意图，保留原始提示和范围辅助输入',async()=>{

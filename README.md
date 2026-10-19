@@ -6,13 +6,13 @@
 
 PS-AI 将 ComfyUI 接到 Photoshop 中，用于局部修图、人像服装和道具处理，以及文字生图。圈选区域、描述修改要求，在面板里生成并预览候选，确认后应用为带蒙版的新图层。
 
-当前源码版本为 **0.5.2（实验性测试版）**。下方公开包安装说明及既有截图以 **v0.4.0（实验版）** 为基线；开发版与原生验收范围见下文。v0.4.0 包含配置向导、色彩检查、编辑范围预览和可选 16 位 SDR 输出。安装时使用同版本的插件包和环境工具。生成结果可能需要手工修整，建议在已保存的副本上使用。不包含常规人像磨皮、去痘和肤色精修功能。
+当前源码版本固定为 **0.5.0（实验性测试版）**，具体修订由独立 Git 构建标识区分。下方公开包安装说明及既有截图以 **v0.4.0（实验版）** 为基线；开发版与原生验收范围见下文。v0.4.0 包含配置向导、色彩检查、编辑范围预览和可选 16 位 SDR 输出。安装时使用同版本的插件包和环境工具。生成结果可能需要手工修整，建议在已保存的副本上使用。不包含常规人像磨皮、去痘和肤色精修功能。
 
 从 0.3.0 升级后，面板名称由 `PS-AI FOR ME` 改为 `PS-AI`，图标使用 Morph Frame 标识。插件 ID 与 `PS-AI-FOR-ME` 安装目录保持不变。
 
-开发分支的面板可选择 ComfyUI、Nano Banana、GPT Image 和 BaiLian，支持分别保存模型与加密 Key，并按需启动本机中转；人像工作区提供独立的[光影重塑工作台](docs/usage/USER_GUIDE.md#relight)，编辑多光源意图后主动生成，完整结果以蒙版新图层回写。配置见 [平台选择](docs/setup/PLATFORMS.md)，接口细节见 [百炼](docs/providers/BAILIAN.md)、[Gemini / Nano Banana](docs/providers/GEMINI.md) 与 [OpenAI Images](docs/providers/OPENAI.md) 的平台适配服务。平台路径仍待真实 API Key 和 Photoshop 验收，**不在已发布的 v0.4.0 包中**。本页下方截图及已测能力对应 ComfyUI 路径；本地布光示意不是 AI 结果，实验补偿层尚未开放应用。
+开发分支的面板可选择 ComfyUI、Nano Banana、GPT Image 和 BaiLian，支持分别保存模型与加密 Key，并按需启动本机中转；人像工作区提供独立的[光影重塑工作台](docs/usage/USER_GUIDE.md#relight)，编辑多光源意图后主动生成，完整结果以蒙版新图层回写。配置见 [平台选择](docs/setup/PLATFORMS.md)，接口细节见 [百炼](docs/providers/BAILIAN.md)、[Gemini / Nano Banana](docs/providers/GEMINI.md) 与 [OpenAI Images](docs/providers/OPENAI.md) 的平台适配服务。平台路径仍待真实 API Key 和 Photoshop 验收，**不在已发布的 v0.4.0 包中**。本页下方截图及已测能力对应 ComfyUI 路径；本地布光示意不是 AI 结果，输出仅提供整图重绘和实验光影层，真实保细节效果仍需验收。
 
-开发版另补充了[原图色彩读取](docs/usage/USER_GUIDE.md#source-color)：没有文档 ICC 时可识别静态 WebP 的默认 sRGB 或 PNG 的显式 sRGB 标记，在工作副本中继续。WebP 8 位工作副本已在 Photoshop 27 完成等值回填与撤销检查；PNG、参考导入和新版面板交互仍待实机验收。现有 v0.4.0 包不包含这项改动。
+开发版另补充了[原图色彩读取](docs/usage/USER_GUIDE.md#source-color)：没有文档 ICC 时可识别静态 WebP 的默认 sRGB 或 PNG 的显式 sRGB 标记，在工作副本中继续。WebP 8 位工作副本已在 Photoshop 27 完成等值回填与撤销检查；本轮另有公开 PNG8 的原生选区／整图捕获及已安装 b3548bd4 的有限色彩恢复流程证据。后续已核对 291c1d40 的 21 个安装运行文件，并通过原文件选择、当前选区捕获与小 RGB8 素材应用／历史读回；参考导入、其他控件和真实模型质量仍单独验收。现有 v0.4.0 包不包含这项改动。
 
 开发版还修正了[背景生成黑底／透明底](docs/usage/USER_GUIDE.md#background-fix)的问题，此前已用同一张样图验证舞台背景生成和 Photoshop 回填。后续开发改动增加免提示词移除、[人像溶图](docs/usage/USER_GUIDE.md#blend)、从主体选区替换整张背景及 RGBA 边缘处理；这些新交互与效果目前仅有离线覆盖，仍需 Photoshop 和真实推理验收。现有 v0.4.0 包尚未更新。
 

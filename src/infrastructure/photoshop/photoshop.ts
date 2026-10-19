@@ -9,14 +9,16 @@ import {validateRelightLayerFields,renderRelightLayerStrip,type RelightLayerFiel
 import {sha256} from '@noble/hashes/sha2.js';
 export interface Snapshot {documentId:number;width:number;height:number;profile:string;mode:string;depth:unknown;nativeDepth?:8|16;historyId:number;sessionId:string;bounds:Bounds;mask:Uint8Array;sourceHash:string;sourceLayerIds?:number[];clipBaseLayerId?:number;requiresClipping?:boolean;colorReason?:SourceColorReason;backgroundComposite?:'subject-background-v1';captureGeometry?:{kind:'relight-analysis'|'edit-analysis';width:number;height:number}}
 export interface Capture {snapshot:Snapshot;image:Raster;selectionMask:Uint8Array;protectionMask:Uint8Array;subjectMask?:Uint8Array;workingCopyOf?:number;documentName?:string}
-export interface CaptureOptions {context?:'selection'|'document';selection?:'edit'|'subject-background'|'document';preserveNativeDepth?:boolean;purpose?:'relight-analysis';analysisResolution?:number;retainedBytes?:number}
-export interface EditAnalysisApplyOptions {preserveAlpha:boolean;subjectMask?:Uint8Array;protectionMask?:Uint8Array;signal?:AbortSignal;onProgress?:(done:number,total:number)=>void;retainedBytes?:number}
+export interface CaptureOptions {context?:'selection'|'document';selection?:'edit'|'subject-background'|'document';preserveNativeDepth?:boolean;purpose?:'relight-analysis'|'selection-asset';analysisResolution?:number;retainedBytes?:number;excludeApplications?:boolean}
+export interface EditAnalysisApplyOptions {preserveAlpha:boolean;assetContext?:'selection-v1';subjectMask?:Uint8Array;protectionMask?:Uint8Array;signal?:AbortSignal;onProgress?:(done:number,total:number)=>void;retainedBytes?:number}
 export interface Protection {documentId:number;width:number;height:number;bounds:Bounds;mask:Uint8Array;sessionId:string}
 /** Geometry only: restoring it grants no permission to apply an old candidate. */
 export interface SelectionRange {documentId:number;sessionId:string;width:number;height:number;mode:string;depth:unknown;bounds:Bounds;mask:Uint8Array}
+interface ColorCopyProvenance {sessionId:string;workingCopyOf:number;origin:string;colorReason:SourceColorReason}
 export class PhotoshopAdapter {
   private applications=new Map<string,{documentId:number;historyId:number;layerId:number;sourceIdentity:string}>();
   private maskKeys=new WeakMap<Uint8Array,number>();
+  private colorCopies=new Map<number,ColorCopyProvenance>();
   constructor(public ps:any,public sessionId:string,private checkpoint:(stage:string)=>Promise<void>=async()=>{},private readSourceColor:SourceColorReader=async()=>undefined){}
   private activeDocument():any {return this.ps.app.documents.length?this.ps.app.activeDocument:undefined;}
   private profiled(doc:any):boolean {return hasSourceProfile(doc,this.ps.constants.ColorProfileType?.NONE);}
@@ -30,12 +32,84 @@ export class PhotoshopAdapter {
     if(color?.kind!=='srgb'||color.width!==doc.width||color.height!==doc.height||color.depth!==depth||doc.mode!==this.ps.constants.DocumentMode.RGB)requireSourceProfile(doc,this.ps.constants.ColorProfileType?.NONE);
     return color;
   }
-  private async colorCopy(doc:any,context:any):Promise<any> {
+  private colorOrigin(doc:any):string|undefined {
+    // Use scalar native identities, never DOM wrapper identity or historyStates
+    // length: inactive native collections can expose trailing undefined IDs.
+    if(this.profiled(doc)||doc.path!==undefined&&doc.path!==null&&doc.path!==''||doc.quickMaskMode||doc.mode!==this.ps.constants.DocumentMode.RGB||![this.ps.constants.BitsPerChannelType.EIGHT,this.ps.constants.BitsPerChannelType.SIXTEEN].includes(doc.bitsPerChannel)||!Number.isSafeInteger(doc.activeHistoryState?.id)||doc.activeHistoryState.id<=0)return;
+    try {
+      checkDocumentSize(doc.width,doc.height);
+      let count=0;const seen=new Set<number>();
+      const identities=(layers:any,depth=0):unknown[]=>Array.from(layers as any[]).map(layer=>{
+        if(depth>64||++count>10000||!Number.isSafeInteger(layer.id)||layer.id<=0||seen.has(layer.id))throw new Error('Invalid layer identity');
+        seen.add(layer.id);return [layer.id,layer.layers?identities(layer.layers,depth+1):null];
+      });
+      return JSON.stringify([this.sourceState(doc),identities(doc.layers)]);
+    }catch{return;}
+  }
+  private pruneColorCopies():void {
+    const live=new Set(Array.from(this.ps.app.documents as any[]).map(doc=>doc.id));
+    for(const [id,record] of this.colorCopies)if(!live.has(id)||record.sessionId!==this.sessionId)this.colorCopies.delete(id);
+  }
+  private rememberColorCopy(doc:any,workingCopyOf:number,origin:string|undefined,colorReason:SourceColorReason|undefined):void {
+    this.pruneColorCopies();
+    if(!origin||!['webp-default','png-srgb'].includes(colorReason??''))return;
+    this.colorCopies.set(doc.id,{sessionId:this.sessionId,workingCopyOf,origin,colorReason:colorReason!});
+    while(this.colorCopies.size>32)this.colorCopies.delete(this.colorCopies.keys().next().value!);
+  }
+  /** Session proof only; this observation grants no candidate apply permission. */
+  colorRecoveryAvailability(documentId:number):'available'|'not-needed'|'unavailable' {
+    this.pruneColorCopies();
+    const doc=Array.from(this.ps.app.documents as any[]).find(doc=>doc.id===documentId);
+    if(!doc)return 'unavailable';
+    if(this.profiled(doc))return 'not-needed';
+    const proof=this.colorCopies.get(documentId);
+    return proof&&this.colorOrigin(doc)===proof.origin?'available':'unavailable';
+  }
+  /** Explicitly duplicate the proven undone origin, retaining its entire redo branch. */
+  async createRecoveredColorCopy(documentId:number):Promise<{documentId:number;workingCopyOf:number;colorReason:SourceColorReason}> {
+    const unavailable=()=>new Error('当前来源没有可验证的会话色彩恢复记录；请在副本中指定正确配置文件');
+    if(this.colorRecoveryAvailability(documentId)!=='available')throw unavailable();
+    const proof=this.colorCopies.get(documentId)!;
+    return this.ps.core.executeAsModal(async(context:any)=>{
+      const previous=this.activeDocument();let copy:any,origin:string|undefined,keep=false,unregistered=false;
+      const check=()=>{if(context.isCancelled)throw new DiagnosticError('cancelled','capture','色彩副本恢复已取消');};
+      try {
+        check();
+        if(this.colorRecoveryAvailability(documentId)!=='available'||this.colorCopies.get(documentId)!==proof)throw unavailable();
+        const doc=Array.from(this.ps.app.documents as any[]).find(doc=>doc.id===documentId)!;
+        copy=await this.colorCopy(doc,context,value=>{origin=value;});check();
+        // Recheck the old source after asynchronous duplication/assignment. All
+        // assignment/history writes belong exclusively to the newly created copy.
+        if(!origin||this.colorRecoveryAvailability(documentId)!=='available')throw unavailable();
+        requireSourceProfile(copy,this.ps.constants.ColorProfileType?.NONE);
+        await context.hostControl.unregisterAutoCloseDocument(copy.id);unregistered=true;check();
+        this.ps.app.activeDocument=copy;
+        this.rememberColorCopy(copy,documentId,origin,proof.colorReason);keep=true;
+        return {documentId:copy.id,workingCopyOf:documentId,colorReason:proof.colorReason};
+      }finally{
+        try{if(copy&&!keep){
+          this.colorCopies.delete(copy.id);
+          try{await copy.closeWithoutSaving();}
+          catch(error){
+            // Cancellation can arrive just after successful unregister. If the
+            // explicit close then fails, restore the host's cleanup fallback.
+            if(unregistered)await context.hostControl.registerAutoCloseDocument(copy.id);
+            throw error;
+          }
+          if(!unregistered)await context.hostControl.unregisterAutoCloseDocument(copy.id);
+        }}
+        finally{if(!keep&&previous&&Array.from(this.ps.app.documents as any[]).some(doc=>doc.id===previous.id))this.ps.app.activeDocument=previous;}
+      }
+    },{commandName:'PS-AI 创建已恢复色彩的副本'});
+  }
+  private async colorCopy(doc:any,context:any,onOrigin?:(origin:string|undefined)=>void):Promise<any> {
     const copy=await doc.duplicate(`${doc.name||'PS-AI'} — sRGB`,false);
     if(!copy||copy.id===doc.id)throw new Error('工作副本的 sRGB 配置失败');
     let suspension:any,pending=false;
     try {
       await context.hostControl.registerAutoCloseDocument(copy.id);
+      onOrigin?.(this.colorOrigin(copy));
+      if(context.isCancelled)throw new DiagnosticError('cancelled','capture','色彩副本创建已取消');
       // Commit the assignment as the duplicate's own history baseline. A live
       // profile setter alone can leave the previous, untagged history state as
       // the target of Undo after the first candidate application.
@@ -202,10 +276,11 @@ export class PhotoshopAdapter {
     }
     return {requiresClipping,...(requiresClipping&&baseMatches?{clipBaseLayerId:base.id}:{}),...(selectionMask?{selectionMask}:{})};
   }
-  async capture(margin=.15,protection?:Protection,expectedDocumentId=this.activeDocument()?.id,outputDepth:8|16=8,options:CaptureOptions={}):Promise<Capture> {
+  async capture(margin=.15,protection?:Protection,expectedDocumentId=this.activeDocument()?.id,outputDepth:8|16=8,options:CaptureOptions={},beforeCommit?:(capture:Capture)=>void):Promise<Capture> {
     if(!Number.isFinite(margin)||margin<0||margin>1)throw new Error('上下文边距无效');
-    if(!options||typeof options!=='object'||Array.isArray(options)||Object.keys(options).some(k=>!['context','selection','preserveNativeDepth','purpose','analysisResolution','retainedBytes'].includes(k))||options.context!==undefined&&!['selection','document'].includes(options.context)||options.selection!==undefined&&!['edit','subject-background','document'].includes(options.selection)||options.selection==='document'&&options.context==='selection'||options.preserveNativeDepth!==undefined&&typeof options.preserveNativeDepth!=='boolean'||options.purpose!==undefined&&options.purpose!=='relight-analysis'||options.purpose==='relight-analysis'&&options.selection==='subject-background'||options.analysisResolution!==undefined&&(!Number.isInteger(options.analysisResolution)||options.analysisResolution<32||options.analysisResolution>2048||options.analysisResolution%32)||options.retainedBytes!==undefined&&(!Number.isSafeInteger(options.retainedBytes)||options.retainedBytes<0)||![8,16].includes(outputDepth))throw new Error('捕获策略无效');
-    const analysis=options.purpose==='relight-analysis';
+    if(!options||typeof options!=='object'||Array.isArray(options)||Object.keys(options).some(k=>!['context','selection','preserveNativeDepth','purpose','analysisResolution','retainedBytes','excludeApplications'].includes(k))||options.context!==undefined&&!['selection','document'].includes(options.context)||options.selection!==undefined&&!['edit','subject-background','document'].includes(options.selection)||options.selection==='document'&&options.context==='selection'||options.preserveNativeDepth!==undefined&&typeof options.preserveNativeDepth!=='boolean'||options.purpose!==undefined&&!['relight-analysis','selection-asset'].includes(options.purpose)||options.purpose==='relight-analysis'&&options.selection==='subject-background'||options.analysisResolution!==undefined&&(!Number.isInteger(options.analysisResolution)||options.analysisResolution<32||options.analysisResolution>2048||options.analysisResolution%32)||options.retainedBytes!==undefined&&(!Number.isSafeInteger(options.retainedBytes)||options.retainedBytes<0)||options.excludeApplications!==undefined&&typeof options.excludeApplications!=='boolean'||![8,16].includes(outputDepth))throw new Error('捕获策略无效');
+    const analysis=options.purpose==='relight-analysis',asset=options.purpose==='selection-asset';
+    if(asset&&(options.selection!==undefined&&options.selection!=='edit'||options.context==='document'||options.preserveNativeDepth===false))throw new Error('捕获策略无效');
     const background=options.selection==='subject-background',whole=options.selection==='document',fullContext=background||whole||options.context==='document';
     await this.checkpoint('capture.start');
     const expected=this.document();
@@ -216,14 +291,22 @@ export class PhotoshopAdapter {
     if(!analysis)try{planNativeCaptureMemory(initialBounds.right-initialBounds.left,initialBounds.bottom-initialBounds.top,nativeDepth,options.retainedBytes);}catch(error){if(!(error instanceof ImageBudgetError))throw error;memory=planEditAnalysisMemory(initialBounds.right-initialBounds.left,initialBounds.bottom-initialBounds.top,nativeDepth,options.analysisResolution,options.retainedBytes);editAnalysis=true;}
     const bounded=!!memory;
     const selectionState=whole?undefined:JSON.stringify(expected.selection.bounds);
-    const state=this.sourceState(expected),color=await this.savedColor(expected);
+    let state=this.sourceState(expected);const color=await this.savedColor(expected);
     return this.ps.core.executeAsModal(async(context:any)=>{
       let doc=this.document();const original=doc;
       if(doc.id!==expectedDocumentId)throw new Error('活动文档已切换，请在来源文档重新生成');
       const bounds=this.captureBounds(doc,margin,fullContext,whole,true);
       if(state!==this.sourceState(doc))throw new Error('来源文档尺寸、颜色或内容状态已改变，请重新捕获');
       if(!whole&&selectionState!==JSON.stringify(doc.selection.bounds))throw new Error('来源或选区已改变，请重新读取原图；原有布光配置已保留');
-      const guard=()=>{if(context.isCancelled)throw new DiagnosticError('cancelled','capture','原图读取已取消');if(state!==this.sourceState(doc)||!whole&&selectionState!==JSON.stringify(doc.selection.bounds))throw new Error('来源或选区已改变，请重新读取原图；原有布光配置已保留');};
+      let exclusion:any,exclusionPending=false;
+      try {
+      const results=options.excludeApplications?this.visibleApplications(doc):[];
+      if(results.length){
+        exclusion=await context.hostControl.suspendHistory({documentID:doc.id,name:'PS-AI 排除已应用结果并重新读取'});exclusionPending=true;
+        for(const layer of results)layer.opacity=0;
+        state=this.sourceState(doc);
+      }
+      const guard=()=>{if(context.isCancelled)throw new DiagnosticError('cancelled','capture','原图读取已取消');if(state!==this.sourceState(original)||!whole&&selectionState!==JSON.stringify(original.selection.bounds))throw new Error('来源或选区已改变，请重新读取原图；原有布光配置已保留');};
       let mask=whole?new Uint8Array(doc.width*doc.height).fill(255):bounded?await this.maskStrips(doc,bounds,guard):await this.mask(doc.id,bounds);
       if(!mask.some(v=>v>0))throw new DiagnosticError('selection-required','capture','选区为空');
       let selectionMask=mask;const subjectMask=background?mask:undefined,protectionMask=new Uint8Array(mask.length);
@@ -239,9 +322,14 @@ export class PhotoshopAdapter {
       }
       if(!background&&!mask.some(v=>v>0))throw new Error('编辑范围完全被保护区覆盖');
       if(background&&editAnalysis&&mask===subjectMask)mask=new Uint8Array(mask.length);
-      let copy:any,keepCopy=false;
+      let copy:any,colorOrigin:string|undefined,keepCopy=false,copyUnregistered=false;
       try {
-        if(color){copy=await this.colorCopy(doc,context);doc=copy;}
+        guard();
+        if(color){copy=await this.colorCopy(doc,context,value=>{colorOrigin=value;});doc=copy;}
+        // Native duplication may leave the new document without a selection.
+        // The mask is already frozen from the original; guard each document's
+        // own selection baseline rather than comparing unrelated DOM states.
+        const pixelSelectionState=whole?undefined:JSON.stringify(doc.selection.bounds);
         await this.checkpoint('capture.pixels.read');
         const pixelState=this.sourceState(doc);
         const result=await this.ps.imaging.getPixels({documentID:doc.id,sourceBounds:bounds,...(memory?{targetSize:{width:memory.width,height:memory.height}}:{}),colorSpace:'RGB',colorProfile:'sRGB IEC61966-2.1',componentSize:doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,applyAlpha:false});
@@ -253,14 +341,14 @@ export class PhotoshopAdapter {
           await this.checkpoint('capture.pixels.getData');
           // The background matte must see native alpha, even for an 8-bit
           // provider: 65534 must not round up to an opaque, protected core.
-          const captureDepth=options.preserveNativeDepth||bounded?(doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8):background&&doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:outputDepth;
+          const captureDepth=asset||options.preserveNativeDepth||bounded?(doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8):background&&doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:outputDepth;
           const read=await this.rgbData(data,captureDepth);
           image=memory?mapCaptureRaster(read,result.sourceBounds,bounds,result.level??0,memory.width,memory.height,editAnalysis?IMAGE_BUDGETS.editPixels:IMAGE_BUDGETS.analysisPixels):expandPixels(read,result.sourceBounds,bounds,result.level??0);
         } finally {data.dispose();await this.checkpoint('capture.pixels.disposed');}
         if(context.isCancelled)throw new DiagnosticError('cancelled','capture','原图读取已取消');
         if(pixelState!==this.sourceState(doc))throw new Error('来源文档尺寸、颜色或内容状态已改变，请重新捕获');
         let nativeScan:{requiresClipping:boolean;clipBaseLayerId?:number;selectionMask?:Uint8Array}|undefined;
-        const pixelGuard=()=>{if(context.isCancelled)throw new DiagnosticError('cancelled','capture','原图读取已取消');if(pixelState!==this.sourceState(doc)||!whole&&selectionState!==JSON.stringify(doc.selection.bounds))throw new Error('来源或选区已改变，请重新读取原图');};
+        const pixelGuard=()=>{guard();if(pixelState!==this.sourceState(doc)||!whole&&pixelSelectionState!==JSON.stringify(doc.selection.bounds))throw new Error('来源或选区已改变，请重新读取原图');};
         if(editAnalysis){nativeScan=await this.scanEditSource(doc,bounds,mask,pixelGuard,subjectMask,protectionMask);if(nativeScan.selectionMask)selectionMask=nativeScan.selectionMask;}
         if(background&&!editAnalysis){
           selectionMask=backgroundEditMask(image,subjectMask!);
@@ -269,16 +357,21 @@ export class PhotoshopAdapter {
         if(background&&!mask.some(v=>v>0))throw new Error('编辑范围完全被保护区覆盖或没有可替换背景');
         if(!background&&fullContext&&!whole){const contextMask=bounded?downsampleSnapshotMask({bounds,mask:selectionMask},image.width,image.height):selectionMask;if(!contextMask.some((s,p)=>s===0&&image.rgba[p*4+3]>=16*rasterMax(image)/255))throw new Error('主体选区外没有可见环境，请保留可见背景作为溶图参考');}
         const visibleMask=bounded?downsampleSnapshotMask({bounds,mask},image.width,image.height):mask;
-        if(!background&&(options.preserveNativeDepth||analysis)&&!visibleMask.some((v,p)=>v>0&&image.rgba[p*4+3]>0))throw new Error('作用区域没有可见像素，请选择可见内容后重新读取原图');
+        if(!background&&!asset&&(options.preserveNativeDepth||analysis)&&!visibleMask.some((v,p)=>v>0&&image.rgba[p*4+3]>0))throw new Error('作用区域没有可见像素，请选择可见内容后重新读取原图');
         let hash=2166136261;for(const v of image.rgba)hash=Math.imul(hash^v,16777619);
         const clipBaseLayerId=editAnalysis?nativeScan?.clipBaseLayerId:background||analysis?undefined:await this.captureClippingBase(doc,bounds,image,mask);
         const sourceLayerIds:number[]=[];
-        const visible=(layers:any[])=>{for(const layer of Array.from(layers)){if(layer.visible===false)continue;if(Number.isSafeInteger(layer.id)&&layer.id>0)sourceLayerIds.push(layer.id);if(layer.layers)visible(layer.layers);}};
+        const visible=(layers:any[])=>{for(const layer of Array.from(layers)){if(layer.visible===false||layer.opacity===0)continue;if(Number.isSafeInteger(layer.id)&&layer.id>0)sourceLayerIds.push(layer.id);if(layer.layers)visible(layer.layers);}};
         visible(doc.layers);
         const snapshot:Snapshot={documentId:doc.id,width:doc.width,height:doc.height,profile:doc.colorProfileName,mode:doc.mode,depth:doc.bitsPerChannel,nativeDepth:doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,historyId:doc.activeHistoryState.id,sessionId:this.sessionId,bounds,mask,sourceHash:(hash>>>0).toString(16),sourceLayerIds,...(memory?{captureGeometry:{kind:editAnalysis?'edit-analysis' as const:'relight-analysis' as const,width:memory.width,height:memory.height}}:{}),...(editAnalysis?{requiresClipping:nativeScan!.requiresClipping}:{}),...(clipBaseLayerId===undefined?{}:{clipBaseLayerId}),...(color?.reason?{colorReason:color.reason}:{}),...(background?{backgroundComposite:'subject-background-v1' as const}:{})};
-        if(copy){await context.hostControl.unregisterAutoCloseDocument(copy.id);keepCopy=true;}
-        return {snapshot,image,selectionMask,protectionMask,...(typeof doc.name==='string'?{documentName:doc.name}:{}),...(subjectMask?{subjectMask}:{}),...(copy?{workingCopyOf:original.id}:{})};
-      }finally{if(copy&&!keepCopy){await copy.closeWithoutSaving();await context.hostControl.unregisterAutoCloseDocument(copy.id);this.ps.app.activeDocument=original;}}
+        const captured:Capture={snapshot,image,selectionMask,protectionMask,...(typeof doc.name==='string'?{documentName:doc.name}:{}),...(subjectMask?{subjectMask}:{}),...(copy?{workingCopyOf:original.id}:{})};
+        beforeCommit?.(captured);pixelGuard();
+        if(copy){await context.hostControl.unregisterAutoCloseDocument(copy.id);copyUnregistered=true;}
+        if(exclusionPending){await context.hostControl.resumeHistory(exclusion,true);exclusionPending=false;snapshot.historyId=doc.activeHistoryState.id;}
+        if(copy){this.rememberColorCopy(copy,original.id,colorOrigin,color?.reason);keepCopy=true;}
+        return captured;
+      }finally{if(copy&&!keepCopy){await copy.closeWithoutSaving();if(!copyUnregistered)await context.hostControl.unregisterAutoCloseDocument(copy.id);this.ps.app.activeDocument=original;}}
+      }catch(error){if(exclusionPending)await context.hostControl.resumeHistory(exclusion,false);throw error;}
     },{commandName:'ps-ai 捕获选区'});
   }
   async protection():Promise<Protection> {
@@ -345,9 +438,15 @@ export class PhotoshopAdapter {
   /** Rereading any visible owned result would turn generated pixels into source content. */
   hasVisibleApplication(documentId:number):boolean {
     const doc=Array.from(this.ps.app.documents as any[]).find(d=>d.id===documentId);if(!doc)return false;
+    return this.visibleApplications(doc).length>0;
+  }
+  /** IDs originate only from successful writes in this adapter session, never names. */
+  private visibleApplications(doc:any):any[] {
+    const documentId=doc.id;
     const owned=new Set([...this.applications.values()].filter(a=>a.documentId===documentId).map(a=>a.layerId));
-    const visible=(layers:any[]):boolean=>Array.from(layers).some(layer=>layer.visible!==false&&(owned.has(layer.id)||layer.layers&&visible(layer.layers)));
-    return visible(doc.layers);
+    const found:any[]=[];
+    const visible=(layers:any[])=>{for(const layer of Array.from(layers)){if(layer.visible===false||layer.opacity===0)continue;if(owned.has(layer.id))found.push(layer);else if(layer.layers)visible(layer.layers);}};
+    visible(doc.layers);return found;
   }
   private sourceIdentity(s:Omit<Snapshot,'mask'>):string {return JSON.stringify([s.documentId,s.width,s.height,s.profile,s.mode,s.depth,s.historyId,s.sessionId,s.bounds,s.sourceHash,s.captureGeometry,s.nativeDepth,s.requiresClipping,s.clipBaseLayerId,s.backgroundComposite]);}
   /** Cheap UI observation only; actual writes still validate the exact native mask. */
@@ -414,6 +513,12 @@ export class PhotoshopAdapter {
     checkDocumentSize(snapshot.width,snapshot.height);checkDocumentSize(width,height);checkSize(image.width,image.height);
     if(!Object.values(b).every(Number.isSafeInteger)||b.left<0||b.top<0||b.right>snapshot.width||b.bottom>snapshot.height||g?.kind!=='edit-analysis'||!Number.isSafeInteger(g.width)||!Number.isSafeInteger(g.height)||g.width<1||g.height<1||g.width*g.height>IMAGE_BUDGETS.editPixels||Math.max(g.width,g.height)>IMAGE_BUDGETS.editSide||snapshot.nativeDepth!==8&&snapshot.nativeDepth!==16||typeof snapshot.requiresClipping!=='boolean'||!(snapshot.mask instanceof Uint8Array)||snapshot.mask.length!==width*height||!snapshot.mask.some(v=>v>0)||image.rgba.length!==image.width*image.height*4)throw new Error('编辑工作图来源、尺寸或原生蒙版无效，请重新捕获');
     if(!options||typeof options.preserveAlpha!=='boolean'||options.retainedBytes!==undefined&&(!Number.isSafeInteger(options.retainedBytes)||options.retainedBytes<0)||background&&(options.preserveAlpha||!(options.subjectMask instanceof Uint8Array)||options.subjectMask.length!==width*height||!(options.protectionMask instanceof Uint8Array)||options.protectionMask.length!==width*height||snapshot.requiresClipping)||!background&&(options.subjectMask!==undefined||options.protectionMask!==undefined))throw new Error('编辑工作图回填策略或背景蒙版无效');
+    if(options.assetContext!==undefined&&(options.assetContext!=='selection-v1'||options.preserveAlpha||background||options.subjectMask!==undefined||options.protectionMask!==undefined))throw new Error('编辑工作图回填策略或背景蒙版无效');
+    if(options.assetContext){
+      const max=rasterMax(image);let transparent=false;
+      for(let p=3;p<image.rgba.length;p+=4)if(image.rgba[p]<max){transparent=true;break;}
+      if(!transparent)throw new Error('素材输出没有透明部分；原始输出可另存检查，暂不回填。');
+    }
     const masks=new Set<Uint8Array>([snapshot.mask,...(options.subjectMask?[options.subjectMask]:[]),...(options.protectionMask?[options.protectionMask]:[])]);
     planEditApplyMemory(width,height,snapshot.nativeDepth,image.rgba.byteLength,[...masks].reduce((sum,m)=>sum+m.byteLength,0),options.retainedBytes);
     const check=(context?:any)=>{if(options.signal?.aborted||context?.isCancelled){const error=new Error('候选回填已取消，已回滚本次操作');error.name='AbortError';throw error;}};

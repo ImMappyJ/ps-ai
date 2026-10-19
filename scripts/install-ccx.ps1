@@ -74,7 +74,7 @@ try {
         if (-not (Test-Path -LiteralPath $runtimePath -PathType Leaf)) { $report.payloadMatches=$false;Finish 3 'Adobe reported success but the installed runtime is missing. Photoshop reinstallation may leave a stale Adobe installation record. Back up plugin settings/history before removing the stale entry with UPIA, then install again. For a custom location, supply InstalledPluginDirectory.' }
         $report.installedRuntimeSha256=Get-LocalSha256 $runtimePath
         $report.payloadMatches=$report.installedRuntimeSha256 -eq $report.expectedRuntimeSha256
-        if (-not $report.payloadMatches) { Finish 3 'Adobe reported success but installed main.js differs from the package. Same-version reinstallation may keep the old runtime. Use a higher plugin version; export history/configuration before any manual uninstall.' }
+        if (-not $report.payloadMatches) { Finish 3 'Adobe reported success but installed main.js differs from the package. Same-version reinstallation may keep the old runtime. Keep the assigned product version and verify the package build ID and SHA256. Back up plugin settings/history before manually removing a stale installation entry, then reinstall this exact package and recheck its runtime hash.' }
     }
     $report.installed=$true
     Finish 0 'Adobe installer returned success. Check payloadMatches for local runtime verification, then open Photoshop and verify the panel. Generation, updates and removal still require validation.'

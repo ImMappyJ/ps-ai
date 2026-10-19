@@ -131,11 +131,12 @@ test('语言切换刷新 UXP 已选中的应用位置和参考用途标题，保
   }finally{await h.close();}
 });
 
-test('候选显示冻结来源；来源关闭后禁用回填但仍保留导出',async()=>{
+test('候选显示冻结来源；来源关闭后可检查但不回填，仍保留导出',async()=>{
   const h=await panelHarness();try{
     h.el('resolution').value='32';h.click('generate');await h.wait();assert.match(h.el('candidate-target').textContent,/11.*sRGB/);assert.equal(h.el('apply').disabled,false);
     h.setDocument(22);h.change('candidate-select');await new Promise(r=>setTimeout(r,30));
-    assert.equal(h.el('apply').disabled,true);assert.equal(h.el('export').disabled,false);assert.match(h.el('candidate-target').textContent,/来源.*改变|关闭|会话/);
+    assert.equal(h.el('apply').disabled,false);assert.equal(h.el('apply').getAttribute('data-candidate-action'),'inspect');assert.equal(h.el('export').disabled,false);assert.match(h.el('candidate-target').textContent,/来源.*改变|关闭|会话/);
+    h.click('apply');await h.wait();assert.equal(h.appliedLayers.length,0);assert.equal(h.ps.app.activeDocument.id,22);assert.equal(h.errors[0]?.code,'source-unavailable');
   }finally{await h.close();}
 });
 

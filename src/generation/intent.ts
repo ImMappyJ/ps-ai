@@ -1,13 +1,16 @@
+import type {AssetContext} from '../infrastructure/backends/gateway-protocol';
 export type Workspace='local'|'cosplay'|'t2i';
 export type OutputKind='edit'|'asset'|'t2i';
-export interface Intent {kind:OutputKind;prompt:string;referenceSlot?:number}
+export interface Intent {kind:OutputKind;prompt:string;referenceSlot?:number;assetContext?:AssetContext}
 export function isBackgroundMode(mode:string):boolean {return mode==='background'||mode==='scene';}
-export function intent(workspace:Workspace,mode:string,prompt:string,hasReference:boolean,guide:boolean,usage:string,bindings:'images'|'semantic'='images',structuredRelight=false):Intent {
+export function intent(workspace:Workspace,mode:string,prompt:string,hasReference:boolean,guide:boolean,usage:string,bindings:'images'|'semantic'='images',structuredRelight=false,assetContext?:AssetContext):Intent {
   const modes={local:['edit','remove','background'],cosplay:['blend','relight','effect','costume','reference','scene','atmosphere'],t2i:['generate']};
   if(!modes[workspace]?.includes(mode))throw new Error('不支持的工作区或模式');
   if(mode!=='remove'&&mode!=='blend'&&!prompt.trim())throw new Error('请描述希望生成或修改的内容');
   if(mode==='reference'&&!hasReference)throw new Error('角色参考辅助需要选择一张参考图');
   const kind:OutputKind=workspace==='t2i'?'t2i':mode==='effect'||mode==='atmosphere'?'asset':'edit';
+  if(assetContext!==undefined&&(assetContext!=='selection-v1'||kind!=='asset'))throw new Error('不支持的素材上下文');
+  if(assetContext==='selection-v1'&&!guide)throw new Error('参考当前图片生成素材需要范围辅助图');
   if(hasReference&&kind!=='edit')throw new Error('参考图用于编辑路径；生成独立素材或文字生图前请清除参考图');
   let text=mode==='remove'?'':structuredRelight&&mode==='relight'?prompt:prompt.trim();
   if(kind==='edit') {
@@ -20,6 +23,12 @@ export function intent(workspace:Workspace,mode:string,prompt:string,hasReferenc
       if(bindings==='semantic')text+=` 另附${usage}参考图，仅参考指定内容，保留原人物面部、姿态与未选区域。`;
       else {const slot=guide?3:2;text+=` <image${slot}> 是${usage}参考图，仅参考指定内容，保留原人物面部、姿态与未选区域。`;return {kind,prompt:text,referenceSlot:slot};}
     }
-  }else if(kind==='asset')text+=' 独立可合成的特效/氛围素材，transparent background, RGBA image，保留自然半透明边缘，不要实心黑底、白底、文字或场景。';
-  return {kind,prompt:text};
+  }else if(kind==='asset'){
+    if(assetContext==='selection-v1'){
+      const source=bindings==='semantic'?'来源图':'<image1>',scope=bindings==='semantic'?'范围图':'<image2>';
+      text=`以 ${source} 作为当前图片参考，匹配指定位置、尺度、透视、色调和光线，生成独立可合成的透明特效/氛围素材：${text}。只输出素材，参考图片中的人物和背景不进入结果。 ${scope} 是与来源图对齐的范围图，用于指定素材放置的位置和范围，白色允许放置，黑色不放置，灰色表示羽化；不要在结果中画出辅助图或蒙版。`;
+    }
+    text+=' 独立可合成的特效/氛围素材，transparent background, RGBA image，保留自然半透明边缘，不要实心黑底、白底、文字或场景。';
+  }
+  return {kind,prompt:text,...(assetContext?{assetContext}:{})};
 }

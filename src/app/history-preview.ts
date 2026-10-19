@@ -1,7 +1,8 @@
 import type {JobRecord} from '../generation/jobs';
-import {t} from '../localization/i18n';
+import {t,errorText} from '../localization/i18n';
+import {diagnostic} from '../diagnostics/diagnostics';
 
-interface Preview {url:string;warning?:string}
+interface Preview {url:string;warning?:string;label?:string;lightingFailure?:Error}
 /** A single display copy, one running local decode, and at most one latest queued request. */
 export class HistoryPreview {
   private token=0;
@@ -20,9 +21,10 @@ export class HistoryPreview {
     this.message='正在读取本地候选预览…';this.pending={record,key,token:this.token};this.render();void this.drain();
   }
   private render():void {
-    this.caption.textContent=this.result?.warning?t(this.result.warning):t(this.message);
+    const result=this.result,label=result?.label?t(result.label):undefined,warning=result?.lightingFailure?diagnostic(result.lightingFailure,'lighting-extraction').summary:result?.warning?errorText(result.warning):undefined;
+    this.caption.textContent=[label,warning].filter(Boolean).join('\n')||t(this.message);
     this.image.setAttribute('aria-busy',String(this.message==='正在读取本地候选预览…'));
-    if(this.result){if(this.image.getAttribute('src')!==this.result.url)this.image.src=this.result.url;this.image.style.display='block';this.image.alt=t('本地候选预览');}
+    if(result){if(this.image.getAttribute('src')!==result.url)this.image.src=result.url;this.image.style.display='block';this.image.alt=label??t('本地候选预览');}
   }
   private async drain():Promise<void> {
     if(this.running)return;this.running=true;
