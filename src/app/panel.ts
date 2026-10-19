@@ -121,7 +121,7 @@ function inputUi(){
   if(nextPromptKind&&nextPromptKind!==promptKind){promptDrafts[promptKind]=el('prompt').value;el('prompt').value=promptDrafts[nextPromptKind];promptKind=nextPromptKind;}
   el('prompt-group').style.display=mode==='remove'||structuredRelight?'none':'block';el('prompt-label').textContent=t(blend?'补充要求（可选）':'描述修改或生成内容');
   el('relight-entry').style.display=structuredRelight?'block':'none';el('generate').textContent=t(structuredRelight?'打开布光工作台':'生成候选');
-  const asset=assetMode(mode),context=assetContext(),standalone=workspace==='t2i'||asset&&!context;el('selection-tools').style.display=standalone?'none':'block';el('prompt').setAttribute('placeholder',blend?t('可选：补充光影、色彩或融合要求'):workspace==='t2i'?t("描述要生成的画面、主体与风格"):workspace==='cosplay'?t("描述服装道具、光影方向、角色参考或氛围效果"):t("描述选区中要修改的内容，及需要保留的细节"));
+  const asset=assetMode(mode),context=assetContext(),standalone=workspace==='t2i'&&el('destination').value==='document'||asset&&!context;el('selection-tools').style.display=standalone?'none':'block';el('prompt').setAttribute('placeholder',blend?t('可选：补充光影、色彩或融合要求'):workspace==='t2i'?t("描述要生成的画面、主体与风格"):workspace==='cosplay'?t("描述服装道具、光影方向、角色参考或氛围效果"):t("描述选区中要修改的内容，及需要保留的细节"));
   el('asset-input-group').style.display=asset?'block':'none';el('asset-input').disabled=busy;
   el('asset-input-help').textContent=t(context?'来源图与有效灰度范围图会一起送模，输出位置不改变输入。范围仅供参考，请检查结果是否残留来源人物、背景或范围图。':'仅使用文字生成独立素材，不读取当前图片；可另存 PNG 或新建文档。');
   if(asset&&!context)el('destination').value='document';el('destination').disabled=busy||asset&&!context;
@@ -703,7 +703,8 @@ async function generate(frozenRelight?:FrozenRelightSubmission,onRelightJob?:(id
   if(!Number.isInteger(count)||count<1||count>4)throw new Error(t("候选数量须为 1–4"));
   if(!(client instanceof GatewayClient))buildGraph({requestId:uuid(),prompt:request.prompt,seed:baseSeed+count-1,steps,resolution,models:settings.models,outputDepth:outputDepth()});
   if(request.kind==='edit'&&destination!=='selection')throw new Error(t("编辑补丁需要捕获来源选区"));
-  if((request.kind==='edit'||context)&&expectedDocumentId===undefined)throw new Error(t("请先打开 Photoshop 文档并建立选区"));
+  const captureTarget=request.kind==='edit'||!!context||request.kind==='t2i'&&destination==='selection';
+  if(captureTarget&&expectedDocumentId===undefined)throw new Error(t("请先打开 Photoshop 文档并建立选区"));
     if(operation)operation.stage='environment';const checking=t(client instanceof GatewayClient?'检查平台服务与模型能力…':"检查节点与本机模型…");taskPhase(checking);status(checking);await checkBackend(client,{...settings,outputDepth:depth});
     if(client instanceof GatewayClient){const chosenModel=client.model,model=client.capabilities!.models.find(m=>m.id===chosenModel)!;if(!model.operations.includes(request.kind))throw new Error(t('此平台模型不支持当前模式'));seedSupported=model.seedMax!==0;if(!seedSupported)baseSeed=0;else if(!Number.isSafeInteger(baseSeed)||baseSeed<0||baseSeed+count-1>model.seedMax)throw new Error(t('平台种子超出范围，请减小种子或候选数量'));}
     let relightCaps:RelightCapabilities|undefined,relightConflictResolution:'structured-lighting'|undefined;
@@ -719,7 +720,7 @@ async function generate(frozenRelight?:FrozenRelightSubmission,onRelightJob?:(id
     }
     // Always recapture at submission; a thumbnail saved earlier is not a fresh document state.
     if(stopBatch){clearCapturePreview();return;}
-    if(operation)operation.stage='capture';if(!frozenRelight){if(request.kind==='edit'||context)await captureArea(expectedDocumentId);else clearCapturePreview();}
+    if(operation)operation.stage='capture';if(!frozenRelight){if(captureTarget)await captureArea(expectedDocumentId);else clearCapturePreview();}
     const captured=frozenRelight?.capture??capture,ref=asset?undefined:reference,hasInputs=request.kind==='edit'||!!context;
     for(let index=0;index<count&&!stopBatch;index++) {
       batchPosition=t("候选 {0} / {1} · ",index+1,count);taskPhase(t("准备与上传输入…"));status(t("上传候选 {0} / {1} 的输入…",index+1,count));const id=uuid(),clientId=uuid();
