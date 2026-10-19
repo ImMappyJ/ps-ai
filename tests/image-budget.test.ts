@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {IMAGE_BUDGETS,checkDocumentSize,planRelightMemory,planNativeCaptureMemory,resampleGray,downsampleSnapshotMask,imageStrips,mapCaptureRaster} from '../src/imaging/budget';
+import {IMAGE_BUDGETS,checkDocumentSize,planRelightMemory,planNativeCaptureMemory,planEditAnalysisMemory,planEditApplyMemory,resampleGray,downsampleSnapshotMask,imageStrips,mapCaptureRaster} from '../src/imaging/budget';
 import {checkSize} from '../src/imaging/image';
 
 test('24M, 36M and 45M documents use bounded analysis and strips without changing the decoder region cap',()=>{
@@ -35,4 +35,19 @@ test('native ROI capture has a byte budget independently of the pixel/decoder ca
   assert.throws(()=>planNativeCaptureMemory(4000,4000,16),(e:any)=>e.code==='image-budget');
   assert.ok(planNativeCaptureMemory(2000,2000,16).estimatedPeakBytes<IMAGE_BUDGETS.workingBytes);
   assert.throws(()=>planNativeCaptureMemory(9000,5000,8),/1600/);
+});
+test('ordinary edit work grids fit 24M/36M/45M sources, requested resolution and retained bytes before allocation',()=>{
+  for(const [w,h] of [[6000,4000],[9000,4000],[9000,5000]])for(const depth of [8,16] as const){
+    const plan=planEditAnalysisMemory(w,h,depth,2048);
+    assert.ok(plan.width*plan.height<=2048*2048);assert.ok(Math.max(plan.width,plan.height)<=IMAGE_BUDGETS.editSide);
+    assert.ok(plan.estimatedPeakBytes<=IMAGE_BUDGETS.workingBytes);
+    assert.equal(plan.nativePixels,w*h);
+  }
+  const full=planEditAnalysisMemory(9000,5000,16,2048),bounded=planEditAnalysisMemory(9000,5000,16,2048,220_000_000);
+  assert.ok(bounded.width*bounded.height<full.width*full.height);assert.ok(bounded.estimatedPeakBytes<=IMAGE_BUDGETS.workingBytes);
+  assert.throws(()=>planEditAnalysisMemory(9000,5000,16,1024,400_000_000),(e:any)=>e.code==='image-budget');
+  for(const resolution of [0,31,33,2049,NaN])assert.throws(()=>planEditAnalysisMemory(100,100,8,resolution));
+  const narrow=planEditAnalysisMemory(30_000,1,16,32);assert.ok(narrow.width*narrow.height<=32*32);assert.ok(narrow.width<=IMAGE_BUDGETS.editSide);assert.equal(narrow.height,1);
+  assert.ok(planEditApplyMemory(9000,5000,16,4_000_000*8,45_000_000*3).estimatedPeakBytes<IMAGE_BUDGETS.workingBytes);
+  assert.throws(()=>planEditApplyMemory(9000,5000,16,32_000_000,135_000_000,300_000_000),(e:any)=>e.code==='image-budget');
 });

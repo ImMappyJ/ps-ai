@@ -70,9 +70,14 @@ function matchContext(image:Raster,source:Raster,mask:Uint8Array):Raster {
   return {...image,rgba};
 }
 export interface EditOptions {preserveAlpha:boolean;align:boolean;matchColor?:boolean;mask?:Uint8Array}
-export function prepareEditCandidate(image:Raster,source:Raster,options:EditOptions):Raster {
+/** Keep generated alpha until the native strip knows the actual source coverage. */
+export function prepareEditModel(image:Raster,source:Raster,options:EditOptions):Raster {
   valid(image);valid(source);const modelSource=resize(source,image.width,image.height);
   let result=options.preserveAlpha&&options.align?alignTransparent(image,modelSource):image;
   if(options.matchColor&&options.mask)result=matchContext(result,modelSource,options.mask);
-  return options.preserveAlpha?retainSourceAlpha(result,modelSource):{...result,rgba:result.rgba.slice()};
+  return {...result,rgba:result.rgba.slice()};
+}
+export function prepareEditCandidate(image:Raster,source:Raster,options:EditOptions):Raster {
+  const result=prepareEditModel(image,source,options);
+  return options.preserveAlpha?retainSourceAlpha(result,resize(source,image.width,image.height)):result;
 }

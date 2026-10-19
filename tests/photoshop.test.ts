@@ -21,9 +21,9 @@ function snap():Snapshot {return {documentId:11,width:100,height:80,profile:'sRG
 test('capture reports a required selection and oversized scope before requesting source-file access',async()=>{
   for(const oversized of [false,true]){
     const h=host();h.doc.colorProfileName='';let reads=0;
-    if(oversized){h.doc.width=5000;h.doc.height=5000;h.doc.selection.bounds={left:0,top:0,right:5000,bottom:5000};}else h.doc.selection.bounds=null;
+    if(oversized){h.doc.width=9001;h.doc.height=5000;h.doc.selection.bounds={left:0,top:0,right:9001,bottom:5000};}else h.doc.selection.bounds=null;
     const adapter=new PhotoshopAdapter(h.ps,'session-a',async()=>{},async()=>{reads++;throw Error('picker should not open');});
-    await assert.rejects(adapter.capture(),(e:any)=>oversized?/1600/.test(e.message):e.code==='selection-required'&&e.stage==='capture');
+    await assert.rejects(adapter.capture(),(e:any)=>oversized?/4500/.test(e.message):e.code==='selection-required'&&e.stage==='capture');
     assert.equal(reads,0);assert.equal(h.calls.some(c=>c[0]==='getPixels'),false);
   }
 });
@@ -312,8 +312,8 @@ test('full-canvas strategies reject empty selections, unavailable environment an
   await assert.rejects(noEnvironment.adapter.capture(0,undefined,11,8,{context:'document',selection:'edit'}),/主体选区外没有可见环境/);
   const empty=host();empty.ps.imaging.getSelection=async()=>({imageData:{width:2,height:2,componentSize:8,components:1,getData:async()=>new Uint8Array(4),dispose(){}},sourceBounds:{left:40,top:30,right:42,bottom:32}});
   await assert.rejects(empty.adapter.capture(0,undefined,11,8,{context:'document',selection:'subject-background'}),/选区为空/);
-  const large=host();large.doc.width=5000;large.doc.height=5000;
-  await assert.rejects(large.adapter.capture(0,undefined,11,8,{context:'document',selection:'subject-background'}),/1600/);assert.equal(large.calls.some(c=>c[0]==='getPixels'),false);
+  const large=host();large.doc.width=9001;large.doc.height=5000;
+  await assert.rejects(large.adapter.capture(0,undefined,11,8,{context:'document',selection:'subject-background'}),/4500/);assert.equal(large.calls.some(c=>c[0]==='getPixels'),false);
   const full=host();full.doc.width=2;full.doc.height=2;full.doc.selection.bounds={left:0,top:0,right:2,bottom:2};
   full.ps.imaging.getSelection=async()=>({imageData:{width:2,height:2,componentSize:8,components:1,getData:async()=>new Uint8Array([255,255,255,255]),dispose(){}},sourceBounds:{left:0,top:0,right:2,bottom:2}});
   full.ps.imaging.getPixels=async()=>({imageData:{width:2,height:2,componentSize:8,components:4,getData:async()=>new Uint8Array([20,30,40,255,20,30,40,255,20,30,40,255,20,30,40,255]),dispose(){}},sourceBounds:{left:0,top:0,right:2,bottom:2}});

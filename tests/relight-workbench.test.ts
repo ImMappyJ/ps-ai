@@ -87,6 +87,13 @@ test('analysis source maps native mask coverage to the small raster and retains 
   assert.equal(frozen.capture.snapshot.captureGeometry.kind,'relight-analysis');assert.equal(frozen.capture.snapshot.mask.length,24);
   assert.equal(session.freeze().scene.source.snapshotId,'native-2');
 });
+test('full-result edit-analysis session transfers immutable native masks and compares the native alpha marker',async()=>{
+  const module=await api(),captured=sample();captured.snapshot.nativeDepth=16;captured.snapshot.captureGeometry={kind:'edit-analysis',width:2,height:2};captured.snapshot.requiresClipping=false;
+  const session=new module!.RelightSession(captured,'full-edit','light-1','document','full-result'),frozen=session.freeze();
+  assert.equal(frozen.capture.snapshot.mask,captured.snapshot.mask);assert.equal(frozen.capture.selectionMask,captured.selectionMask);assert.equal(frozen.capture.protectionMask,captured.protectionMask);
+  assert.notEqual(frozen.capture.image.rgba,captured.image.rgba);
+  const changed={...captured,snapshot:{...captured.snapshot,requiresClipping:true}};assert.throws(()=>session.assertCaptureMatches(changed),/重新读取/);
+});
 
 test('source reread retains exact session snapshot ownership and rejects an invalid replacement atomically',async()=>{
   const module=await api(),session=new module!.RelightSession(sample(),'snapshot-1','light-1'),previous=session.freeze();

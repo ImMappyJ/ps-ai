@@ -5,6 +5,12 @@ import {candidateOutputKind,prepareCandidate} from '../src/app/candidate-prepara
 import {encodePng} from '../src/imaging/image';
 import {planRelightMemory} from '../src/imaging/budget';
 
+test('large edit sizing, budget preflight and native alpha failures translate without changing numeric limits',()=>{
+ const messages=['当前分辨率的候选准备预计需要 600 MB，超过图像内存预算；请降低分辨率后重新读取。','大区域历史的来源尺寸、原生蒙版或位深不一致；原始输出已保留','背景原生蒙版与冻结来源、主体或保护区不一致，请重新捕获','半透明来源的剪贴底层透明度不匹配，请重新捕获','生成背景的有效覆盖不足 90%；保留原始输出供检查和导出'];
+ setLanguage('en-US');try{for(const message of messages)assert.doesNotMatch(errorText(message),/[一-龥]/);assert.match(errorText(messages[0]),/600 MB/);assert.match(errorText(messages[4]),/90%/);}
+ finally{setLanguage('zh-CN');}
+});
+
 test('English budget diagnostics preserve numeric limits and source error contracts',()=>{
  setLanguage('en-US');try{
   assert.throws(()=>planRelightMemory(9001,5000,8),(error:any)=>{assert.equal(error.code,'image-budget');assert.match(error.message,/4500 万/);assert.match(errorText(error.message),/45 million/);return true;});

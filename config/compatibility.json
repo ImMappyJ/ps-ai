@@ -360,7 +360,11 @@
           "rgb16EstimatedPeakBytes": 399530984,
           "measuredMemoryPeak": false
         },
-        "ordinaryRoi": "Existing 16M full-resolution ROI cap plus separate byte gate; may reject before the pixel cap",
+        "ordinaryRoi": "Native pixel/byte gate with automatic bounded edit-analysis fallback for large ordinary/background/blend/full-redraw scopes within 45MP; exact native masks and history-pinned strip application; exports remain model/working size",
+        "ordinaryWorkingPixels": 4194304,
+        "ordinaryWorkingSide": 4096,
+        "ordinaryWorkingPolicy": "Requested analysis area follows the panel resolution, reduced when retained buffers require it; source PNG retains validated native depth, model input remains sRGB8; model/PNG decode caps unchanged",
+        "ordinaryNativeAcceptance": "2026-10-19 PS27.0.0 synthetic native API checks passed ordinary 24M RGB8, 45M RGB16 and 45M RGB8 background capture/apply/protection/single undo/preflight cancellation/selection restoration; sampled source and undo differences zero. Analysis target 512. A 23.15MP sRGB8 photograph duplicate at target 1024 passed whole-source hashing, single undo and post-write cancellation rollback with full-composite hash equality. Installed-panel flow, new inference and full export remain pending; no measured memory peak",
         "validation": "PNG CRC/inflation/color and model output budgets remain enforced; source/session/history/profile/mask identity revalidated independently at apply"
       },
       "sourceLifecycle": {

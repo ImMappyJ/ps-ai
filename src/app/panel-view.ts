@@ -34,7 +34,15 @@ export class ResultNavigation {
   take(available:readonly string[],ready:boolean,enabled=true):string|undefined {const pending=this.pending;if(!pending)return;if(!enabled||pending.intent!==this.latest||!available.includes(pending.candidateId)){this.pending=undefined;return;}if(!ready)return;this.pending=undefined;return pending.candidateId;}
 }
 
-interface SourceCaptionDetails {documentId:number;width:number;height:number;profile:string;protectedArea:boolean;colorReason?:string}
+export interface CaptureSizeDetails {documentWidth:number;documentHeight:number;nativeWidth:number;nativeHeight:number;workWidth:number;workHeight:number;modelWidth?:number;modelHeight?:number;outputWidth?:number;outputHeight?:number}
+export function captureSizeSummary(size:CaptureSizeDetails):string {
+  const lines=[t('原文档 {0}×{1} · 原坐标回填 {2}×{3} · 工作图 {4}×{5}',size.documentWidth,size.documentHeight,size.nativeWidth,size.nativeHeight,size.workWidth,size.workHeight)];
+  if(size.modelWidth&&size.modelHeight)lines.push(t('送模 {0}×{1}',size.modelWidth,size.modelHeight));
+  if(size.outputWidth&&size.outputHeight)lines.push(t('PNG／新文档 {0}×{1}',size.outputWidth,size.outputHeight));
+  lines.push(t('模型细节受工作与送模尺寸限制；原尺寸结果请回填后从 Photoshop 保存／导出。'));
+  return lines.join(' · ');
+}
+interface SourceCaptionDetails {documentId:number;width:number;height:number;profile:string;protectedArea:boolean;colorReason?:string;sizes?:CaptureSizeDetails}
 /** Only presentation metadata is retained; no document, raster or persisted state. */
 export class SourceCaption {
   private current:string|SourceCaptionDetails='先圈选编辑范围。保护区可保留人物与重要细节。';
@@ -45,6 +53,7 @@ export class SourceCaption {
     if(typeof info==='string'){this.node.textContent=t(info);return;}
     const color=info.colorReason?t(info.colorReason==='webp-default'?' · WebP 默认 sRGB · 已创建工作副本':' · PNG sRGB 标记 · 已创建工作副本'):` · ${info.profile}`;
     this.node.textContent=t('文档 {0} · 区域 {1}×{2} · {3}{4}',info.documentId,info.width,info.height,t(info.protectedArea?'已扣除保护区':'未指定保护区'),color);
+    if(info.sizes)this.node.textContent+='\n'+captureSizeSummary(info.sizes);
   }
 }
 
@@ -124,18 +133,20 @@ export class PanelViews {
 export class CandidatePreview {
   private request=0;
   private fit=new Map<Raster,Promise<string>>();
+  private sizes=new Map<Raster,number>();
+  get retainedBytes():number {return [...this.sizes.values()].reduce((sum,bytes)=>sum+bytes,0);}
   constructor(private render:(image:Raster,size:number)=>Promise<string>=displayPreview){}
-  retain(images:Raster[]):void {this.request++;for(const image of this.fit.keys())if(!images.includes(image))this.fit.delete(image);}
+  retain(images:Raster[]):void {this.request++;for(const image of this.fit.keys())if(!images.includes(image)){this.fit.delete(image);this.sizes.delete(image);}}
   async show(image:Raster,actualSize:boolean,apply:(url:string)=>void):Promise<void> {
     const request=++this.request;
     let pending=actualSize?undefined:this.fit.get(image);
     if(!pending)pending=this.render(image,actualSize?Math.max(image.width,image.height):1280);
     if(!actualSize){
       this.fit.delete(image);this.fit.set(image,pending);
-      if(this.fit.size>4)this.fit.delete(this.fit.keys().next().value!);
+      if(this.fit.size>4){const first=this.fit.keys().next().value!;this.fit.delete(first);this.sizes.delete(first);}
     }
-    try{const url=await pending;if(request===this.request)apply(url);}
-    catch(error){if(this.fit.get(image)===pending)this.fit.delete(image);if(request===this.request)throw error;}
+    try{const url=await pending;if(this.fit.get(image)===pending)this.sizes.set(image,url.length*2);if(request===this.request)apply(url);}
+    catch(error){if(this.fit.get(image)===pending){this.fit.delete(image);this.sizes.delete(image);}if(request===this.request)throw error;}
   }
 }
 

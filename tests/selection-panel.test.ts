@@ -65,7 +65,7 @@ test('restoring clears stale source pixels when reread fails and still permits a
 
 test('source switching after selection restoration cannot redirect the following capture',async()=>{
   const h=await panelHarness();try{
-    await h.wait();h.click('capture');await h.wait();missing(h);const put=h.ps.imaging.putSelection;h.ps.imaging.putSelection=async(o:any)=>{await put(o);h.switchDocument(22);};restoreButton(h);h.click('restore-selection');await h.wait();assert.equal(h.selectionWrites[0].documentID,11);assert.equal(h.pixelRequests.length,1);assert.equal(h.el('selection-previews').style.display,'none');assert.match(h.el('status').textContent,/选区已恢复.*活动文档/);assert.equal(h.posts.length,0);
+    await h.wait();h.click('capture');await h.wait();missing(h);const put=h.ps.imaging.putSelection;h.ps.imaging.putSelection=async(o:any)=>{await put(o);h.switchDocument(22);};restoreButton(h);h.click('restore-selection');await h.wait();assert.equal(h.selectionWrites[0].documentID,11);assert.equal(h.pixelRequests.length,1);assert.equal(h.el('selection-previews').style.display,'none');assert.match(h.el('status').textContent,/上次选区.*来源文档.*改变/);assert.deepEqual(h.selectionTransactions.slice(-1),[['resume',11,false]],'the changed-source write rolls back before reporting success');assert.equal(h.posts.length,0);
   }finally{await h.close();}
 });
 
