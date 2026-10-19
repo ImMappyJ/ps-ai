@@ -68,6 +68,7 @@ export class RelightWorkbench {
   private viewport:RelightViewport={clientRect:{left:0,top:0,width:1,height:1},fitScale:1,zoom:1,panX:0,panY:0};
   private visible=false;private transitioning=false;private pending=false;private nativeBusy=false;private lifecycle=0;
   private request?:RequestOwner;private selectedResult?:string;private lastStatus='';private parameterStatus=false;private warnings:string[]=[];private acknowledged=false;private sourceInvalid=false;private scopePending=false;private outputPending=false;
+  private measurementStatus?:{previous:string;parameter:boolean};
   private pendingDraft?:RelightScene;private invalid=new Set<string>();private invalidLightId:string|null=null;private afterClose?:()=>Promise<void>;private reopenAfterClose=true;
   private listeners:Array<()=>void>=[];private drag?:Drag;private sliderGesture?:SliderGesture;private preview?:RelightPreparedPreview;
   private originalUrl='';private illustrationUrl='';private resultUrl='';private resultUrlId='';
@@ -108,7 +109,7 @@ export class RelightWorkbench {
   private listen(node:any,name:string,fn:(event:any)=>void):void {node.addEventListener(name,fn);this.listeners.push(()=>node.removeEventListener(name,fn));}
   private click(id:string,fn:()=>void|Promise<void>):void {this.listen(this.el(id),'click',()=>void this.guard(()=>{this.finishInteraction();return fn();}));}
   private async guard(fn:()=>void|Promise<void>):Promise<void>{try{await fn();}catch(error){this.message(error instanceof Error?error.message:String(error),error instanceof ParameterValidationError);}}
-  private message(text:string,parameter=false):void {this.parameterStatus=parameter;this.lastStatus=errorText(text);if(this.visible)this.el('status').textContent=this.lastStatus;}
+  private message(text:string,parameter=false):void {this.measurementStatus=undefined;this.parameterStatus=parameter;this.lastStatus=errorText(text);if(this.visible)this.el('status').textContent=this.lastStatus;}
   private geometry():RelightGeometry {const b=this.session.editor.snapshot().source.bounds,w=b.right-b.left,h=b.bottom-b.top;return {bounds:b,modelWidth:w,modelHeight:h,modelContentRect:{left:0,top:0,right:w,bottom:h}};}
   private result():RelightResult|undefined{return this.host.results().find(r=>r.jobId===this.selectedResult);}
   private assertHostIdle():void {if(this.host.busy?.())throw new Error(t('已有任务正在进行，请等待完成后再生成或应用；可以继续编辑布光'));}
@@ -183,7 +184,12 @@ export class RelightWorkbench {
   }
   private measure():void {
     const box=this.el('viewport').getBoundingClientRect();
-    if(!Number.isFinite(box.width)||!Number.isFinite(box.height)||box.width<=0||box.height<=0){this.message(t('无法读取预览区域尺寸，请点击适应窗口重试'));return;}
+    if(!Number.isFinite(box.width)||!Number.isFinite(box.height)||box.width<=0||box.height<=0){
+      if(!this.measurementStatus){const previous={previous:this.lastStatus,parameter:this.parameterStatus};this.message(t('无法读取预览区域尺寸，请点击适应窗口重试'));this.measurementStatus=previous;}
+      return;
+    }
+    // Recover only our own size warning, even if layout returns to identical bounds.
+    if(this.measurementStatus){const {previous,parameter}=this.measurementStatus;this.message(previous,parameter);}
     const source=this.session.editor.snapshot().source,b=source.bounds,w=b.right-b.left,h=b.bottom-b.top;
     const fitScale=Math.min(box.width/(w*1.35),box.height/(h*1.35)),previous=this.viewport.clientRect;
     // UXP can report resize when an img finishes loading without changing bounds.
@@ -277,7 +283,9 @@ export class RelightWorkbench {
     this.listen(this.dialog,'cancel',()=>{this.afterClose=undefined;});
     if(this.host.observeSource)this.listeners.push(this.host.observeSource(()=>{this.invalidateSource();this.checkSourceState();}));
     const state=this.host.sourceState?.();if(state&&state!=='current')this.invalidateSource();
-    this.message(this.lastStatus||t('编辑布光不会发起 AI 请求；主动点击生成'),this.parameterStatus);this.refresh();
+    if(!this.lastStatus)this.message(t('编辑布光不会发起 AI 请求；主动点击生成'));
+    else this.el('status').textContent=this.lastStatus;
+    this.refresh();
     try{
       const capture=this.session.sourceCapture,mask=downsampleSnapshotMask(capture.snapshot,capture.image.width,capture.image.height);
       this.preview=prepareRelightPreview(capture.image,mask);this.finalRenderer=new RelightPreviewRenderer(this.preview);

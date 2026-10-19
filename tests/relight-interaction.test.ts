@@ -18,11 +18,11 @@ async function panelHarness(source:Raster={width:2,height:2,rgba:new Uint8Array(
   const session=new RelightSession(capture(),'snapshot-1','light-1'),files:Record<string,string>={},pixelRequests:unknown[]=[],posts:unknown[]=[],uploads:unknown[]=[],applied:string[]=[],errors:Error[]=[],results:RelightResult[]=[];
   type SourceState=ReturnType<NonNullable<RelightWorkbenchHost['sourceState']>>;
   type Scene=ReturnType<typeof session.editor.snapshot>;
-  let busy=false,draft:Scene|Promise<Scene|undefined>|undefined;const saves:unknown[]=[];
+  let busy=false,draft:Scene|Promise<Scene|undefined>|undefined,generation:Promise<void>|undefined;const saves:unknown[]=[];
   let serial=1,sourceListener:(()=>void)|undefined,subscriptions=0,disposals=0,rereadError:Error|undefined,sourceState:SourceState='current';const rereadOptions:unknown[]=[];
-  const workbench=new RelightWorkbench(dialog,session,{uuid:()=>`light-${++serial}`,save:async scene=>{files['relight-draft.json']=JSON.stringify({scene});saves.push(scene);},loadDraft:async()=>draft,prepare:async()=>{pixelRequests.push('prepare');},generate:async(frozen)=>{posts.push(frozen);},cancel:async()=>{},reread:async options=>{rereadOptions.push(options);pixelRequests.push('reread');if(rereadError)throw rereadError;session.rebind(capture(),`snapshot-${++serial}`);sourceState='current';},apply:async id=>{applied.push(id);},export:async()=>{},results:()=>results,busy:()=>busy,sourceState:()=>sourceState,observeSource:invalidate=>{sourceListener=invalidate;subscriptions++;return()=>{sourceListener=undefined;disposals++;};},reportError:error=>{errors.push(error);}});
+  const workbench=new RelightWorkbench(dialog,session,{uuid:()=>`light-${++serial}`,save:async scene=>{files['relight-draft.json']=JSON.stringify({scene});saves.push(scene);},loadDraft:async()=>draft,prepare:async()=>{pixelRequests.push('prepare');},generate:async(frozen)=>{posts.push(frozen);await generation;},cancel:async()=>{},reread:async options=>{rereadOptions.push(options);pixelRequests.push('reread');if(rereadError)throw rereadError;session.rebind(capture(),`snapshot-${++serial}`);sourceState='current';},apply:async id=>{applied.push(id);},export:async()=>{},results:()=>results,busy:()=>busy,sourceState:()=>sourceState,observeSource:invalidate=>{sourceListener=invalidate;subscriptions++;return()=>{sourceListener=undefined;disposals++;};},reportError:error=>{errors.push(error);}});
   const event=(id:string,type:string,values:Record<string,unknown>={})=>{const e=new window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,values);el(id).dispatchEvent(e);return e;};
-  return {el,event,click:(id:string)=>event(id,'click'),change:(id:string)=>event(id,'change'),workbench,session,files,saves,setBusy:(value:boolean)=>{busy=value;workbench.refreshAvailability();},setDraft:(value:typeof draft)=>{draft=value;},pixelRequests,posts,uploads,applied,errors,results,capture,rereadOptions,invalidate:()=>sourceListener?.(),setSourceState:(state:SourceState)=>{sourceState=state;},setRereadError:(error?:Error)=>{rereadError=error;},subscriptions:()=>({subscriptions,disposals}),close:async()=>{dialog.close();await new Promise(r=>setTimeout(r,15));}};
+  return {el,event,click:(id:string)=>event(id,'click'),change:(id:string)=>event(id,'change'),workbench,session,files,saves,setBusy:(value:boolean)=>{busy=value;workbench.refreshAvailability();},setDraft:(value:typeof draft)=>{draft=value;},setGeneration:(value:Promise<void>)=>{generation=value;},pixelRequests,posts,uploads,applied,errors,results,capture,rereadOptions,invalidate:()=>sourceListener?.(),setSourceState:(state:SourceState)=>{sourceState=state;},setRereadError:(error?:Error)=>{rereadError=error;},subscriptions:()=>({subscriptions,disposals}),close:async()=>{dialog.close();await new Promise(r=>setTimeout(r,15));}};
 }
 async function open(h:Awaited<ReturnType<typeof panelHarness>>){h.workbench.show();await new Promise(r=>setTimeout(r,65));}
 async function scene(h:Awaited<ReturnType<typeof panelHarness>>){h.click('relight-save');await new Promise(r=>setTimeout(r,10));return JSON.parse(String(h.files['relight-draft.json'])).scene;}
@@ -33,6 +33,52 @@ function slider(h:Awaited<ReturnType<typeof panelHarness>>,id='intensity'){
 function slide(h:Awaited<ReturnType<typeof panelHarness>>,value:string,id='intensity'){
   slider(h,id).value=value;h.event(`relight-${id}-slider`,'input');
 }
+
+for(const reopen of [false,true])test(`viewport recovers its initial zero-size status when delayed layout becomes valid${reopen?' after reopening':''}`,async()=>{
+  const h=await panelHarness();let width=0;
+  h.el('relight-viewport').getBoundingClientRect=()=>({left:20,top:100,width,height:450});
+  try{
+    await open(h);assert.match(h.el('relight-status').textContent,/无法读取预览区域尺寸/);
+    if(reopen){await h.close();await open(h);assert.match(h.el('relight-status').textContent,/无法读取预览区域尺寸/);}
+    width=680;h.click('relight-fit');
+    assert.equal(h.el('relight-status').textContent,'编辑布光不会发起 AI 请求；主动点击生成');
+    assert.ok(h.el('relight-image').getAttribute('src'));assert.ok(h.el('relight-markers').querySelector('[data-kind="light"]'));
+    assert.equal(h.pixelRequests.length,0);assert.equal(h.posts.length,0);
+  }finally{await h.close();}
+});
+
+test('viewport recovers the same valid bounds without rebuilding image or markers and keeps persistent size errors',async()=>{
+  const h=await panelHarness();let width=680;
+  h.el('relight-viewport').getBoundingClientRect=()=>({left:20,top:100,width,height:450});
+  try{
+    await open(h);h.click('relight-save');await new Promise(r=>setTimeout(r,10));const previous=h.el('relight-status').textContent;
+    const image=h.el('relight-image');let imageWrites=0;
+    const setAttribute=image.setAttribute.bind(image);image.setAttribute=(name:string,value:string)=>{if(name==='src')imageWrites++;setAttribute(name,value);};
+    width=0;h.event('relight-dialog','resize');const invalid=h.el('relight-status').textContent;assert.match(invalid,/无法读取预览区域尺寸/);
+    h.click('relight-fit');h.event('relight-dialog','resize');assert.equal(h.el('relight-status').textContent,invalid);const marker=h.el('relight-markers').firstChild;
+    width=680;h.event('relight-dialog','resize');assert.equal(h.el('relight-status').textContent,previous);
+    assert.equal(imageWrites,0);assert.ok(h.el('relight-markers').firstChild===marker,'identical recovered bounds retain the rendered marker DOM');
+  }finally{await h.close();}
+});
+
+for(const replacement of ['source','scope','parameters','request','saved'])test(`valid viewport measurement preserves a newer ${replacement} status`,async()=>{
+  const h=await panelHarness();let width=0;
+  h.el('relight-viewport').getBoundingClientRect=()=>({left:20,top:100,width,height:450});
+  try{
+    await open(h);assert.match(h.el('relight-status').textContent,/无法读取预览区域尺寸/);
+    if(replacement==='source')h.workbench.invalidateSource('source failure retained');
+    else if(replacement==='scope')h.workbench.setScopePending(true);
+    else if(replacement==='parameters'){h.el('relight-intensity').value='';h.change('relight-intensity');}
+    else if(replacement==='request'){
+      let reject!:(error:Error)=>void;h.setGeneration(new Promise<void>((_resolve,fail)=>{reject=fail;}));h.click('relight-generate');
+      await new Promise(r=>setTimeout(r,25));assert.equal(h.posts.length,1);reject(new Error('generation request failure retained'));
+    }
+    else h.click('relight-save');
+    await new Promise(r=>setTimeout(r,10));const previous=h.el('relight-status').textContent;assert.doesNotMatch(previous,/无法读取预览区域尺寸/);
+    width=680;h.event('relight-dialog','resize');h.click('relight-fit');assert.equal(h.el('relight-status').textContent,previous);
+    assert.equal(h.pixelRequests.length,replacement==='request'?1:0);assert.equal(h.posts.length,replacement==='request'?1:0);
+  }finally{await h.close();}
+});
 
 test('slider and precise input share a clamped scene value and reject malformed numbers',async()=>{
   const h=await panelHarness();try{
