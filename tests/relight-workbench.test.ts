@@ -70,6 +70,7 @@ test('new relight submissions freeze an explicit output choice while legacy meta
   const metadata=module!.relightTaskMetadata(frozen,'job-1',{provider:'comfyui',model:'qwen',edit:true,maxInputImages:3,maskMode:'guide',seed:true},{width:512,height:512},8,7);
   assert.equal(metadata.outputKind,'lighting-layers');assert.equal(module!.relightOutputKind({schemaVersion:1}),'full-result');
   assert.throws(()=>session.setOutputKind('compensation'),/output/i);
+  assert.throws(()=>module!.relightOutputKind({outputKind:'compensation'}),/output/i);
   assert.throws(()=>module!.relightOutputKind({outputKind:'unknown'}),/output/i);
   assert.throws(()=>module!.relightOutputKind({outputKind:null}),/output/i);
 });

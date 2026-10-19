@@ -15,7 +15,7 @@ This describes the development upgrade, absent from existing release packages. T
 | UI | PS 27 native probe confirmed large UXP dialog, PNG data URL, absolute DOM markers and pointer capture |
 | Native writes | Existing application fails inside an open dialog; close for short capture/write, then restore the workbench |
 | Models | Existing ComfyUI Qwen 2.1, Bailian, Gemini and OpenAI adapters; no new services or depth/normal/segmentation models |
-| Output | New sessions default to experimental editable lighting fields; explicit full-result mode and old history retain NORMAL image application |
+| Output | Lighting layers and Full redraw only; new sessions default to experimental editable lighting fields, while explicit full-result mode and old history retain NORMAL image application |
 
 The initial container probe used a disposable 128×96 synthetic document. Application inside the dialog returned an unavailable Make command; after closing, application succeeded. Identity comparison of 49,152 RGBA channels had maximum difference 0. Pre-existing document IDs/history were unchanged. Workbench controls, performance and generation are validated separately from this container/API combination.
 
@@ -80,7 +80,7 @@ Tasks retain submitted scene/fingerprint, actual provider/model, sanitized capab
 
 New sessions use `lighting-layers`; old records without an output kind remain `full-result`. Changing this choice requires an explicit reread. One existing model request supplies an illumination reference; no per-light requests or new provider fields are added. The analysis compares source/reference log luminance, local structural agreement and coarse chroma. Source-guided filtering and bounded gains try to limit transfer of generated texture. Unreliable structure can reject extraction while retaining the model reference. There is no automatic switch to Full redraw. This is a conservative estimate from one image: localized changes to faces, lettering, edges or materials can still contaminate the estimated fields, and real-photo visual acceptance remains pending.
 
-The native writer copies the frozen source composite into an isolated NORMAL group, then adds available Shadow/Multiply, Cast Shadow/Multiply, Color Atmosphere/Color, Light/Screen and Rim Light/Screen layers in that order. Group and layer opacity/fill start at 100%; each channel has an editable white mask, and the group carries the exact selection-minus-protection mask once. Multiply uses white at zero influence, Screen uses black, and Color uses zero alpha. Absent channels are omitted and their absence recorded; a fully neutral reference creates no empty lighting group. Cast Shadow needs an observed dark receiver downstream of a stable source edge; this is a 2D classification, not recovered occlusion. Rim Light needs an enabled rim light and an observed edge response. The older per-pixel compensation experiment below remains disabled.
+The native writer copies the frozen source composite into an isolated NORMAL group, then adds available Shadow/Multiply, Cast Shadow/Multiply, Color Atmosphere/Color, Light/Screen and Rim Light/Screen layers in that order. Group and layer opacity/fill start at 100%; each channel has an editable white mask, and the group carries the exact selection-minus-protection mask once. Multiply uses white at zero influence, Screen uses black, and Color uses zero alpha. Absent channels are omitted and their absence recorded; a fully neutral reference creates no empty lighting group. Cast Shadow needs an observed dark receiver downstream of a stable source edge; this is a 2D classification, not recovered occlusion. Rim Light needs an enabled rim light and an observed edge response.
 
 The experimental source path supports tagged sRGB RGB8/16 with opaque pixels throughout the editable area. Other profiles, grayscale and editable transparency are rejected explicitly; native strips recheck actual source opacity during application and roll back a failed write. Full-result output remains an explicit choice with its existing color/alpha rules. The native base retains document depth, while provider inputs remain sRGB8. Lost highlight/shadow detail cannot be reconstructed. Hair, skin, text, logos, cloth and cast-shadow plausibility require user visual acceptance. Synthetic native writer evidence is recorded below; the complete 45MP workflow and real inference for these fields remain pending.
 
@@ -130,26 +130,17 @@ Translucent sources retain the existing validated clipping-base strategy to avoi
 
 Historical full-result evidence: a disposable 512×512 sRGB16 document in PS27 retained native channel values that were not multiples of 257. A previously saved real Qwen 8-bit result passed two consecutive applications through the earlier workbench and adapter: the second replaced the owned candidate without increasing the layer count. Successive undo operations restored the first candidate and original image. Original-layer preservation and both restorations each compared 1,048,576 native16 RGBA values with maximum difference 0. This used controlled host callbacks and an existing result file, not current lighting-layer application, new inference or full panel storage/network end-to-end acceptance; it does not establish lossless model color exchange.
 
-## Experimental compensation
+## Output types and legacy history
 
-The baseline requires equal dimensions/depth, fully opaque alpha and fixed encoded-sRGB values. It is not linear-light data or freely ICC-convertible photography. For normalized per-channel base `B` and target `R`:
+The only output choices are `full-result` (Full redraw) and `lighting-layers` (Lighting layers). The older per-pixel editable compensation option, diagnostics and unused implementation have been removed. Lighting layers continue to use the separate field extraction and confidence checks described above.
 
-- `R<B`: `D=R/B`, `L=0`.
-- `R>B`: `D=1`, `L=(R-B)/(1-B)`.
-- Equal: `D=1`, `L=0`.
-- Dark then light: `C=1-(1-B*D)*(1-L)`.
-
-Branches avoid zero denominators. Quantized maps are recomposed and measured with RGB maximum absolute error, mean absolute error and RMSE, in code values and normalized units. Transparency, unknown color conditions, unequal depth or unsupported blend settings reject compensation while preserving the complete result.
-
-An independent PS 27 probe used a NORMAL isolated group with a fixed opaque base, Multiply dark and Screen light, full opacity and no masks. Maps were written directly in the document's encoded channel space without cross-profile conversion. sRGB/Adobe RGB at 8-bit had maximum error 0; 16-bit maximum was 2/65535, mean approximately 0.284 code values across RGBA. Display P3 was unavailable and skipped. These numbers do not establish product support for Adobe RGB compensation or real-image quality.
-
-**Compensation application remains unavailable.** Reconstruction does not prove the layers contain only lighting: facial, logo and texture edits may also appear. Both native composition and real-image visual acceptance are required before creating compensation layers. They must never stack over the same complete result.
+Legacy history without an output type still means `full-result`; unknown types remain rejected, and existing records are not rewritten in bulk. Changing the next output choice changes only new submissions. Existing candidates retain the preview, type and application action defined by their saved output type. A changed output choice still requires an explicit source reread before generation.
 
 ## Validation boundary
 
 Current automated/core and simulated-panel tests cover state, coordinates, compilation, source lifecycle, bounded processing and synthetic lighting fields. The dated synthetic native API checks above cover the stated writer cases only. Installed-panel behavior, source-sync interactions, complete 45MP read/edit/generate/apply/export acceptance, 45MP RGB16 and real-photo lighting quality remain pending checks.
 
-The following historical model observations precede the new lighting-field path. Local ComfyUI/Qwen2.1 comparisons used 512×512, fixed seed 23491 and 25 steps: the first numeric-heavy compiler failed visually, while natural direction and color wording produced distinguishable left/right warm lighting and cool lighting on synthetic objects. Real outputs from a public NASA/scikit-image photo retained the broad pose, clothing and environment with visible color changes. Small badge text and fine texture were not accepted as faithful; compensation was not enabled. These observations do not validate the current field extraction or its detail protection.
+The following historical model observations precede the new lighting-field path. Local ComfyUI/Qwen2.1 comparisons used 512×512, fixed seed 23491 and 25 steps: the first numeric-heavy compiler failed visually, while natural direction and color wording produced distinguishable left/right warm lighting and cool lighting on synthetic objects. Real outputs from a public NASA/scikit-image photo retained the broad pose, clothing and environment with visible color changes. Small badge text and fine texture were not accepted as faithful. These observations do not validate the current field extraction or its detail protection.
 
 The full source-panel native-network probe was denied on its first GET in PSJS, with zero uploads or inference submissions and unchanged pre-existing documents. Adobe lists [Network as unavailable to scripts](https://developer.adobe.com/photoshop/uxp/2022/scripting/how-it-works/); the network path needs acceptance in an installed UXP plugin. Independent model inference, native module application and this full panel end-to-end check remain separate evidence.
 

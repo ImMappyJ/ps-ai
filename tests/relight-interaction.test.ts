@@ -18,12 +18,24 @@ async function panelHarness(source:Raster={width:2,height:2,rgba:new Uint8Array(
   const session=new RelightSession(capture(),'snapshot-1','light-1'),files:Record<string,string>={},pixelRequests:unknown[]=[],posts:unknown[]=[],uploads:unknown[]=[],applied:string[]=[],errors:Error[]=[],results:RelightResult[]=[];
   type SourceState=ReturnType<NonNullable<RelightWorkbenchHost['sourceState']>>;
   let serial=1,sourceListener:(()=>void)|undefined,subscriptions=0,disposals=0,rereadError:Error|undefined,sourceState:SourceState='current';const rereadOptions:unknown[]=[];
-  const workbench=new RelightWorkbench(dialog,session,{uuid:()=>`light-${++serial}`,save:async scene=>{files['relight-draft.json']=JSON.stringify({scene});},loadDraft:async()=>undefined,prepare:async()=>{pixelRequests.push('prepare');},generate:async(frozen)=>{posts.push(frozen);},cancel:async()=>{},reread:async options=>{rereadOptions.push(options);pixelRequests.push('reread');if(rereadError)throw rereadError;session.rebind(capture(),`snapshot-${++serial}`);sourceState='current';},apply:async id=>{applied.push(id);},export:async()=>{},results:()=>results,diagnostics:async()=>'',busy:()=>false,sourceState:()=>sourceState,observeSource:invalidate=>{sourceListener=invalidate;subscriptions++;return()=>{sourceListener=undefined;disposals++;};},reportError:error=>{errors.push(error);}});
+  const workbench=new RelightWorkbench(dialog,session,{uuid:()=>`light-${++serial}`,save:async scene=>{files['relight-draft.json']=JSON.stringify({scene});},loadDraft:async()=>undefined,prepare:async()=>{pixelRequests.push('prepare');},generate:async(frozen)=>{posts.push(frozen);},cancel:async()=>{},reread:async options=>{rereadOptions.push(options);pixelRequests.push('reread');if(rereadError)throw rereadError;session.rebind(capture(),`snapshot-${++serial}`);sourceState='current';},apply:async id=>{applied.push(id);},export:async()=>{},results:()=>results,busy:()=>false,sourceState:()=>sourceState,observeSource:invalidate=>{sourceListener=invalidate;subscriptions++;return()=>{sourceListener=undefined;disposals++;};},reportError:error=>{errors.push(error);}});
   const event=(id:string,type:string,values:Record<string,unknown>={})=>{const e=new window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,values);el(id).dispatchEvent(e);return e;};
   return {el,event,click:(id:string)=>event(id,'click'),change:(id:string)=>event(id,'change'),workbench,session,files,pixelRequests,posts,uploads,applied,errors,results,capture,rereadOptions,invalidate:()=>sourceListener?.(),setSourceState:(state:SourceState)=>{sourceState=state;},setRereadError:(error?:Error)=>{rereadError=error;},subscriptions:()=>({subscriptions,disposals}),close:async()=>{dialog.close();await new Promise(r=>setTimeout(r,15));}};
 }
 async function open(h:Awaited<ReturnType<typeof panelHarness>>){h.workbench.show();await new Promise(r=>setTimeout(r,65));}
 async function scene(h:Awaited<ReturnType<typeof panelHarness>>){h.click('relight-save');await new Promise(r=>setTimeout(r,10));return JSON.parse(String(h.files['relight-draft.json'])).scene;}
+
+test('workbench mounts and reopens with only the two supported output choices',async()=>{
+  const h=await panelHarness();try{
+    for(let opening=0;opening<2;opening++){
+      await open(h);assert.equal(h.workbench.isOpen,true);assert.equal(h.el('relight-dialog').hasAttribute('open'),true);
+      assert.deepEqual(Array.from(h.el('relight-output').querySelectorAll('option'),(option:any)=>[option.value,!!option.disabled]),[['lighting-layers',false],['full-result',false]]);
+      assert.equal(h.el('relight-compensation'),null);assert.equal(h.el('relight-compensation-info'),null);
+      h.el('relight-intensity').value='2.4';h.change('relight-intensity');await h.close();
+    }
+    assert.equal(h.session.editor.snapshot().lights[0].intensity,2.4);assert.deepEqual(h.errors,[]);assert.equal(h.posts.length,0);assert.equal(h.pixelRequests.length,0);
+  }finally{await h.close();}
+});
 
 test('light dragging updates coordinates without rebuilding lists, rereading pixels, saving or submitting',async()=>{
   const h=await panelHarness();try{
@@ -91,13 +103,28 @@ test('failed source reread remains visibly stale and a later successful reread a
   }finally{await h.close();}
 });
 
-test('output switching requires reread while a legacy selected result retains its complete-result apply action',async()=>{
+test('output switching requires reread while existing full-result and lighting candidates keep their own apply action',async()=>{
   const h=await panelHarness();try{
     await open(h);assert.equal(h.el('relight-output').value,'lighting-layers');h.el('relight-output').value='full-result';h.change('relight-output');assert.equal(h.el('relight-generate').disabled,true);
     h.click('relight-reread');await new Promise(r=>setTimeout(r,45));assert.equal(h.el('relight-generate').disabled,false);assert.equal(h.session.freeze().outputKind,'full-result');
-    h.results.push({jobId:'legacy-job',fingerprint:h.session.fingerprint,image:h.session.sourceCapture.image});h.workbench.refreshAvailability();
-    const result=h.el('relight-result-list').querySelector('button');result.id='legacy-choice';h.click(result.id);assert.match(result.textContent,/整图重绘/);assert.match(h.el('relight-apply').textContent,/整图结果/);
-    h.click('relight-apply');await new Promise(r=>setTimeout(r,45));assert.deepEqual(h.applied,['legacy-job']);
+    const candidates:RelightResult[]=[
+      {jobId:'legacy-job',fingerprint:h.session.fingerprint,image:h.session.sourceCapture.image},
+      {jobId:'full-job',fingerprint:h.session.fingerprint,image:h.session.sourceCapture.image,outputKind:'full-result'},
+      {jobId:'lighting-job',fingerprint:h.session.fingerprint,image:h.session.sourceCapture.image,outputKind:'lighting-layers',lightingState:'composite'}
+    ];
+    h.results.push(...candidates);h.workbench.refreshAvailability();
+    for(const candidate of candidates){
+      const lighting=candidate.jobId==='lighting-job',result=h.el('relight-result-list').querySelector(`[data-job-id="${candidate.jobId}"]`);result.id=candidate.jobId+'-choice';h.click(result.id);
+      assert.match(result.textContent,lighting?/光影合成预览/:/整图重绘/);
+      for(const choice of ['lighting-layers','full-result']){
+        h.el('relight-output').value=choice;h.change('relight-output');
+        assert.equal(h.el('relight-generate').disabled,true);assert.equal(h.workbench.currentResultId,candidate.jobId);
+        assert.match(h.el('relight-apply').textContent,lighting?/应用光影层组/:/应用整图结果/);
+        h.click('relight-apply');await new Promise(r=>setTimeout(r,45));assert.equal(h.applied[h.applied.length-1],candidate.jobId);
+        assert.equal(candidate.outputKind,lighting?'lighting-layers':candidate.jobId==='full-job'?'full-result':undefined);
+      }
+    }
+    assert.deepEqual(h.applied,['legacy-job','legacy-job','full-job','full-job','lighting-job','lighting-job']);assert.equal(h.posts.length,0);
   }finally{await h.close();}
 });
 

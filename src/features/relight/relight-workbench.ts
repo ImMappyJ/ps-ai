@@ -13,7 +13,7 @@ export interface RelightWorkbenchHost {
   prepare(frozen:FrozenRelightSubmission):Promise<void>;
   generate(frozen:FrozenRelightSubmission,onJob:(id:string)=>void):Promise<void>;
   cancel():Promise<void>;reread(options?:{explicit?:boolean;excludeResults?:boolean}):Promise<void>;rebindCurrent?(options?:{excludeResults?:boolean}):Promise<void>;appliedResults?(rebind?:boolean):boolean;apply(jobId:string):Promise<void>;inspectResult?(jobId:string):Promise<void>;export(jobId:string):Promise<void>;
-  results():RelightResult[];diagnostics(jobId:string):Promise<string>;
+  results():RelightResult[];
   busy?():boolean;pendingTasks?():number;openPendingTasks?():Promise<void>;reportError?(error:Error):void;
   sourceState?():'current'|'changed'|'closed'|'rebind-required'|'applied-results';observeSource?(invalidate:()=>void):()=>void;
   resultSourceState?(jobId:string):'current'|'changed';
@@ -231,7 +231,6 @@ export class RelightWorkbench {
     this.click('cancel',async()=>{if(this.request)this.request.cancelled=true;await this.host.cancel();this.message(t('已请求取消或停止后续候选；平台当前任务可能继续并计费，结果保留在历史中'));this.refresh();});
     this.click('apply',()=>{if(this.pending||this.nativeBusy)return;this.assertHostIdle();const r=this.result();if(!r)throw new Error(t('请先选择实际 AI 结果'));const kind=relightOutputKind(r),inspect=this.el('apply').getAttribute('data-result-action')==='inspect';this.closeForNative(async()=>{if(inspect){if(!this.host.inspectResult)throw r.lightingFailure??new DiagnosticError('source-changed','apply',t('此结果属于旧来源快照，仅可查看或导出；请对当前来源重新生成'));await this.host.inspectResult(r.jobId);this.message(t('来源检查通过；请再次明确应用候选。'));return;}await this.host.apply(r.jobId);this.message(t(kind==='lighting-layers'?'光影层已应用；原图细节保留在来源图层，可编辑并一次撤销':'完整结果已应用；可编辑蒙版并一次撤销'));});});
     this.click('export',async()=>{const r=this.result();if(!r)throw new Error(t('请先选择实际 AI 结果'));await this.host.export(r.jobId);});
-    this.click('compensation',async()=>{const r=this.result();if(!r)throw new Error(t('请先选择实际 AI 结果'));this.el('compensation-info').textContent=await this.host.diagnostics(r.jobId);});
     this.listen(this.el('acknowledge'),'change',()=>{this.acknowledged=!!this.el('acknowledge').checked;});
     this.listen(this.el('lights'),'click',e=>{const node=e.target?.closest?.('[data-light-id]');if(!node)return;const id=node.getAttribute('data-light-id');this.session.editor.select(id);if(node.getAttribute('data-find')==='true')this.findLight(id);this.refresh();});
     this.listen(this.el('result-list'),'click',e=>{const node=e.target?.closest?.('[data-job-id]');if(!node)return;this.selectedResult=node.getAttribute('data-job-id');this.tab='result';this.refresh();});
@@ -367,7 +366,7 @@ export class RelightWorkbench {
     const pendingTasks=this.host.pendingTasks?.()??0;this.el('pending-tasks').style.display=pendingTasks?'block':'none';this.el('pending-tasks').disabled=this.pending||this.nativeBusy||sharedBusy;this.el('pending-tasks').textContent=t('处理未确认任务（{0}）；保留布光并返回历史',pendingTasks);
     this.el('generate').disabled=this.pending||this.nativeBusy||this.sourceInvalid||this.scopePending||this.outputPending||sharedBusy;this.el('cancel').disabled=!this.pending;
     const result=this.result(),referenceOnly=!!result&&relightOutputKind(result)==='lighting-layers'&&result.lightingState!=='composite',checkSource=!!result&&(result.sourceSnapshotId!==undefined&&result.sourceSnapshotId!==scene.source.snapshotId||(this.host.resultSourceState?.(result.jobId)??(this.sourceInvalid?'changed':'current'))!=='current');
-    this.el('apply').disabled=this.pending||this.nativeBusy||sharedBusy||!result||!!result.warning&&!referenceOnly;this.el('export').disabled=!result;this.el('compensation').disabled=!result;this.el('reread').disabled=this.pending||this.nativeBusy||sharedBusy;
+    this.el('apply').disabled=this.pending||this.nativeBusy||sharedBusy||!result||!!result.warning&&!referenceOnly;this.el('export').disabled=!result;this.el('reread').disabled=this.pending||this.nativeBusy||sharedBusy;
     this.el('tab-result').textContent=t(result?resultLabel(result):'AI 结果');
     const recover=this.el('exclude-results');recover.style.display=this.host.appliedResults?.(this.recoveryRebind)?'block':'none';recover.disabled=this.pending||this.nativeBusy||sharedBusy;recover.textContent=t(this.recoveryRebind?'排除当前文档的已应用结果并绑定':'排除已应用结果并重新读取');this.el('recovery-info').style.display=recover.style.display;
     const color=this.el('recover-color'),colorAction=this.host.colorRecovery?.();

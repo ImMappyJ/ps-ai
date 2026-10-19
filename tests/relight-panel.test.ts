@@ -339,10 +339,10 @@ test('unsupported dialog and fully transparent source fail before uploads with a
   }
 });
 
-test('source document switching never redirects capture or apply, and compensation remains unavailable',async()=>{
+test('source document switching never redirects capture or either supported output choice',async()=>{
   const h=await panelHarness();try{
     await open(h);await useFullResult(h);h.switchDocument(22);h.click('relight-generate');await h.wait();assert.equal((h.records()[0].snapshot as any).documentId,11);assert.equal(h.ps.app.activeDocument.id,22);
-    h.click('relight-compensation');await new Promise(r=>setTimeout(r,20));assert.match(h.el('relight-compensation-info').textContent,/encoded sRGB|完整结果/);assert.equal(h.el('relight-output').querySelector('option[value="compensation"]').disabled,true);
+    assert.deepEqual(Array.from(h.el('relight-output').querySelectorAll('option'),(option:any)=>option.value),['lighting-layers','full-result']);assert.equal(h.el('relight-compensation'),null);assert.equal(h.el('relight-compensation-info'),null);
     h.click('relight-apply');await new Promise(r=>setTimeout(r,50));assert.equal(h.appliedLayers[0].documentId,11);assert.equal(h.ps.app.activeDocument.id,22);
     const before=h.appliedLayers.length;h.ps.app.documents.find((d:any)=>d.id===11).activeHistoryState={id:99};h.click('relight-apply');await new Promise(r=>setTimeout(r,50));assert.equal(h.appliedLayers.length,before);assert.match(h.el('relight-status').textContent,/改变|重新捕获/);
     assert.equal(h.el('relight-export').disabled,false);

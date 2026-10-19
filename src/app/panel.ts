@@ -16,7 +16,6 @@ import type {GatewayCapabilities,GenerationRequest} from '../infrastructure/back
 import {RelightSession,RelightDraftStore,relightTaskMetadata,type FrozenRelightSubmission,type RelightTaskMetadata,type RelightScope,type RelightOutputKind} from '../features/relight/relight-session';
 import {RelightWorkbench,type RelightResult} from '../features/relight/relight-workbench';
 import {compileRelightScene,validateRelightScene,type RelightScene,type RelightCapabilities} from '../features/relight/relight-scene';
-import {decomposeRelightCompensation} from '../features/relight/relight-compensation';
 import {PanelViews,OperationFeedback,ResultNavigation,CandidatePreview,SourceCaption,captureSizeSummary,localValidationMessage,createCandidateCard,setCandidateCardState,displayPreview as preview} from './panel-view';import type {OperationContext,PanelPage,CaptureSizeDetails} from './panel-view';
 import {HistoryTable,historyTaskType,historyPrompt,historyState,historySource,historyDate} from './history-table';
 import {prepareCandidate,prepareLightingLayerApplication,prepareEditAnalysisApplication,preflightEditAnalysisCandidate,historyOutputName,type PreparedCandidate} from './candidate-preparation';
@@ -450,7 +449,6 @@ function publishRelightSession(session:RelightSession):void {
       colorRecovery:()=>colorRecoveryAction(session.sourceCapture.snapshot.documentId,session),recoverColor:()=>relightOperation('recover-color','capture',()=>recoverSourceColor(session.sourceCapture.snapshot.documentId,session)),
       resultSourceState:id=>candidateApplicationMode(candidates.find(c=>c.job.id===id))==='unavailable'?'changed':'current',
       apply:id=>relightOperation('apply','apply',()=>apply(id)),inspectResult:id=>relightOperation('apply','apply',()=>apply(id,true)),export:exportCandidate,results:relightResults,
-      diagnostics:async(id)=>{const c=candidateById(id);try{const source=decodePng(await store.readBinary(`${id}-source.png`)),target=resize(c.image,source.width,source.height),result=decomposeRelightCompensation(source,target,{colorSpace:'encoded-srgb',documentProfile:c.snapshot?.profile??'',blend:{order:'multiply-screen',opacity:1,fillOpacity:1,group:'isolated-with-base',gamma:'encoded-srgb',mask:'none'}});return t('补偿诊断：encoded sRGB，{0} 位，先 Multiply 后 Screen，量化后 RGB 绝对误差（不含 Alpha）：max={1}，mean={2}，RMSE={3}；归一化 max={4}。这不代表仅改变光照，应用仍不可用。',rasterDepth(source),result.error.code.maxAbs,result.error.code.meanAbs,result.error.code.rmse,result.error.normalized.maxAbs);}catch(error){return t('无法可靠计算补偿，请使用完整结果：{0}',error instanceof Error?error.message:String(error));}}
     });
     relightWorkbench.show();
 }
