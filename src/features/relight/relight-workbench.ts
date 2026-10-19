@@ -17,6 +17,7 @@ export interface RelightWorkbenchHost {
   busy?():boolean;pendingTasks?():number;openPendingTasks?():Promise<void>;reportError?(error:Error):void;
   sourceState?():'current'|'changed'|'closed'|'rebind-required'|'applied-results';observeSource?(invalidate:()=>void):()=>void;
   resultSourceState?(jobId:string):'current'|'changed';
+  colorRecovery?():'create'|'retry'|undefined;recoverColor?():Promise<void>;
 }
 type Tab='original'|'illustration'|'result';
 type Drag={kind:'light'|'target'|'pan';id?:string;startX:number;startY:number;panX:number;panY:number;pointerId?:number;node?:any};
@@ -210,6 +211,15 @@ export class RelightWorkbench {
     this.click('load-draft',async()=>{const scene=await this.host.loadDraft();if(!scene)throw new Error(t('尚无保存的布光草稿'));try{this.session.restore(scene);this.selectedResult=undefined;this.changed();}catch(error){this.pendingDraft=scene;this.refresh();throw error;}});
     this.click('reuse-draft',()=>{if(this.pendingDraft){this.session.restore(this.pendingDraft,true);this.pendingDraft=undefined;this.selectedResult=undefined;this.changed();this.message(t('已明确将保存的布光复用到当前快照，请检查位置后生成'));}});
     this.click('reread',()=>this.rereadSource());
+    if(this.el('recover-color'))this.click('recover-color',()=>{
+      if(this.pending||this.nativeBusy||this.host.busy?.()||!this.host.colorRecovery?.()||!this.host.recoverColor)return;
+      this.sourceSyncFailed=true;this.invalidateSource();
+      this.closeForNative(async()=>{
+        await this.host.recoverColor!();
+        this.sourceInvalid=false;this.scopePending=false;this.outputPending=false;this.sourceSyncFailed=false;this.selectedResult=undefined;this.pendingDraft=undefined;
+        this.message(t('色彩副本已恢复并读取；布光配置已保留，请检查新来源后明确生成。旧候选仍可检查或导出。'));await this.save();
+      });
+    });
     if(this.el('rebind-current'))this.click('rebind-current',()=>this.rereadSource(true));
     this.click('exclude-results',()=>this.rereadSource(this.recoveryRebind,true,true));
     this.listen(this.el('output'),'change',()=>void this.guard(()=>{
@@ -360,6 +370,8 @@ export class RelightWorkbench {
     this.el('apply').disabled=this.pending||this.nativeBusy||sharedBusy||!result||!!result.warning&&!referenceOnly;this.el('export').disabled=!result;this.el('compensation').disabled=!result;this.el('reread').disabled=this.pending||this.nativeBusy||sharedBusy;
     this.el('tab-result').textContent=t(result?resultLabel(result):'AI 结果');
     const recover=this.el('exclude-results');recover.style.display=this.host.appliedResults?.(this.recoveryRebind)?'block':'none';recover.disabled=this.pending||this.nativeBusy||sharedBusy;recover.textContent=t(this.recoveryRebind?'排除当前文档的已应用结果并绑定':'排除已应用结果并重新读取');this.el('recovery-info').style.display=recover.style.display;
+    const color=this.el('recover-color'),colorAction=this.host.colorRecovery?.();
+    if(color){color.style.display=colorAction?'block':'none';color.disabled=this.pending||this.nativeBusy||sharedBusy;color.textContent=t(colorAction==='retry'?'重试读取已恢复的色彩副本':'创建已恢复色彩副本并重新读取');}
     if(this.el('rebind-current')){this.el('rebind-current').style.display=this.host.rebindCurrent?'block':'none';this.el('rebind-current').disabled=this.pending||this.nativeBusy||sharedBusy;}
     this.el('apply').textContent=t(referenceOnly?'查看提取失败原因':checkSource?'检查来源':result&&relightOutputKind(result)==='lighting-layers'?'应用光影层组':'应用整图结果');
     this.el('apply').setAttribute('data-result-action',referenceOnly||checkSource?'inspect':'apply');

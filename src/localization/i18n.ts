@@ -3,6 +3,19 @@ import type {Language} from '../infrastructure/config/profile';
 // Chinese source messages are stable keys. Model prompts and saved parameter values
 // are deliberately independent of the display language.
 export const english:Record<string,string>={
+  '创建已恢复色彩副本并重新读取':'Create a color-recovered copy and reread',
+  '重试读取已恢复的色彩副本':'Retry reading the color-recovered copy',
+  '仅能恢复本次会话已验证的撤销状态。此操作创建新的色彩副本并重新读取，保留旧来源和候选；不会自动生成。':'Only the verified undone state from this session can be recovered. This creates and rereads a new color-recovered copy, retaining the old source and candidates. Generation requires a separate action.',
+  '已恢复的色彩副本已保留；重试只读取该副本，不会创建另一份或自动生成。':'The color-recovered copy is retained. Retry reads that copy without creating another copy or starting generation.',
+  '当前来源没有可验证的会话色彩恢复记录；请在副本中指定正确配置文件':'This source has no verifiable color recovery record for this session. Assign the correct profile to a copy.',
+  '已恢复的色彩副本（文档 {0}）已保留，但读取未完成；请重试读取。原因：{1}':'The color-recovered copy (document {0}) is retained, but reading did not finish. Retry reading. Reason: {1}',
+  '已创建并读取恢复色彩的副本；请检查新来源后明确生成。旧候选仍绑定原来源，可继续导出。':'The color-recovered copy has been read. Check the new source before explicitly generating. Old candidates remain bound to their original source and can still be exported.',
+  '色彩副本已恢复并读取；布光配置已保留，请检查新来源后明确生成。旧候选仍可检查或导出。':'The color-recovered copy has been read and lighting settings retained. Check the new source before explicitly generating. Old candidates remain available for inspection or export.',
+  '来源文档或模式已切换；请返回报错的来源重新检查，色彩恢复不会作用于新活动文档。':'The source document or mode has changed. Return to the source that reported the error and check again. Color recovery will not target the new active document.',
+  '若显示色彩恢复按钮，可明确创建本次会话已验证的色彩副本并重新读取。没有可验证记录时，请在副本中指定正确配置文件，再重新捕获；已有候选仍可导出。':'When a color recovery button is available, explicitly create and reread a copy verified in this session. Without a verified record, assign the correct profile to a copy and recapture. Existing candidates remain exportable.',
+  '色彩副本恢复已取消':'Color copy recovery was cancelled',
+  '色彩副本创建已取消':'Color copy creation was cancelled',
+  '已恢复副本的尺寸、模式或位深已改变；请检查副本后明确重新读取来源。':'The recovered copy dimensions, mode or depth changed. Check the copy, then explicitly reread the source.',
   '检查来源':'Check source',
   '来源检查通过；请再次明确应用候选。':'Source check passed. Choose Apply explicitly to write the candidate.',
   '查看提取失败原因':'View extraction failure',
