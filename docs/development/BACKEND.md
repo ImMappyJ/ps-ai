@@ -122,6 +122,8 @@ ComfyUI 按来源、范围图排序，保留现有 LoadImage 倒置 MASK 到 alp
 
 本轮六个 PS27 sRGB 合成 API 用例通过 RGB8/16 素材捕获、原生灰度平面、单次有效蒙版、alpha／羽化／保护、单步撤销和注入故障回滚；两个大图用例实际走 `edit-analysis`，并验证写入两条带后取消的完整恢复。外侧／保护区的可见颜色与 alpha 差异为零，透明像素下隐藏 RGB 不属于该证明。保存 UUID 的读取在这些用例中使用内存夹具，不是磁盘持久化、重启或已安装素材控件验收。五个真实 Qwen 样本（四种场景及一次提示词对照）仍为视觉失败，不能用原生 API 通过替代效果验收。
 
+另有已安装 291c1d40 的小 RGB8 受控后端流程：真实来源／灰度图预览、两次上传与一次 POST、透明素材独立图层及可编辑蒙版、一次原生撤销、磁盘 History 按同一 UUID 读回并再次应用均通过；后续读回／应用没有新增请求，重复提交为零。此证据不扩大为安装大图／RGB16、重启持久性或真实模型质量通过。
+
 能力清单至少包含 `protocol: ps-ai/1`、`provider`、`configured`、`cancellation: none`、`progress: stages` 和 `models`。每个模型给出 `id`、`label`、`operations`、`maxInputImages`、`outputDepths`、`seedMax`、`minPixels`、`maxPixels`、`maxAspectRatio`。`seedMax: 0` 表示没有可设种子，信封只接受占位值 0，不向平台传种子；未知参数会被拒绝。本协议版本只支持 8 位输出、阶段进度和不保证中断的取消语义；需要真实步数、更多参数或其他取消保证时，应先扩展客户端和协议版本，不能伪造字段。
 
 状态是 `queued`、`running`、`ready`、`failed`、`cancelled` 或 `unknown`。只有 `ready` 才提供：

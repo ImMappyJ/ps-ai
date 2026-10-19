@@ -12,7 +12,7 @@ PS-AI 将 ComfyUI 接到 Photoshop 中，用于局部修图、人像服装和道
 
 开发分支的面板可选择 ComfyUI、Nano Banana、GPT Image 和 BaiLian，支持分别保存模型与加密 Key，并按需启动本机中转；人像工作区提供独立的[光影重塑工作台](docs/usage/USER_GUIDE.md#relight)，编辑多光源意图后主动生成，完整结果以蒙版新图层回写。配置见 [平台选择](docs/setup/PLATFORMS.md)，接口细节见 [百炼](docs/providers/BAILIAN.md)、[Gemini / Nano Banana](docs/providers/GEMINI.md) 与 [OpenAI Images](docs/providers/OPENAI.md) 的平台适配服务。平台路径仍待真实 API Key 和 Photoshop 验收，**不在已发布的 v0.4.0 包中**。本页下方截图及已测能力对应 ComfyUI 路径；本地布光示意不是 AI 结果，输出仅提供整图重绘和实验光影层，真实保细节效果仍需验收。
 
-开发版另补充了[原图色彩读取](docs/usage/USER_GUIDE.md#source-color)：没有文档 ICC 时可识别静态 WebP 的默认 sRGB 或 PNG 的显式 sRGB 标记，在工作副本中继续。WebP 8 位工作副本已在 Photoshop 27 完成等值回填与撤销检查；本轮另有公开 PNG8 的原生选区／整图捕获及已安装 b3548bd4 的有限色彩恢复流程证据。参考导入、更广泛控件及最终修订安装复测仍需单独验收。现有 v0.4.0 包不包含这项改动。
+开发版另补充了[原图色彩读取](docs/usage/USER_GUIDE.md#source-color)：没有文档 ICC 时可识别静态 WebP 的默认 sRGB 或 PNG 的显式 sRGB 标记，在工作副本中继续。WebP 8 位工作副本已在 Photoshop 27 完成等值回填与撤销检查；本轮另有公开 PNG8 的原生选区／整图捕获及已安装 b3548bd4 的有限色彩恢复流程证据。后续已核对 291c1d40 的 21 个安装运行文件，并通过原文件选择、当前选区捕获与小 RGB8 素材应用／历史读回；参考导入、其他控件和真实模型质量仍单独验收。现有 v0.4.0 包不包含这项改动。
 
 开发版还修正了[背景生成黑底／透明底](docs/usage/USER_GUIDE.md#background-fix)的问题，此前已用同一张样图验证舞台背景生成和 Photoshop 回填。后续开发改动增加免提示词移除、[人像溶图](docs/usage/USER_GUIDE.md#blend)、从主体选区替换整张背景及 RGBA 边缘处理；这些新交互与效果目前仅有离线覆盖，仍需 Photoshop 和真实推理验收。现有 v0.4.0 包尚未更新。
 

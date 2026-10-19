@@ -39,11 +39,11 @@
     },
     "untaggedSource": "Development: RGB static WebP with a bound original file without ICC (format-default sRGB) or PNG with an explicit sRGB chunk can use a tagged working copy after source-entry validation. Preserve a loaded document ICC after edits/conversion. Unknown/custom untagged sources or documents without a bound file remain blocked. Unsaved layers survive on the copy, interpreted using original-file semantics. Published v0.4.0 retains the earlier blanket rejection.",
     "savedColorResolution": {
-      "status": "Offline parser/mock tests and PS27 WebP8 capture/apply/undo passed; public PNG8 selection/document capture passed native API checks, with limited installed b3548bd4 picker/document-scope/recovery evidence. Reference import, persistent-access controls and final-revision installation remain separate checks.",
+      "status": "Offline parser/mock tests and PS27 WebP8 capture/apply/undo passed; public PNG8 selection/document capture passed native API checks, installed b3548bd4 passed bounded recovery, and hash-verified installed 291c1d40 passed missing-selection rejection/real picker/selection capture. Reference import, persistent access and broader controls remain separate checks.",
       "sourceFileByteLimit": 64000000,
       "identity": "Same full path, dimensions and native depth; recheck source state after file selection",
       "workingCopy": "Unmerged sRGB duplicate, preserved original, capture/apply frozen to the copy",
-      "undoRecapture": "Profile assignment is a separate history baseline. Only exact session-proven preassignment working copies offer explicit recovery into a NEW tagged copy; preserve the old document/redo history and recapture current pixels/protection. PS27 RGB8/16 synthetic API recovery and apply/undo/recapture passed; installed b3548bd4 additionally passed public PNG8 document-scope recovery after three native Undo operations reached NONE, retaining the old document/lights/candidates. Arbitrary pathless, earlier-session or modified origins still require verified manual assignment; broader controls and final-revision installation remain separate checks.",
+      "undoRecapture": "Profile assignment is a separate history baseline. Only exact session-proven preassignment working copies offer explicit recovery into a NEW tagged copy; preserve the old document/redo history and recapture current pixels/protection. PS27 RGB8/16 synthetic API recovery and apply/undo/recapture passed; installed b3548bd4 additionally passed public PNG8 document-scope recovery after three native Undo operations reached NONE, retaining the old document/lights/candidates. Arbitrary pathless, earlier-session or modified origins still require verified manual assignment; recovery on other sources/scopes and broader controls remain separate checks.",
       "nativeAcceptance": {
         "date": "2026-10-18",
         "host": "27.0.0",
@@ -447,7 +447,7 @@
         "probeLimit": "Raw off-image-find assertion retained false because the probe saved a live viewport reference; unchanged scene fingerprint and edge-to-center marker geometry independently confirmed find behavior"
       },
       "panelEndToEnd": {
-        "status": "Limited installed 0.5.0 b3548bd4 controlled-response flow passed; no upstream inference, complete-control or final-revision installation acceptance",
+        "status": "Limited installed 0.5.0 b3548bd4 controlled-response flow passed; 291c1d40 follow-up is recorded under iteration050; no upstream inference or complete-control acceptance",
         "attempt": "Historical PSJS native fetch denied at first GET; zero uploads and inference POSTs; no new source document created; pre-existing documents unchanged",
         "reason": "Adobe UXP scripting does not permit Network; no proxy or permission bypass used",
         "reference": "https://developer.adobe.com/photoshop/uxp/2022/scripting/how-it-works/"
@@ -484,8 +484,8 @@
         "preexistingDocumentsPreserved": "IDs, geometry, ICC, history and saved state unchanged",
         "limits": "Single timings and stated synthetic masked-preview comparison, not memory peaks or real-photo acceptance; no 45MP RGB16, installed panel, source-sync UI, network inference or full 45MP workflow"
       },
-      "currentAcceptancePending": ["Real-photo field quality and localized face/text/material protection", "Real model inference through current lighting-field pipeline", "Uncovered installed controls/source-sync, final-revision installation and native drag latency", "Complete 45MP read/edit/generate/apply/export workflow", "45MP RGB16 native processing", "Platform lighting output"],
-      "status": "development; new sessions default experimental lighting fields; bounded core/mock, synthetic native API and limited installed b3548bd4 controlled-response evidence are separate from historical model probes; current real inference, broader installation and visual quality pending"
+      "currentAcceptancePending": ["Real-photo field quality and localized face/text/material protection", "Real model inference through current lighting-field pipeline", "Uncovered installed controls/source-sync and native drag latency", "Complete 45MP read/edit/generate/apply/export workflow", "45MP RGB16 native processing", "Platform lighting output"],
+      "status": "development; new sessions default experimental lighting fields; bounded core/mock, synthetic native API and limited installed b3548bd4 controlled-response evidence are separate from historical model probes; current real inference, broader host acceptance and visual quality pending"
     },
     "imageBlending": {
       "mode": "blend",
@@ -515,7 +515,7 @@
         "Capture/binding failure rollback",
         "Old candidate remains invalid"
       ],
-      "installedPanel": "b3548bd4 controlled public PNG8: recorded-group exclusion/reread retained lights and candidates; broader source-sync and final-revision installation pending"
+      "installedPanel": "b3548bd4 controlled public PNG8: recorded-group exclusion/reread retained lights and candidates; broader source-sync and repeats on other builds remain separate checks"
     },
     "colorRecovery": {
       "evidence": "Synthetic native API; RGB8/16 verified PNG sRGB working copies and valid Adobe RGB controls",
@@ -534,10 +534,10 @@
         "originalSelectionAndEffectiveMaskSha256": "3b874d3ba46c638fc3094f8e92fb744ca974893873f8885f54e23760f9b6311b",
         "exactMaskMatch": true,
         "preexistingDocumentsUnchanged": true,
-        "installedFixRetest": "pending"
+        "installedFixRetest": "291c1d40: 21 runtime-file hashes and settings build label verified; missing selection rejected, real original-file picker/full-selection capture created the correct tagged copy and workbench without a size error"
       },
       "installedPanel": "b3548bd4 public PNG8 document scope: three native Undo operations reached NONE; explicit action created/captured a new sRGB copy, retaining old document, edited key light and two old candidates; no old candidate selected or authorized for the new source",
-      "limits": "Small synthetic sources plus one bounded installed PNG8 flow; other sources/scopes, new real WebP recovery and final-revision installation remain pending"
+      "limits": "Small synthetic sources plus bounded installed PNG8 recovery/capture flows; other sources/scopes, new real WebP recovery and broader host controls remain pending"
     },
     "lightingExtraction": {
       "evidence": "Actual derive/preparation/native apply, synthetic RGB8/16 64x64",
@@ -590,6 +590,17 @@
         "passed": ["Native source/selection/protection planes", "Output alpha and effective mask applied once", "Feather not squared", "Outside/protected visible color and alpha unchanged", "Source binding and single undo", "Injected mask failure rollback", "Cancellation after two written strips with full restoration", "Opaque/stale/closed-source write rejection and retained raw export"],
         "limits": "Synthetic outputs and in-memory saved-UUID fixtures, not disk durability/restart, installed asset controls, real ComfyUI output, hidden RGB under zero alpha or other ICC/hosts"
       },
+      "installedApplication": {
+        "build": "0.5.0 291c1d40",
+        "scope": "Small RGB8 rectangular selection on public PNG source; controlled transparent blue-wave response",
+        "sourceCrop": [353, 273],
+        "modelCanvas": [1120, 864],
+        "input": "Default image-and-selection; actual source crop and effective grayscale-guide previews",
+        "posts": 1,
+        "uploads": 2,
+        "passed": ["Transparent independent layer with editable mask", "One native Undo removes the layer", "Disk History reload by the original UUID and successful reapply", "No additional upload/POST or duplicate submission on History/read/apply", "Original document retained"],
+        "limits": "No upstream inference; not installed large/RGB16, restart durability or real-model visual acceptance"
+      },
       "liveComfy": {
         "samples": 4,
         "promptComparisons": 1,
@@ -609,7 +620,7 @@
     },
     "historyApplication": {
       "evidence": "Offline per-UUID candidate switching, four apply/delete/undo cycles, disk reload and source inspection regressions; independent review passed",
-      "installedPanel": "b3548bd4: valid controlled-fixture UUID read from History and applied again without another POST; reference-only negative blocked from apply; broader candidate/source matrix and final-revision installation pending"
+      "installedPanel": "b3548bd4 lighting UUID read/reapply added no POST and a reference-only negative was blocked; installed 291c1d40 also passed small RGB8 asset disk-History reload/reapply with no extra upload/POST or duplicate. Broader candidate/source matrix remains pending"
     },
     "installedPanelFixture": {
       "build": "0.5.0 b3548bd4",
@@ -617,7 +628,20 @@
       "backend": "Isolated local controlled responses; no upstream model inference",
       "positiveSubmission": { "posts": 1, "uploads": 2 },
       "passed": ["Native original-file picker and tagged working-copy capture", "Lighting-group apply and one Photoshop Undo", "Same-UUID History read/apply without an additional POST", "Recorded-group exclusion/reread retaining lights and candidates", "Reference-only negative cannot apply", "Intensity gesture/local Undo without a POST", "Exactly full-result and lighting-layers outputs", "Explicit new-copy ICC recovery after native Undo reached NONE"],
-      "limits": "Partial actual installed interaction only; not real-model quality, every control, contextual asset UI or final-revision installation acceptance"
+      "limits": "This b3548bd4 record is separate from the 291c1d40 installation follow-up; not real-model quality or every control"
+    },
+    "installationFollowup": {
+      "build": "0.5.0 291c1d40",
+      "runtimeFilesHashVerified": 21,
+      "settingsBuildLabel": "PS-AI 0.5.0 · 291c1d40",
+      "selectionCapture": "Missing selection rejected; full selection plus real original-file picker created a tagged copy and correct source/key-light workbench without size error",
+      "assetServiceCountsBefore": { "posts": 2, "uploads": 4 },
+      "assetServiceCountsAfter": { "posts": 3, "uploads": 6 },
+      "historyReadApplyCountsUnchanged": true,
+      "duplicateSubmissions": 0,
+      "historyReadApplyEventCount": { "before": 15, "after": 15 },
+      "upstreamInference": false,
+      "limits": "Observed installed selection capture and small RGB8 asset/disk-History paths, not complete UI, large/RGB16, restart durability or model visual quality"
     },
     "packaging": "pending final local main merge, full package gate and artifact hash verification; no push"
   }
