@@ -3,6 +3,8 @@ import type {Language} from '../infrastructure/config/profile';
 // Chinese source messages are stable keys. Model prompts and saved parameter values
 // are deliberately independent of the display language.
 export const english:Record<string,string>={
+  '光影合成预览':'Lighting composite preview',
+  'AI 参考图（提取失败，仅供检查）':'AI reference (extraction failed, inspection only)',
   '本地光影提取已停止':'Local lighting extraction stopped',
   '本地光影提取':'Local lighting extraction',
   '检查原始 AI 参考图与来源在作用范围内的结构、文字和纹理；参考图仅供检查与导出，不能作为光影层回填。':'Inspect the original AI reference against the source structure, text and texture inside the edit range. The reference is for inspection and export; it cannot be applied as lighting layers.',
