@@ -3,6 +3,8 @@ import type {Language} from '../infrastructure/config/profile';
 // Chinese source messages are stable keys. Model prompts and saved parameter values
 // are deliberately independent of the display language.
 export const english:Record<string,string>={
+  '拖动滑块调整，或输入精确数值。Esc 取消本次拖动。':'Drag a slider or enter a precise value. Esc cancels the current drag.',
+  '精确值：{0}':'Precise value: {0}',
   '创建已恢复色彩副本并重新读取':'Create a color-recovered copy and reread',
   '重试读取已恢复的色彩副本':'Retry reading the color-recovered copy',
   '仅能恢复本次会话已验证的撤销状态。此操作创建新的色彩副本并重新读取，保留旧来源和候选；不会自动生成。':'Only the verified undone state from this session can be recovered. This creates and rereads a new color-recovered copy, retaining the old source and candidates. Generation requires a separate action.',

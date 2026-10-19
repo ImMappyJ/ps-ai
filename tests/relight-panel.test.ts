@@ -143,7 +143,9 @@ test('generation closes for recapture, reopens for network, uploads the clean so
 test('editing during generation keeps the submitted scene frozen and marks the returned actual result stale',async()=>{
   const h=await panelHarness();try{
     await open(h);h.setJobStatus('running');h.click('relight-generate');await new Promise(r=>setTimeout(r,100));
-    assert.equal(h.posts.length,1);h.el('relight-intensity').value='3';h.change('relight-intensity');
+    assert.equal(h.posts.length,1);assert.equal(h.el('relight-intensity-slider').disabled,false);
+    h.el('relight-intensity-slider').value='2.35';h.event('relight-intensity-slider','input');
+    h.el('relight-intensity-slider').value='3';h.event('relight-intensity-slider','input');h.change('relight-intensity-slider');assert.equal(h.el('relight-intensity').value,'3');
     assert.equal((h.records()[0].relight as any).scene.lights[0].intensity,1);
     h.setJobStatus('ready');await h.wait();assert.match(h.el('relight-stale').textContent,/已修改/);
     assert.equal(h.el('relight-apply').disabled,false);assert.equal(h.posts.length,1);
