@@ -59,7 +59,9 @@ let lastSelection:{range:SelectionRange;workspace:Workspace;mode:string}|undefin
 let current:JobRecord|undefined,busy=false,stopBatch=false,zoomed=false;
 let historyRecords:JobRecord[]=[],detachAcknowledgedId:string|undefined;
 let applied:{documentId:number;layerId:number;jobId:string}|undefined;
-interface Candidate {job:JobRecord;image:Raster;bytes:Uint8Array;preview:string;snapshot?:Snapshot;warning?:string;outputKind?:RelightOutputKind;lightingSummary?:PreparedCandidate['lightingSummary']}
+interface Candidate extends PreparedCandidate {job:JobRecord;bytes:Uint8Array;preview:string}
+function lightingPreviewLabel(candidate:PreparedCandidate):string|undefined {return candidate.outputKind==='lighting-layers'?candidate.lightingState==='composite'?'光影合成预览':'AI 参考图（提取失败，仅供检查）':undefined;}
+function assertLightingComposite(candidate:Candidate):void {if(candidate.outputKind==='lighting-layers'&&candidate.lightingState!=='composite')throw candidate.lightingFailure??new DiagnosticError('relight-extraction','lighting-extraction',t('本地光影提取未完成；原始 AI 参考图已保留，请检查参考图和来源的作用范围。'));}
 let candidates:Candidate[]=[];
 let imageOperation:Promise<void>=Promise.resolve();
 function withImagePixels<T>(action:()=>Promise<T>):Promise<T>{const work=imageOperation.then(action);imageOperation=work.then(()=>{},()=>{});return work;}
@@ -78,7 +80,7 @@ let cleanupStatus:HistoryCleanupStatus|undefined,historyNotice='',lastHistoryFoc
 let pendingDetailReveal=false,historyRevealTimer:ReturnType<typeof setTimeout>|undefined;
 const historyPreview=new HistoryPreview(el('history-preview'),el('history-preview-status'),record=>withImagePixels(async()=>{
   const name=historyOutputName(record),bytes=await store.readBinary(name),prepared=await prepareCandidate(record,bytes,name=>store.readBinary(name),retainedImageBytes(true));
-  return {url:await preview(prepared.image,480),warning:prepared.warning};
+  return {url:await preview(prepared.image,480),warning:prepared.warning,label:lightingPreviewLabel(prepared),lightingFailure:prepared.lightingFailure};
 }));
 const historyTable=new HistoryTable(el('history-browser'),{busy:()=>busy,changed:()=>{detachAcknowledgedId=undefined;clearConfirmation=undefined;historyNotice='';historyUi();},focused:()=>{historyScrollTop=el('history-rows').scrollTop;historyDetail=true;historyUi();},refresh:()=>void guarded(()=>configure(()=>refreshHistory()),{page:'history',feature:'history-refresh'})});
 function outputDepth():8|16{return el('output-depth').value==='16'?16:8;}
@@ -133,15 +135,17 @@ function inputUi(){
 }
 function candidateUi(){
   const c=candidates[Number(el('candidate-select').value)],bounded=!!c?.snapshot?.captureGeometry,mode=c?.snapshot?(bounded?(adapter.sourceAvailability(c.snapshot,true)==='current'?'bound':'unavailable'):adapter.applicationMode(c.snapshot)):'unavailable';
-  el('apply').disabled=busy||!c?.snapshot||!!c.warning||mode==='unavailable';el('apply').textContent=t(bounded?'应用到来源文档':mode==='replace'?'替换本轮候选图层':'应用为新图层');
-  const notes=c?.warning??c?.lightingSummary?.warnings.map(message=>errorText(message)).join(' ');el('candidate-warning').textContent=notes?errorText(notes):'';el('candidate-warning').style.display=notes?'block':'none';
-  const s=c?.snapshot;el('candidate-target').textContent=s?t('来源文档 {0} · {1} · {2}',s.documentId,s.profile,mode==='unavailable'?t('来源已关闭、改变或会话已结束；候选仍可导出'):bounded?t('应用到绑定文档；同次捕获会替换插件结果，其他图层保留'):mode==='replace'?t('替换同次捕获的插件图层，其他图层保留'):t('新增独立结果，保留来源图层')):c?t('独立生成结果，可另存或新建文档'):'';
+  const lighting=c?.outputKind==='lighting-layers',referenceOnly=lighting&&c.lightingState!=='composite';
+  el('apply').disabled=busy||!c?.snapshot||referenceOnly||!!c.warning||mode==='unavailable';el('apply').textContent=t(bounded?'应用到来源文档':mode==='replace'?'替换本轮候选图层':'应用为新图层');
+  const notes=c?.lightingFailure?diagnostic(c.lightingFailure,'lighting-extraction').summary:c?.warning??c?.lightingSummary?.warnings.map(message=>errorText(message)).join(' ');el('candidate-warning').textContent=notes?errorText(notes):'';el('candidate-warning').style.display=notes?'block':'none';
+  const s=c?.snapshot;el('candidate-target').textContent=s?t('来源文档 {0} · {1} · {2}',s.documentId,s.profile,referenceOnly?t('提取失败；AI 参考图仅供检查和导出，不能作为光影层应用'):mode==='unavailable'?t('来源已关闭、改变或会话已结束；候选仍可导出'):bounded?t('应用到绑定文档；同次捕获会替换插件结果，其他图层保留'):mode==='replace'?t('替换同次捕获的插件图层，其他图层保留'):t('新增独立结果，保留来源图层')):c?t('独立生成结果，可另存或新建文档'):'';
   if(c&&s){const sizes=captureSizes(s,(c.job.params as any)?.modelSize,c.image);if(sizes)el('candidate-target').textContent+='\n'+captureSizeSummary(sizes);}
   for(const id of ['zoom','export','new-document'])el(id).disabled=busy||!c;el('candidate-select').disabled=busy||!c;el('opacity').disabled=busy||!applied;el('candidate-empty').style.display=candidates.length?'none':'block';el('detail-frame').style.display=c?'block':'none';
-  const lighting=c?.outputKind==='lighting-layers';el('export-ai-reference').style.display=lighting?'block':'none';el('export-ai-reference').disabled=busy||!lighting;el('ai-reference-export-info').style.display=lighting?'block':'none';
-  el('ai-reference-export-info').textContent=t(c?.warning?'此候选未形成可用光影重组；另存 AI 参考图保留模型原始输出。':'另存 PNG 保存本地光影重组；AI 参考图保存模型原始输出。');
+  el('export-ai-reference').style.display=lighting?'block':'none';el('export-ai-reference').disabled=busy||!lighting;el('ai-reference-export-info').style.display=lighting?'block':'none';
+  el('ai-reference-export-info').textContent=t(referenceOnly?'此候选未形成可用光影重组；另存 AI 参考图保留模型原始输出。':'另存 PNG 保存本地光影重组；AI 参考图保存模型原始输出。');
   const index=Number(el('candidate-select').value);
-  el('candidate-caption').textContent=c?t('候选 {0} / {1} · {2}×{3} · {4}-bit',index+1,candidates.length,c.image.width,c.image.height,rasterDepth(c.image)):'';
+  const label=c?lightingPreviewLabel(c):undefined;
+  el('candidate-caption').textContent=c?t('候选 {0} / {1} · {2}×{3} · {4}-bit',index+1,candidates.length,c.image.width,c.image.height,rasterDepth(c.image))+(label?' · '+t(label):''):'';
   el('nav-results').textContent=t('结果')+(candidates.length?` · ${candidates.length}`:'');
   el('candidates').setAttribute('aria-label',t('候选预览'));
   for(const card of Array.from(el('candidates').children) as HTMLElement[])setCandidateCardState(card,Number(card.getAttribute('data-candidate-index'))===index,busy);
@@ -299,7 +303,7 @@ async function captureRelight(expectedDocumentId=activeDocumentId(),scope:Religh
   });
 }
 function relightResults():RelightResult[]{
-  return candidates.flatMap(c=>{const metadata=c.job.relight as RelightTaskMetadata|undefined;if(!metadata||metadata.schemaVersion!==1||!relightSession?.ownsSnapshot(metadata.scene?.source?.snapshotId))return [];return [{jobId:c.job.id,fingerprint:metadata.fingerprint,sourceSnapshotId:metadata.scene.source.snapshotId,image:c.image,warning:c.warning,outputKind:c.outputKind}];});
+  return candidates.flatMap(c=>{const metadata=c.job.relight as RelightTaskMetadata|undefined;if(!metadata||metadata.schemaVersion!==1||!relightSession?.ownsSnapshot(metadata.scene?.source?.snapshotId))return [];return [{jobId:c.job.id,fingerprint:metadata.fingerprint,sourceSnapshotId:metadata.scene.source.snapshotId,image:c.image,warning:c.warning,outputKind:c.outputKind,lightingState:c.lightingState,lightingFailure:c.lightingFailure}];});
 }
 const reportedRelightErrors=new WeakSet<object>();
 async function relightOperation(feature:string,stage:Stage,action:()=>Promise<void>):Promise<void>{
@@ -489,13 +493,15 @@ async function stopTracking(confirm=false){
 async function addCandidate(record:JobRecord,bytes:Uint8Array){
   return withImagePixels(async()=>{
   await store.trace('candidate.preview',record.id);
-  const {image,snapshot,warning,outputKind,lightingSummary}=await prepareCandidate(record,bytes,name=>store.readBinary(name),retainedImageBytes(true));
+  const prepared=await prepareCandidate(record,bytes,name=>store.readBinary(name),retainedImageBytes(true)),{image,snapshot}=prepared;
   // All exported candidates, including standalone assets, declare sRGB explicitly.
   bytes=encodePng(image);
-  const c:Candidate={job:record,bytes,image,preview:await preview(image),snapshot:snapshot?.captureGeometry?{...snapshot,mask:new Uint8Array()}:snapshot,warning,outputKind,lightingSummary};
+  const c:Candidate={...prepared,job:record,bytes,preview:await preview(image),snapshot:snapshot?.captureGeometry?{...snapshot,mask:new Uint8Array()}:snapshot};
   const previous=candidates.findIndex(candidate=>candidate.job.id===record.id);if(previous>=0)candidates.splice(previous,1);
   if(candidates.length===4)candidates.shift();candidates.push(c);
-  await renderCandidates(record.id);await store.trace('candidate.ready',record.id);
+  await renderCandidates(record.id);
+  if(c.lightingState==='reference-only'){const reason=diagnostic(c.lightingFailure,'lighting-extraction').reason;await store.trace(`relight.extraction.failed.${reason??'local-validation'}`,record.id);}
+  await store.trace(c.lightingState==='reference-only'?'candidate.reference':'candidate.ready',record.id);
   relightWorkbench?.notifyResult(record.id);
   return c;
   });
@@ -534,7 +540,11 @@ async function navigateCompletedResult():Promise<void> {
 async function saveReady(record:JobRecord,images:OutputFile[],operation=activeOperation) {
   if(operation){operation.stage='output';operation.taskId=record.id;}
   record.state='downloading';record.outputs=images;
-  try{await store.trace('candidate.download',record.id);const bytes=await client.output(images[0]);await store.binary(`${record.id}-output.png`,bytes);record.outputFile=`${record.id}-output.png`;decodeModelPng(bytes,String(record.template??""));record.state='ready';if(record.relight)(record.relight as RelightTaskMetadata).result={jobId:record.id,outputFile:record.outputFile as string};await store.save(record);const candidate=await addCandidate(record,bytes);if(candidate.outputKind==='lighting-layers'&&candidate.warning)throw new DiagnosticError('invalid-output','output',candidate.warning);}
+  try{
+    await store.trace('candidate.download',record.id);const bytes=await client.output(images[0]);await store.binary(`${record.id}-output.png`,bytes);record.outputFile=`${record.id}-output.png`;decodeModelPng(bytes,String(record.template??""));record.state='ready';if(record.relight)(record.relight as RelightTaskMetadata).result={jobId:record.id,outputFile:record.outputFile as string};await store.save(record);
+    if((record.relight as RelightTaskMetadata|undefined)?.outputKind==='lighting-layers'){if(operation)operation.stage='lighting-extraction';taskPhase(t('正在提取光影影响场…'));}
+    const candidate=await addCandidate(record,bytes);assertLightingComposite(candidate);
+  }
   catch(error){record.state='output-error';record.detail=error instanceof Error?error.message:String(error);await store.save(record);throw error;}
 }
 async function waitRecord(record:JobRecord,operation=activeOperation):Promise<boolean> {
@@ -679,7 +689,7 @@ async function apply(jobId?:string){
   if(busy){if(jobId)throw new Error(t('已有任务正在进行，请等待完成后再生成或应用；可以继续编辑布光'));return;}
   lock(true);const started=Date.now();
   try{
-    const c=jobId?candidateById(jobId):selected();if(c.warning)throw new DiagnosticError('invalid-output','output',c.warning);
+    const c=jobId?candidateById(jobId):selected();assertLightingComposite(c);if(c.warning)throw new DiagnosticError('invalid-output','output',c.warning);
     if(!c.snapshot)throw new Error(t('此候选没有来源选区，请使用新文档查看'));
     let layerId:number;
     if(c.outputKind==='lighting-layers'){
@@ -814,7 +824,7 @@ on('export-ai-reference',()=>configure(async()=>{
 }));
 on('new-document',()=>configure(async()=>{const c=selected();await adapter.newDocument(c.image,`ps-ai ${c.job.id.slice(0,8)}`);}));
 el('opacity').addEventListener('change',()=>void guarded(()=>configure(async()=>{if(!applied)throw new Error(t("请先应用一个候选"));await adapter.opacity(applied.documentId,applied.layerId,Number(el('opacity').value));})));
-on('load-history',async()=>{if(busy)return;const id=historyTable.selectedId;lock(true);try{const record=(await store.history()).find(r=>r.id===id);if(!record?.outputFile)throw new Error(t("此记录尚未保存候选，请恢复任务"));await addCandidate(record,await store.readBinary(historyOutputName(record)));views.show('results');}finally{lock(false);}});
+on('load-history',async()=>{if(busy)return;const id=historyTable.selectedId,operation=activeOperation;lock(true);try{const record=(await store.history()).find(r=>r.id===id);if(!record?.outputFile)throw new Error(t("此记录尚未保存候选，请恢复任务"));if(operation)operation.taskId=record.id;const candidate=await addCandidate(record,await store.readBinary(historyOutputName(record)));views.show('results');if(candidate.lightingState==='reference-only')await guarded(async local=>{local.taskId=record.id;assertLightingComposite(candidate);},{page:'results',feature:'load-history',stage:'lighting-extraction'});}finally{lock(false);}});
 on('repeat-history',async()=>{
   if(busy)return;const id=historyTable.selectedId;lock(true);
   try{const r=(await store.history()).find(r=>r.id===id);if(!r)throw new Error(t("请选择历史记录"));const p=r.params as any;

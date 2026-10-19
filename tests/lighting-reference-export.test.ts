@@ -21,9 +21,11 @@ function fixture(id=A){
 test('lighting Results export exact saved AI reference bytes separately from the local reconstruction, without backend or source changes',async()=>{
  const f=fixture(),h=await panelHarness({settings:defaultSettings(),history:[f.record],files:f.files});try{
   await h.wait();h.selectHistory(A);h.click('load-history');await h.wait();assert.ok(h.el('export-ai-reference'));assert.equal(h.el('export-ai-reference').style.display,'block');assert.equal(h.el('export-ai-reference').textContent,'另存 AI 参考图');assert.match(h.el('ai-reference-export-info').textContent,/本地光影重组.*模型原始输出/);
+  assert.match(h.el('candidate-caption').textContent,/光影合成预览/);
   const preview=h.el('detail-preview').src,caption=h.el('candidate-target').textContent,record=JSON.stringify(h.records());h.click('export');await h.wait();const local=h.files['ps-ai-11111111.png'];assert.ok(local);assert.notDeepEqual(local,f.raw,'the tagged raw bytes differ from a reconstructed PNG');
   const requests=h.requests.length;h.click('export-ai-reference');await h.wait();assert.deepEqual(h.files['ps-ai-11111111-ai-reference.png'],f.raw);assert.equal(h.requests.length,requests);assert.equal(h.posts.length,0);assert.equal(h.gatewayPosts.length,0);assert.equal(h.pixelRequests.length,0);assert.equal(h.appliedLayers.length,0);assert.equal(h.el('detail-preview').src,preview);assert.equal(h.el('candidate-target').textContent,caption);assert.equal(JSON.stringify(h.records()),record);
   h.el('language').value='en-US';h.change('language');await h.wait();assert.equal(h.el('export-ai-reference').textContent,'Save AI reference');assert.match(h.el('ai-reference-export-info').textContent,/local lighting reconstruction.*original model output/);
+  assert.match(h.el('candidate-caption').textContent,/Lighting composite preview/);
  }finally{await h.close();}
 });
 
@@ -43,5 +45,28 @@ test('ordinary and legacy full-image candidates hide the AI-reference-only expor
 test('rejected lighting references remain explicitly exportable without claiming a usable local reconstruction',async()=>{
  const f=fixture(),raw=taggedRaw(encodePng({width:2,height:2,rgba:new Uint8Array(16)}),'rejected'),h=await panelHarness({settings:defaultSettings(),history:[f.record],files:{...f.files,[`${A}-output.png`]:raw}});try{
   await h.wait();h.selectHistory(A);h.click('load-history');await h.wait();assert.equal(h.el('apply').disabled,true);assert.equal(h.el('export-ai-reference').disabled,false);assert.match(h.el('ai-reference-export-info').textContent,/未形成可用光影重组/);h.click('export-ai-reference');await h.wait();assert.deepEqual(h.files['ps-ai-11111111-ai-reference.png'],raw);assert.equal(h.posts.length,0);assert.equal(h.gatewayPosts.length,0);
+  assert.match(h.el('candidate-caption').textContent,/AI 参考图.*提取失败/);
+  assert.doesNotMatch(h.el('candidate-target').textContent,/应用到绑定文档/);
+ }finally{await h.close();}
+});
+
+test('lighting generation, original-ID recovery and historical loading preserve a rejected reference and its local reason',async()=>{
+ const width=32,height=32,source={width,height,rgba:new Uint8Array(width*height*4)},output={width,height,rgba:new Uint8Array(width*height*4)};
+ for(let p=0;p<width*height;p++){source.rgba.set([70+p%width,90+Math.floor(p/width),110,255],p*4);const v=p%2?220:20;output.rgba.set([v,v,v,255],p*4);}
+ const h=await panelHarness({source,output});try{
+  await h.wait();h.click('nav-create');h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');h.el('resolution').value='32';h.click('open-relight');await new Promise(r=>setTimeout(r,80));
+  h.click('relight-generate');await h.wait();
+  const job=h.records()[0],raw=(h.files[`${job.id}-output.png`] as Uint8Array).slice();
+  assert.equal(h.posts.length,1);assert.equal(job.state,'output-error');assert.equal((job.relight as any).outputKind,'lighting-layers');
+  const checkDiagnostic=()=>{const d=JSON.parse(h.el('diagnostic-details').value);assert.equal(d.taskId,job.id);assert.equal(d.code,'relight-extraction');assert.equal(d.stage,'lighting-extraction');assert.equal(d.reason,'structure-mismatch');assert.ok(Number.isFinite(d.metrics.structureConfidence));assert.doesNotMatch(d.action,/PNG|ICC|sRGB/);};
+  checkDiagnostic();assert.match(h.el('relight-result-list').textContent,/AI 参考图.*提取失败/);assert.equal(h.el('relight-apply').disabled,true);assert.equal(h.el('relight-export').disabled,false);
+  h.el('relight-output').value='full-result';h.change('relight-output');assert.equal(h.el('relight-apply').disabled,true);assert.match(h.el('relight-result-list').textContent,/AI 参考图.*提取失败/);
+  h.click('relight-close');await pause();h.click('nav-history');h.selectHistory(job.id);h.click('recover');await h.wait();checkDiagnostic();
+  assert.equal(h.posts.length,1,'recovering the original UUID never submits generation');assert.deepEqual(h.files[`${job.id}-output.png`],raw);
+  assert.ok(h.requests.some(r=>r.url.endsWith(`/history/${job.id}`)));
+  h.selectHistory(job.id);await new Promise(r=>setTimeout(r,60));assert.match(h.el('history-preview-status').textContent,/AI 参考图.*提取失败/);
+  h.click('load-history');await h.wait();checkDiagnostic();assert.equal(h.el('view-results').style.display,'block');assert.equal(h.el('diagnostic-box').style.display,'block');assert.match(h.el('candidate-caption').textContent,/AI 参考图.*提取失败/);assert.equal(h.el('apply').disabled,true);
+  h.click('export-ai-reference');await h.wait();assert.deepEqual(h.files[`ps-ai-${job.id.slice(0,8)}-ai-reference.png`],raw);assert.equal(h.posts.length,1);assert.equal(h.appliedLayers.length,0);
+  const trace=JSON.parse(String(h.files['runtime-trace.json']));assert.ok(trace.events.some((event:any)=>event.taskId===job.id&&event.stage==='relight.extraction.failed.structure-mismatch'));
  }finally{await h.close();}
 });
