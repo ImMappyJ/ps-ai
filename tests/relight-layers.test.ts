@@ -86,7 +86,7 @@ test('analysis work yields, honors cancellation and refuses non-sRGB numeric fie
 
 test('native16 texture beside nearly white gradients has finite identity confidence despite filter roundoff',async()=>{
   const source=image((x,y)=>x<33?(x+y)%2?65500:2000:65500+x%30,16),s=scene();s.source.documentDepth=16;
-  const fields=await deriveRelightLayers(source,source,s);assert.equal(fields.summary.structureConfidence,1);assert.equal(fields.channels.length,0);
+  const fields=await deriveRelightLayers(source,convertDepth(convertDepth(source,8),16),s);assert.equal(fields.summary.structureConfidence,1);assert.equal(fields.channels.length,0);
 });
 
 test('negative variance roundoff cannot poison native16 shadow channels after confidence calculation',async()=>{
@@ -118,12 +118,23 @@ test('normal model-grid lighting retains usable fields after interpolation of qu
   assert.ok(fields.channels.some(c=>c.kind==='shadow'||c.kind==='light'));assert.ok(fields.channels.every(c=>c.amount.every(Number.isFinite)));
 });
 
-test('native16 source remains neutral through same-size and upsampled sRGB8 model inputs without losing native preview values',async()=>{
+test('native16 source remains neutral through same-size and upsampled 8/16-bit model outputs without losing native preview values',async()=>{
   const source=image((x,y)=>[(x*1301+y*701)%65536,(x*509+y*1103)%65536,(x*1709+y*307)%65536],16),s=scene();s.source.documentDepth=16;
-  for(const [width,height] of [[W,H],[256,192]]){
-    const fields=await deriveRelightLayers(source,convertDepth(resize(source,width,height),8),s);
+  for(const [width,height] of [[W,H],[256,192]])for(const depth of [8,16] as const){
+    const output=convertDepth(convertDepth(resize(source,width,height),8),depth),fields=await deriveRelightLayers(source,output,s);
     assert.equal(fields.summary.structureConfidence,1);assert.equal(fields.channels.length,0);assert.deepEqual(previewRelightLayers(source,fields),source);
   }
+});
+
+test('same-size SDR16 neutral output compares to the uploaded sRGB8 source while preserving native source samples',async()=>{
+  const source=image((x,y)=>[(x*1301+y*701)%65536,(x*509+y*1103)%65536,(x*1709+y*307)%65536],16),before=source.rgba.slice(),s=scene();s.source.documentDepth=16;
+  const output=convertDepth(convertDepth(source,8),16),fields=await deriveRelightLayers(source,output,s);
+  assert.equal(fields.summary.structureConfidence,1);assert.equal(fields.channels.length,0);assert.deepEqual(previewRelightLayers(source,fields),source);assert.deepEqual(source.rgba,before);
+});
+
+test('sRGB8 input projection cannot turn native16 semitransparency into an opaque editable source',async()=>{
+  const source=image(()=>12000,16),s=scene();s.source.documentDepth=16;for(let i=3;i<source.rgba.length;i+=4)source.rgba[i]=65534;
+  await assert.rejects(deriveRelightLayers(source,convertDepth(convertDepth(source,8),16),s),/结构|透明/);
 });
 
 test('a genuine frame-spanning colored shadow creates independent shadow and color fields',async()=>{
@@ -149,6 +160,34 @@ test('structure changes confined to context or protection cannot reject or bleed
   const fields=await deriveRelightLayers(source,target,scene(),{editMask:mask});assert.equal(fields.summary.structureConfidence,1);assert.equal(fields.channels.length,0);
   const inside=changed(source,(v,x,y)=>x>15&&x<35&&y>20&&y<70?40:v);
   await assert.rejects(deriveRelightLayers(source,inside,scene(),{editMask:mask}),/结构|文字|纹理/);
+});
+
+test('excluded model pixels adjacent to a narrow feathered scope cannot enter editable observations through resize',async()=>{
+  const source=image(()=>180),model=resize(source,64,48);
+  for(const left of [60,64]){
+    const mask=new Uint8Array(W*H);for(let y=0;y<H;y++)mask.set([64,128,192,255],y*W+left);const before=mask.slice();
+    for(const outside of [0,40,255,[30,210,70]])for(const depth of [8,16] as const){
+      const changed={...model,rgba:Uint8Array.from(model.rgba,(v,i)=>{
+        if(i%4===3)return v;const x=Math.floor(i/4)%64,excluded=left===60?x>=32:x<32;
+        return excluded?(Array.isArray(outside)?outside[i%4]:outside):v;
+      })},output=convertDepth(changed,depth),rawBefore=output.rgba.slice();
+      const fields=await deriveRelightLayers(source,output,scene(),{editMask:mask});
+      assert.equal(fields.summary.structureConfidence,1);assert.equal(fields.channels.length,0);assert.deepEqual(previewRelightLayers(source,fields),source);
+      assert.deepEqual(mask,before);assert.deepEqual(output.rgba,rawBefore);
+    }
+  }
+});
+
+test('narrow scope resampling retains real inside lighting and still rejects new inside structure',async()=>{
+  const source=image(()=>180),model=resize(source,64,48),mask=new Uint8Array(W*H),s=scene();s.shadow.strength=1;
+  for(let y=0;y<H;y++)mask.fill(255,y*W+60,y*W+64);
+  const target=(structure:boolean)=>({...model,rgba:Uint8Array.from(model.rgba,(v,i)=>{
+    if(i%4===3)return v;const x=Math.floor(i/4)%64,y=Math.floor(Math.floor(i/4)/64);
+    return x>=30&&x<32?(structure&&y>14&&y<34?40:structure?v:144):v;
+  })});
+  const fields=await deriveRelightLayers(source,target(false),s,{editMask:mask});assert.ok(fields.channels.some(c=>c.kind==='shadow'));assert.ok(previewRelightLayers(source,fields).rgba[(48*W+61)*4]<180);
+  const feather=Uint8Array.from(mask,(v,p)=>v?[64,128,192,255][p%W-60]:0),soft=await deriveRelightLayers(source,target(false),s,{editMask:feather});assert.deepEqual(soft.channels,fields.channels,'feather coverage belongs only to the external editable mask');
+  await assert.rejects(deriveRelightLayers(source,target(true),s,{editMask:mask}),/结构|文字|纹理/);
 });
 
 test('global disagreement and unsupported local boundaries report distinct finite redacted extraction reasons',async()=>{

@@ -29,9 +29,10 @@ function check(signal?:AbortSignal):void {if(signal?.aborted){const error=new Er
 function raster(image:Raster):void {
   if(!image||!Number.isSafeInteger(image.width)||!Number.isSafeInteger(image.height)||image.width<1||image.height<1||image.width*image.height>16_000_000||!(image.rgba instanceof Uint8Array||image.rgba instanceof Uint16Array)||image.rgba.length!==image.width*image.height*4)throw new Error('光影参考图尺寸或 RGBA 数据无效');
 }
-/** Match resize -> sRGB8 model input -> resize without allocating a model-sized copy. */
-async function modelProjection(source:Raster,modelWidth:number,modelHeight:number,pause:()=>Promise<void>):Promise<Raster> {
-  const {width,height}=source,max=rasterMax(source),scale=255/max,out=new Uint8Array(width*height*4),rows=new Map<number,Uint8Array>();
+/** Match model input/output grids with two cached sRGB8 input rows. */
+async function modelProjection(source:Raster,reference:Raster,pause:()=>Promise<void>,editMask?:Uint8Array):Promise<{comparison:Raster;result:Raster;referenceSample:(index:number)=>number;referenceAllowed:(index:number)=>boolean}> {
+  const {width,height}=source,modelWidth=reference.width,modelHeight=reference.height,max=rasterMax(source),scale=255/max,targetMax=rasterMax(reference),modelScale=targetMax/255;
+  const out=targetMax===65535?new Uint16Array(width*height*4):new Uint8Array(width*height*4),result=out.slice(),rows=new Map<number,Uint8Array>();
   const row=(y:number)=>{
     const cached=rows.get(y);if(cached)return cached;
     const data=new Uint8Array(modelWidth*4),sy=clamp((y+.5)*height/modelHeight-.5,0,height-1),y0=Math.floor(sy),dy=sy-y0;
@@ -40,7 +41,17 @@ async function modelProjection(source:Raster,modelWidth:number,modelHeight:numbe
       let alpha=0;for(let k=0;k<4;k++)alpha+=source.rgba[indices[k]+3]*weights[k];data[x*4+3]=Math.round(Math.round(alpha)*scale);
       for(let c=0;c<3;c++){let sum=0;for(let k=0;k<4;k++)sum+=source.rgba[indices[k]+c]*source.rgba[indices[k]+3]*weights[k];data[x*4+c]=alpha?Math.round(Math.round(sum/alpha)*scale):0;}
     }
-    rows.set(y,data);return data;
+    if(rows.size===2)rows.delete(rows.keys().next().value!);rows.set(y,data);return data;
+  };
+  const referenceAllowed=(index:number)=>{
+    if(!editMask)return true;const pixel=Math.floor(index/4),x=pixel%modelWidth,y=Math.floor(pixel/modelWidth);
+    // Test model-pixel centers against binary support; gray feathers remain
+    // exclusively in the external editable mask.
+    return sample(editMask,width,height,(x+.5)*width/modelWidth-.5,(y+.5)*height/modelHeight-.5)>0;
+  };
+  const referenceSample=(index:number)=>{
+    if(!referenceAllowed(index)){const pixel=Math.floor(index/4),x=pixel%modelWidth,y=Math.floor(pixel/modelWidth);return row(y)[x*4+index%4]*modelScale;}
+    return reference.rgba[index];
   };
   for(let y=0;y<height;y++){
     if(y%16===0)await pause();
@@ -48,23 +59,29 @@ async function modelProjection(source:Raster,modelWidth:number,modelHeight:numbe
     for(const key of rows.keys())if(key!==y0&&key!==y1)rows.delete(key);
     const top=row(y0),bottom=row(y1);
     for(let x=0;x<width;x++){
-      const sx=clamp((x+.5)*modelWidth/width-.5,0,modelWidth-1),x0=Math.floor(sx),x1=Math.min(modelWidth-1,x0+1),dx=sx-x0,values=[top,bottom],xs=[x0,x1],weights=[(1-dx)*(1-dy),dx*(1-dy),(1-dx)*dy,dx*dy],p=(y*width+x)*4;
-      let alpha=0;for(let k=0;k<4;k++)alpha+=values[k>>1][xs[k%2]*4+3]*weights[k];out[p+3]=Math.round(alpha);
-      for(let c=0;c<3;c++){let sum=0;for(let k=0;k<4;k++)sum+=values[k>>1][xs[k%2]*4+c]*values[k>>1][xs[k%2]*4+3]*weights[k];out[p+c]=alpha?Math.round(sum/alpha):0;}
+      const sx=clamp((x+.5)*modelWidth/width-.5,0,modelWidth-1),x0=Math.floor(sx),x1=Math.min(modelWidth-1,x0+1),dx=sx-x0,values=[top,bottom],xs=[x0,x1],weights=[(1-dx)*(1-dy),dx*(1-dy),(1-dx)*dy,dx*dy],indices=[(y0*modelWidth+x0)*4,(y0*modelWidth+x1)*4,(y1*modelWidth+x0)*4,(y1*modelWidth+x1)*4],p=(y*width+x)*4;
+      const support=weights.reduce((sum,w,k)=>sum+(referenceAllowed(indices[k])?w:0),0);
+      if(support)for(let k=0;k<4;k++)weights[k]=referenceAllowed(indices[k])?weights[k]/support:0;
+      let alpha=0,targetAlpha=0;for(let k=0;k<4;k++){alpha+=values[k>>1][xs[k%2]*4+3]*modelScale*weights[k];targetAlpha+=referenceSample(indices[k]+3)*weights[k];}out[p+3]=Math.round(alpha);result[p+3]=Math.round(targetAlpha);
+      for(let c=0;c<3;c++){
+        let sum=0,targetSum=0;for(let k=0;k<4;k++){sum+=values[k>>1][xs[k%2]*4+c]*modelScale*values[k>>1][xs[k%2]*4+3]*modelScale*weights[k];targetSum+=referenceSample(indices[k]+c)*referenceSample(indices[k]+3)*weights[k];}
+        out[p+c]=alpha?Math.round(sum/alpha):0;result[p+c]=targetAlpha?Math.round(targetSum/targetAlpha):0;
+      }
     }
   }
-  return {width,height,rgba:out};
+  return {comparison:{width,height,rgba:out},result:{width,height,rgba:result},referenceSample,referenceAllowed};
 }
 const luminance=(r:number,g:number,b:number)=>r*.2126+g*.7152+b*.0722;
-async function blur(values:Float32Array,width:number,height:number,radius:number,pause:()=>Promise<void>):Promise<Float32Array> {
-  const tmp=new Float32Array(values.length),out=new Float32Array(values.length),r=Math.max(1,Math.round(radius));
+async function blur(values:Float32Array,width:number,height:number,radius:number,pause:()=>Promise<void>,mask?:Uint8Array):Promise<Float32Array> {
+  const tmp=new Float32Array(values.length),out=new Float32Array(values.length),weights=mask?new Float32Array(values.length):undefined,r=Math.max(1,Math.round(radius));
+  const included=(p:number)=>!mask||mask[p]>0?1:0;
   for(let y=0;y<height;y++){
-    if(y%32===0)await pause();let sum=0;for(let x=-r;x<=r;x++)sum+=values[y*width+clamp(x,0,width-1)];
-    for(let x=0;x<width;x++){tmp[y*width+x]=sum/(2*r+1);sum+=values[y*width+Math.min(width-1,x+r+1)]-values[y*width+Math.max(0,x-r)];}
+    if(y%32===0)await pause();let sum=0,weight=0;for(let x=-r;x<=r;x++){const p=y*width+clamp(x,0,width-1),a=included(p);sum+=values[p]*a;weight+=a;}
+    for(let x=0;x<width;x++){const p=y*width+x,add=y*width+Math.min(width-1,x+r+1),remove=y*width+Math.max(0,x-r);tmp[p]=sum/(2*r+1);if(weights)weights[p]=weight/(2*r+1);sum+=values[add]*included(add)-values[remove]*included(remove);weight+=included(add)-included(remove);}
   }
   for(let x=0;x<width;x++){
-    if(x%64===0)await pause();let sum=0;for(let y=-r;y<=r;y++)sum+=tmp[clamp(y,0,height-1)*width+x];
-    for(let y=0;y<height;y++){out[y*width+x]=sum/(2*r+1);sum+=tmp[Math.min(height-1,y+r+1)*width+x]-tmp[Math.max(0,y-r)*width+x];}
+    if(x%64===0)await pause();let sum=0,weight=0;for(let y=-r;y<=r;y++){const p=clamp(y,0,height-1)*width+x;sum+=tmp[p];if(weights)weight+=weights[p];}
+    for(let y=0;y<height;y++){const p=y*width+x,add=Math.min(height-1,y+r+1)*width+x,remove=Math.max(0,y-r)*width+x;out[p]=weights?(weight>0?sum/weight:values[p]):sum/(2*r+1);sum+=tmp[add]-tmp[remove];if(weights)weight+=weights[add]-weights[remove];}
   }
   return out;
 }
@@ -96,7 +113,7 @@ function isSrgb(profile:string):boolean{return /^sRGB(?: IEC61966-2\.1)?$/i.test
  * only as a straight frame-spanning transition, or an observed cast/highlight edge
  * anchored coherently to existing source geometry and the submitted light.
  */
-async function assertSupportedBoundaries(base:Raster,target:Raster,scene:RelightScene,confidence:Float32Array,sourceGuide:Float32Array,targetGuide:Float32Array,pause:()=>Promise<void>,editMask?:Uint8Array,reference:Raster=target):Promise<void> {
+async function assertSupportedBoundaries(base:Raster,target:Raster,scene:RelightScene,confidence:Float32Array,sourceGuide:Float32Array,targetGuide:Float32Array,pause:()=>Promise<void>,editMask?:Uint8Array,reference:Raster=target,referenceSample:(index:number)=>number=index=>reference.rgba[index],referenceAllowed:(index:number)=>boolean=()=>true):Promise<void> {
   const {width,height}=base,n=width*height,max=rasterMax(base),targetMax=rasterMax(target),lower=new Float32Array(n*3),upper=new Float32Array(n*3),boundary=new Uint8Array(n),chroma=new Uint8Array(n);
   const opaque=(p:number)=>(!editMask||editMask[p]>0)&&base.rgba[p*4+3]===max&&target.rgba[p*4+3]>=targetMax*.98;
   // Model inputs have 8-bit precision even for native16 sources/outputs. A
@@ -108,8 +125,9 @@ async function assertSupportedBoundaries(base:Raster,target:Raster,scene:Relight
     if(resampled){
       const sx=clamp((x+.5)*reference.width/width-.5,0,reference.width-1),sy=clamp((y+.5)*reference.height/height-.5,0,reference.height-1),x0=Math.floor(sx),y0=Math.floor(sy),dx=sx-x0,dy=sy-y0;
       indices.set([(y0*reference.width+x0)*4,(y0*reference.width+Math.min(x0+1,reference.width-1))*4,(Math.min(y0+1,reference.height-1)*reference.width+x0)*4,(Math.min(y0+1,reference.height-1)*reference.width+Math.min(x0+1,reference.width-1))*4]);
-      weights.set([(1-dx)*(1-dy),dx*(1-dy),(1-dx)*dy,dx*dy]);let alpha=0;
-      for(let k=0;k<4;k++){weights[k]*=reference.rgba[indices[k]+3];alpha+=weights[k];}if(alpha)for(let k=0;k<4;k++)weights[k]/=alpha;
+      weights.set([(1-dx)*(1-dy),dx*(1-dy),(1-dx)*dy,dx*dy]);let alpha=0,support=0;for(let k=0;k<4;k++)if(referenceAllowed(indices[k]))support+=weights[k];
+      if(support)for(let k=0;k<4;k++)if(!referenceAllowed(indices[k]))weights[k]=0;
+      for(let k=0;k<4;k++){weights[k]*=referenceSample(indices[k]+3);alpha+=weights[k];}if(alpha)for(let k=0;k<4;k++)weights[k]/=alpha;
     }
     for(let c=0;c<3;c++){
       const b=base.rgba[p*4+c]/max,t=target.rgba[p*4+c]/targetMax;
@@ -121,7 +139,7 @@ async function assertSupportedBoundaries(base:Raster,target:Raster,scene:Relight
         low=-.5/targetMax;high=.5/targetMax;saturated=false;
         // Propagate model-code intervals through the same alpha-weighted
         // interpolation and final rounding as resize(), including saturation.
-        for(let k=0;k<4;k++)if(weights[k]>0){const value=reference.rgba[indices[k]+c]/referenceMax;low+=weights[k]*Math.max(0,value-referenceHalf);high+=weights[k]*(value+referenceHalf);if(value>=1-referenceHalf)saturated=true;}
+        for(let k=0;k<4;k++)if(weights[k]>0){const value=referenceSample(indices[k]+c)/referenceMax;low+=weights[k]*Math.max(0,value-referenceHalf);high+=weights[k]*(value+referenceHalf);if(value>=1-referenceHalf)saturated=true;}
       }
       lower[p*3+c]=low<=0?-32:Math.log(low)-Math.log(b+sourceHalf);
       upper[p*3+c]=b<=sourceHalf||saturated?32:Math.log(high)-Math.log(b-sourceHalf);
@@ -178,35 +196,38 @@ export async function deriveRelightLayers(source:Raster,target:Raster,scene:Reli
   if(options.editMask&&(!(options.editMask instanceof Uint8Array)||options.editMask.length!==n))throw new Error('光影分析蒙版尺寸错误');
   // Compare to the exact grid/8-bit input sent to the model. Comparing an
   // unfiltered source with its resized return invents high-frequency changes.
-  const comparison=target.width===width&&target.height===height?(rasterMax(base)>rasterMax(target)?convertDepth(base,8):base):await modelProjection(base,target.width,target.height,pause);
-  let result=target.width===width&&target.height===height?target:resize(target,width,height);
+  const scope=options.editMask?.some(v=>v===0)?options.editMask:undefined;
+  const projected=target.width===width&&target.height===height?undefined:await modelProjection(base,target,pause,scope);
+  const modelBase=!projected&&rasterMax(base)!==255?convertDepth(base,8):base;
+  const comparison=projected?.comparison??(rasterMax(target)===255?modelBase:convertDepth(modelBase,16));
+  let result=projected?.result??target;
   const max=rasterMax(comparison),targetMax=rasterMax(result),sourceMax=rasterMax(base),logBase=new Float32Array(n),logTarget=new Float32Array(n),guide=new Float32Array(n);
-  if(options.editMask?.some(v=>v===0)){
-    result={...result,rgba:result.rgba.slice()};
+  if(scope){
+    if(!projected)result={...result,rgba:result.rgba.slice()};
     // Context/protection changes supply no observations to any blur or chroma
     // field. The original grayscale mask still applies exactly once outside.
-    for(let p=0;p<n;p++)if(options.editMask[p]===0)for(let c=0;c<4;c++)result.rgba[p*4+c]=Math.round(comparison.rgba[p*4+c]*targetMax/max);
+    for(let p=0;p<n;p++)if(scope[p]===0)for(let c=0;c<4;c++)result.rgba[p*4+c]=Math.round(comparison.rgba[p*4+c]*targetMax/max);
   }
   let transparent=0;
-  for(let y=0;y<height;y++){if(y%32===0)await pause();for(let x=0;x<width;x++){const p=y*width+x,i=p*4,b=luminance(comparison.rgba[i],comparison.rgba[i+1],comparison.rgba[i+2])/max,t=luminance(result.rgba[i],result.rgba[i+1],result.rgba[i+2])/targetMax;guide[p]=luminance(base.rgba[i],base.rgba[i+1],base.rgba[i+2])/sourceMax;logBase[p]=Math.log(Math.max(.025,b));logTarget[p]=Math.log(Math.max(.025,t));if((!options.editMask||options.editMask[p]>0)&&comparison.rgba[i+3]===max&&result.rgba[i+3]<targetMax*.98)transparent++;}}
+  for(let y=0;y<height;y++){if(y%32===0)await pause();for(let x=0;x<width;x++){const p=y*width+x,i=p*4,b=luminance(comparison.rgba[i],comparison.rgba[i+1],comparison.rgba[i+2])/max,t=luminance(result.rgba[i],result.rgba[i+1],result.rgba[i+2])/targetMax;guide[p]=luminance(base.rgba[i],base.rgba[i+1],base.rgba[i+2])/sourceMax;logBase[p]=Math.log(Math.max(.025,b));logTarget[p]=Math.log(Math.max(.025,t));if((!options.editMask||options.editMask[p]>0)&&base.rgba[i+3]===sourceMax&&result.rgba[i+3]<targetMax*.98)transparent++;}}
   if(transparent/n>.05)throw new Error('AI 光影参考含明显透明或缺失区域；无法提取可靠照明，原始输出已保留');
-  const radius=Math.max(2,Math.round(Math.min(width,height)/32)),smallBase=await blur(logBase,width,height,1,pause),smallTarget=await blur(logTarget,width,height,1,pause);
+  const radius=Math.max(2,Math.round(Math.min(width,height)/32)),smallBase=await blur(logBase,width,height,1,pause,scope),smallTarget=await blur(logTarget,width,height,1,pause,scope);
   const es=new Float32Array(n),et=new Float32Array(n),cross=new Float32Array(n);
   for(let p=0;p<n;p++){const a=logBase[p]-smallBase[p],b=logTarget[p]-smallTarget[p];es[p]=a*a;et[p]=b*b;cross[p]=a*b;}
-  const sourceEnergy=await blur(es,width,height,2,pause),targetEnergy=await blur(et,width,height,2,pause),correlation=await blur(cross,width,height,2,pause),confidence=new Float32Array(n),edge=new Float32Array(n);
+  const sourceEnergy=await blur(es,width,height,2,pause,scope),targetEnergy=await blur(et,width,height,2,pause,scope),correlation=await blur(cross,width,height,2,pause,scope),confidence=new Float32Array(n),edge=new Float32Array(n);
   let rejected=0,confidenceSum=0,visible=0;
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){
     // Sliding sums can leave negative roundoff where true energy is zero.
     const p=y*width+x,a=sourceEnergy[p]=Math.max(0,sourceEnergy[p]),b=targetEnergy[p]=Math.max(0,targetEnergy[p]),corr=correlation[p]/Math.sqrt(a*b+1e-10),change=Math.sqrt(Math.max(0,a+b-2*correlation[p]))/(Math.sqrt(a)+Math.sqrt(b)+.025);
-    let c=Math.exp(-change*change*9);if(a+b>.003&&corr<.3)c*=clamp((corr+.1)/.4);if(comparison.rgba[p*4+3]!==max||result.rgba[p*4+3]<targetMax*.98)c=0;
+    let c=Math.exp(-change*change*9);if(a+b>.003&&corr<.3)c*=clamp((corr+.1)/.4);if(base.rgba[p*4+3]!==sourceMax||result.rgba[p*4+3]<targetMax*.98)c=0;
     confidence[p]=c;
-    if(comparison.rgba[p*4+3]>0&&(!options.editMask||options.editMask[p]>0)){visible++;confidenceSum+=c;if(c<.35)rejected++;}
+    if(base.rgba[p*4+3]>0&&(!options.editMask||options.editMask[p]>0)){visible++;confidenceSum+=c;if(c<.35)rejected++;}
     edge[p]=Math.hypot(smallBase[y*width+Math.min(width-1,x+1)]-smallBase[y*width+Math.max(0,x-1)],smallBase[Math.min(height-1,y+1)*width+x]-smallBase[Math.max(0,y-1)*width+x]);
   }
   const structureConfidence=visible?confidenceSum/visible:0,rejectedFraction=visible?rejected/visible:1;
   if(!visible||!Number.isFinite(structureConfidence)||rejectedFraction>.55||structureConfidence<.4)throw new RelightExtractionError('structure-mismatch',{structureConfidence,rejectedFraction});
-  await assertSupportedBoundaries(comparison,result,s,confidence,smallBase,smallTarget,pause,options.editMask,target);
-  const coarseBase=await blur(logBase,width,height,radius,pause),coarseTarget=await blur(logTarget,width,height,radius,pause),raw=new Float32Array(n);
+  await assertSupportedBoundaries(comparison,result,s,confidence,smallBase,smallTarget,pause,options.editMask,target,projected?.referenceSample,projected?.referenceAllowed);
+  const coarseBase=await blur(logBase,width,height,radius,pause,scope),coarseTarget=await blur(logTarget,width,height,radius,pause,scope),raw=new Float32Array(n);
   let clipped=0;for(let p=0;p<n;p++){const d=coarseTarget[p]-coarseBase[p];if(Math.abs(d)>.7)clipped++;raw[p]=clamp(d,-.7,.55);}
   // A small cross-bilateral stencil in source luminance prevents a broad field
   // crossing stable subject edges. Invalid patches contribute no observations.
@@ -243,7 +264,7 @@ export async function deriveRelightLayers(source:Raster,target:Raster,scene:Reli
   const chromaPlanes:Float32Array[]=[];
   for(let c=0;c<3;c++){
     const delta=new Float32Array(n);for(let p=0;p<n;p++)delta[p]=Math.log(Math.max(.03,result.rgba[p*4+c]/targetMax))-logTarget[p]-(Math.log(Math.max(.03,comparison.rgba[p*4+c]/max))-logBase[p]);
-    chromaPlanes.push(await blur(delta,width,height,radius,pause));
+    chromaPlanes.push(await blur(delta,width,height,radius,pause,scope));
   }
   for(let y=0;y<height;y++){if(y%32===0)await pause();for(let x=0;x<width;x++){
     const p=y*width+x;if(confidence[p]<.08||options.editMask&&options.editMask[p]===0)continue;
@@ -273,7 +294,7 @@ export function validateRelightLayerFields(fields:RelightLayerFields):void {
     kinds.add(c.kind);previous=position;
   }
 }
-function sample(values:Float32Array,width:number,height:number,x:number,y:number,components=1,component=0):number {
+function sample(values:Float32Array|Uint8Array,width:number,height:number,x:number,y:number,components=1,component=0):number {
   const sx=clamp(x,0,width-1),sy=clamp(y,0,height-1),x0=Math.floor(sx),y0=Math.floor(sy),fx=sx-x0,fy=sy-y0;
   return (values[(y0*width+x0)*components+component]*(1-fx)+values[(y0*width+Math.min(width-1,x0+1))*components+component]*fx)*(1-fy)+(values[(Math.min(height-1,y0+1)*width+x0)*components+component]*(1-fx)+values[(Math.min(height-1,y0+1)*width+Math.min(width-1,x0+1))*components+component]*fx)*fy;
 }
