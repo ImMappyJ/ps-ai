@@ -643,6 +643,6 @@
       "upstreamInference": false,
       "limits": "Observed installed selection capture and small RGB8 asset/disk-History paths, not complete UI, large/RGB16, restart durability or model visual quality"
     },
-    "packaging": "pending final local main merge, full package gate and artifact hash verification; no push"
+    "packaging": "Per-delivery verification: run full package gate on clean local main and verify CCX/Portable/environment versions, runtime bytes, licenses and SHA256; artifact-level reports identify the accepted build. No push."
   }
 }
