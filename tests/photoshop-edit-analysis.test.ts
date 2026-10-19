@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {PhotoshopAdapter,type Snapshot} from '../src/infrastructure/photoshop/photoshop';
+import type {Bounds} from '../src/imaging/image';
 import {IMAGE_BUDGETS} from '../src/imaging/budget';
 
 function host(width=6000,height=4000,depth:8|16=8){
@@ -93,4 +94,66 @@ test('45M edit apply covers the native canvas in bounded strips with one effecti
   h.ps.imaging.putLayerMask=async(o:any)=>{assert.equal(o.replace,false);maskArea+=o.imageData.width*o.imageData.height;masks++;const v=await o.imageData.getData();assert.equal(v[0],128);};
   const id=await h.adapter.applyEditAnalysis(s,{width:1,height:1,rgba:new Uint8Array([80,120,160,255])},'45M',{preserveAlpha:false,onProgress:(done,total)=>{completed=done;assert.equal(total,346);}});
   assert.equal(pixelArea,45_000_000);assert.equal(maskArea,45_000_000);assert.equal(writes,173);assert.equal(masks,173);assert.equal(completed,346);assert.equal(h.doc.layers[0].id,id);assert.ok(h.doc.layers.includes(h.original));assert.deepEqual(h.calls.filter(c=>c[0]==='resume'),[['resume',true]]);assert.ok(h.resources.every(r=>r.disposed));
+});
+
+/** PS27 clips intersecting reads and rejects requests outside selection bounds. */
+function insetSelectionHost(){
+  const h=host(6000,4000,8),selection={left:900,top:500,right:5500,bottom:3600},requests:Bounds[]=[];
+  h.doc.selection.bounds=selection;
+  h.selected((x,y)=>x<selection.left||x>=selection.right||y<selection.top||y>=selection.bottom||y>=1800&&y<2000?0:x===selection.left||x===selection.right-1||y===selection.top||y===selection.bottom-1?64:x===selection.left+1?128:255);
+  const read=h.ps.imaging.getSelection;
+  h.ps.imaging.getSelection=async(o:any)=>{
+    const requested=o.sourceBounds;requests.push({...requested});
+    const actual={left:Math.max(requested.left,selection.left),top:Math.max(requested.top,selection.top),right:Math.min(requested.right,selection.right),bottom:Math.min(requested.bottom,selection.bottom)};
+    if(actual.right<=actual.left||actual.bottom<=actual.top)throw Error('Invalid Source Bounds');
+    return read({...o,sourceBounds:actual});
+  };
+  return {...h,selection,requests};
+}
+for(const mode of ['ordinary','background','blend','relight'] as const)test(`selection strips preserve ${mode} context, offset feathering, protection and empty bands without out-of-selection reads`,async()=>{
+  const h=insetSelectionHost(),s=h.selection,protection={documentId:7,sessionId:'s',width:6000,height:4000,bounds:{left:s.left,top:s.top,right:s.left+20,bottom:s.top+20},mask:new Uint8Array(400).fill(128)};
+  const options=mode==='background'?{context:'document' as const,selection:'subject-background' as const}:mode==='blend'?{context:'document' as const,selection:'edit' as const}:mode==='relight'?{purpose:'relight-analysis' as const}:{};
+  const c=await h.adapter.capture(.15,protection,7,8,{analysisResolution:32,...options}),b=c.snapshot.bounds,width=b.right-b.left;
+  const raw=c.subjectMask??c.selectionMask,at=(x:number,y:number)=>((y-b.top)*width+x-b.left);
+  assert.equal(c.snapshot.captureGeometry?.kind,mode==='relight'?'relight-analysis':'edit-analysis');
+  assert.deepEqual(b,mode==='ordinary'||mode==='relight'?{left:435,top:35,right:5965,bottom:4000}:{left:0,top:0,right:6000,bottom:4000});
+  assert.equal(raw.length,width*(b.bottom-b.top));assert.equal(raw[at(b.left,b.top)],0);assert.equal(raw[at(s.left,s.top+10)],64);assert.equal(raw[at(s.left+1,s.top+10)],128);assert.equal(raw[at(s.left+2,s.top+10)],255);
+  assert.equal(raw[at(s.left+100,1900)],0,'empty pixels inside the bounding box must remain valid');assert.equal(raw[at(s.left+100,b.bottom-1)],0,'trailing context strips must stay zero');
+  assert.deepEqual([c.snapshot.mask[at(s.left,s.top+10)],c.snapshot.mask[at(s.left+1,s.top+10)],c.snapshot.mask[at(s.left+2,s.top+10)]],mode==='background'?[95,63,0]:[32,64,127]);
+  assert.equal(c.snapshot.mask[at(b.left,b.top)],mode==='background'?255:0);assert.ok(h.requests.length>1);
+  assert.ok(h.requests.every(r=>r.left>=s.left&&r.top>=s.top&&r.right<=s.right&&r.bottom<=s.bottom&&r.left<r.right&&r.top<r.bottom),'only the frozen selection intersection may reach getSelection');
+  assert.ok(h.requests.some(r=>r.top>=1800&&r.bottom<=2000),'valid all-zero strips within the selection bbox are read');
+  assert.ok(h.resources.every(r=>r.disposed));
+});
+
+test('clipped cached selection strips map native16 feathering at the original document offset',async()=>{
+  const h=host(8,4,16);h.doc.selection.bounds={left:2,top:0,right:6,bottom:4};let disposed=false;
+  h.ps.imaging.getSelection=async(o:any)=>{
+    assert.deepEqual(o.sourceBounds,{left:2,top:0,right:6,bottom:4});
+    return {sourceBounds:{left:1,top:0,right:3,bottom:2},level:1,imageData:{width:2,height:2,components:1,componentSize:16,getData:async()=>new Uint16Array([64*257,128*257,64*257,128*257]),dispose(){disposed=true;}}};
+  };
+  const c=await h.adapter.capture(0,undefined,7,8,{purpose:'relight-analysis'});
+  assert.deepEqual([...c.snapshot.mask],[0,0,64,80,112,128,0,0,0,0,64,80,112,128,0,0,0,0,64,80,112,128,0,0,0,0,64,80,112,128,0,0]);assert.equal(disposed,true);
+});
+
+test('cached selection bounds that cover neighboring cells do not write outside the frozen intersection',async()=>{
+  const h=host(10,6,8),s={left:3,top:1,right:7,bottom:5};h.doc.selection.bounds=s;let disposed=false;
+  h.ps.imaging.getSelection=async(o:any)=>{assert.deepEqual(o.sourceBounds,s);return {sourceBounds:{left:1,top:0,right:4,bottom:3},level:1,imageData:{width:3,height:3,components:1,componentSize:8,getData:async()=>new Uint8Array(9).fill(128),dispose(){disposed=true;}}};};
+  const c=await h.adapter.capture(0,undefined,7,8,{purpose:'relight-analysis'});
+  for(let y=0;y<6;y++)for(let x=0;x<10;x++)assert.equal(c.snapshot.mask[y*10+x],x>=s.left&&x<s.right&&y>=s.top&&y<s.bottom?128:0,`native (${x},${y})`);
+  assert.equal(disposed,true);
+});
+
+test('selection-intersecting host errors still reject capture instead of becoming empty masks',async()=>{
+  const h=insetSelectionHost(),read=h.ps.imaging.getSelection;let calls=0;
+  h.ps.imaging.getSelection=async(o:any)=>{if(++calls===2)throw Error('Native selection read failed');return read(o);};
+  await assert.rejects(h.adapter.capture(.15,undefined,7,8,{analysisResolution:32}),/Native selection read failed/);
+  assert.equal(calls,2);assert.equal(h.calls.some(c=>c[0]==='pixels'),false);assert.ok(h.resources.every(r=>r.disposed));
+});
+
+test('source and cancellation guards survive skipped selection context strips and disposed reads',async()=>{
+  for(const reason of ['source','selection','cancel']){const h=insetSelectionHost(),read=h.ps.imaging.getSelection;
+    h.ps.imaging.getSelection=async(o:any)=>{const result=await read(o);if(reason==='source')h.doc.activeHistoryState.id++;if(reason==='selection')h.doc.selection.bounds={...h.selection,left:h.selection.left+1};if(reason==='cancel')h.context.isCancelled=true;return result;};
+    await assert.rejects(h.adapter.capture(.15,undefined,7,8,{analysisResolution:32}),reason==='cancel'?/取消/:/改变/);assert.equal(h.calls.some(c=>c[0]==='pixels'),false);assert.ok(h.resources.every(r=>r.disposed));
+  }
 });
