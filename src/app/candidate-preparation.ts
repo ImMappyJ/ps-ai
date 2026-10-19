@@ -103,18 +103,34 @@ function editAnalysisGeometry(record:JobRecord,retainedBytes:number,outputBytes:
   planEditApplyMemory(width,height,snapshot.nativeDepth!,sourceBytes*2+modelBytes*3+outputBytes,width*height*(assetContext||application&&background?3:1),retainedBytes);
   return {snapshot,geometry,params,width,height,background,assetContext};
 }
-/** Check the planned paid response before any upload or submission. */
-export function preflightEditAnalysisCandidate(record:JobRecord,retainedBytes=0):void {
+function estimatedCandidatePngBytes(record:JobRecord):number {
   const model=(record.params as any)?.modelSize;
-  if(!model||!Number.isSafeInteger(model.width)||!Number.isSafeInteger(model.height))throw editAnalysisHistoryError();
-  const bytes=model.width*model.height*(record.template==='qwen21-local-v3-rgba16'?8:4)+model.height+65_536;
-  try{editAnalysisGeometry(record,retainedBytes,bytes,false);}catch(error){
+  if(!model||!Number.isSafeInteger(model.width)||!Number.isSafeInteger(model.height)||model.width<1||model.height<1)throw editAnalysisHistoryError();
+  return model.width*model.height*(record.template==='qwen21-local-v3-rgba16'?8:4)+model.height+65_536;
+}
+function candidateCapturePreflight(check:()=>unknown):void {
+  try{check();}catch(error){
     if((error as any)?.code==='image-budget'){
       const estimate=/^原生回填预计需要 (\d+) MB，超过图像内存预算$/.exec(error instanceof Error?error.message:'');
       throw new DiagnosticError('image-budget','capture',estimate?t('当前分辨率的候选准备预计需要 {0} MB，超过图像内存预算；请降低分辨率后重新读取。',estimate[1]):t('当前分辨率的候选准备超出内存预算；请降低分辨率后重新读取。'));
     }
     throw error;
   }
+}
+/** Check the planned paid response before any upload or submission. */
+export function preflightEditAnalysisCandidate(record:JobRecord,retainedBytes=0):void {
+  candidateCapturePreflight(()=>editAnalysisGeometry(record,retainedBytes,estimatedCandidatePngBytes(record),false));
+}
+/** Every contextual asset, including a native small capture, must fit the later candidate peak. */
+export function preflightSelectionAssetCandidate(record:JobRecord,retainedBytes=0):void {
+  if(selectionAssetContext(record)!=='selection-v1')throw editAnalysisHistoryError();
+  assertTaskNames(record);
+  const geometry=(record.snapshot as Snapshot).captureGeometry;
+  if(geometry!==undefined&&geometry.kind!=='edit-analysis')throw editAnalysisHistoryError();
+  candidateCapturePreflight(()=>{
+    const bytes=estimatedCandidatePngBytes(record);
+    return geometry?editAnalysisGeometry(record,retainedBytes,bytes,false):smallAssetGeometry(record,bytes,retainedBytes);
+  });
 }
 
 async function editAnalysisInputs(record:JobRecord,bytes:Uint8Array,read:ReadBinary,retainedBytes:number,application:boolean){

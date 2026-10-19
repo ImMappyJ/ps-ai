@@ -4,6 +4,7 @@ import * as preparation from '../src/app/candidate-preparation';
 import {encodePng,decodePng,type Raster} from '../src/imaging/image';
 import type {JobRecord} from '../src/generation/jobs';
 import UPNG from 'upng-js';
+import {planNativeCaptureMemory} from '../src/imaging/budget';
 const {prepareCandidate}=preparation;
 
 const id='92000000-1111-4111-8111-111111111111';
@@ -122,4 +123,38 @@ test('matching small selection asset headers still require complete strict PNG v
   const f=fixture(),bytes=encodePng(f.output);bytes[bytes.length-1]^=1;
   await assert.rejects(prepareCandidate(f.record,bytes,f.read),/PNG|CRC/i);
   await assert.rejects(preparation.prepareSelectionAssetApplication(f.record,bytes,f.read),/PNG|CRC/i);
+});
+
+test('selection asset preflight blocks a captured native16 scope whose candidate peak cannot fit before submission',async(t)=>{
+  const f=fixture(),retained=90_000_000;
+  Object.assign(f.record.snapshot as any,{width:3000,height:3000,nativeDepth:16,depth:16,bounds:{left:0,top:0,right:3000,bottom:3000}});
+  (f.record.params as any).modelSize={width:1024,height:1024};
+  assert.equal(planNativeCaptureMemory(3000,3000,16,retained).estimatedPeakBytes,501_000_000,'the real capture plan can fit while the later candidate plan cannot');
+  const bytes=encodePng({width:1024,height:1024,rgba:new Uint8Array(1024*1024*4).fill(128)}),decode=t.mock.method(UPNG,'decode');
+  await assert.rejects(prepareCandidate(f.record,bytes,f.read,retained),(error:any)=>error.code==='image-budget');
+  assert.equal(decode.mock.callCount(),0);assert.deepEqual(f.reads,[]);
+  const preflight=(preparation as any).preflightSelectionAssetCandidate;assert.equal(typeof preflight,'function');
+  assert.throws(()=>preflight(f.record,retained),(error:any)=>error.code==='image-budget'&&error.stage==='capture'&&/分辨率|resolution/i.test(error.message));
+  const bounded=structuredClone(f.record);Object.assign(bounded.snapshot as any,{captureGeometry:{kind:'edit-analysis',width:64,height:64},requiresClipping:false});
+  assert.doesNotThrow(()=>preflight(bounded,retained),'bounded native16 source PNGs use their working grid instead of budgeting a full native RGBA source');
+  assert.equal(decode.mock.callCount(),0);assert.deepEqual(f.reads,[],'preflight has no decoding or persistence input');
+});
+
+test('selection asset preflight covers small and bounded native8/16 geometry without changing records',()=>{
+  const preflight=(preparation as any).preflightSelectionAssetCandidate;assert.equal(typeof preflight,'function');
+  for(const nativeDepth of [8,16])for(const bounded of [false,true]){
+    const f=fixture();Object.assign(f.record.snapshot as any,{nativeDepth,depth:nativeDepth,...(bounded?{captureGeometry:{kind:'edit-analysis',width:4,height:1},requiresClipping:false}:{})});
+    const saved=structuredClone(f.record);assert.doesNotThrow(()=>preflight(f.record));
+    assert.throws(()=>preflight(f.record,512_000_000),(error:any)=>error.code==='image-budget'&&error.stage==='capture');
+    assert.deepEqual(f.record,saved);assert.deepEqual(f.reads,[]);
+  }
+});
+
+test('selection asset preflight rejects missing markers and unsupported saved capture geometry',()=>{
+  const preflight=(preparation as any).preflightSelectionAssetCandidate;assert.equal(typeof preflight,'function');
+  for(const patch of [{assetContext:undefined},{assetContext:'selection-v2'},{outputKind:'edit'},{mode:'edit'}]){
+    const f=fixture();Object.assign(f.record.params as any,patch);assert.throws(()=>preflight(f.record));assert.deepEqual(f.reads,[]);
+  }
+  const relight=fixture();(relight.record.snapshot as any).captureGeometry={kind:'relight-analysis',width:4,height:1};
+  assert.throws(()=>preflight(relight.record));
 });
