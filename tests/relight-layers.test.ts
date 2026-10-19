@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {deriveRelightLayers,previewRelightLayers,renderRelightLayerStrip} from '../src/features/relight/relight-layers';
 import {createRelightScene,type RelightScene} from '../src/features/relight/relight-scene';
-import type {Raster} from '../src/imaging/image';
+import {resize,convertDepth,type Raster} from '../src/imaging/image';
 
 const W=128,H=96;
 function scene():RelightScene{return createRelightScene({documentId:7,layerIds:[1],sessionId:'s',historyId:3,sourceHash:'source',snapshotId:'snap',docWidth:W,docHeight:H,bounds:{left:0,top:0,right:W,bottom:H},profile:'sRGB IEC61966-2.1',documentMode:'rgb',documentDepth:8,maskRef:'mask'},'key');}
@@ -82,4 +82,79 @@ test('analysis work yields, honors cancellation and refuses non-sRGB numeric fie
   const source=image(()=>120),target=image(()=>140);let yields=0;const control=new AbortController();
   await assert.rejects(deriveRelightLayers(source,target,scene(),{signal:control.signal,yieldControl:async()=>{if(++yields===2)control.abort();}}),/取消|cancel/i);assert.ok(yields>=2);
   const s=scene();s.source.profile='Adobe RGB (1998)';await assert.rejects(deriveRelightLayers(source,target,s),/sRGB/);
+});
+
+test('native16 texture beside nearly white gradients has finite identity confidence despite filter roundoff',async()=>{
+  const source=image((x,y)=>x<33?(x+y)%2?65500:2000:65500+x%30,16),s=scene();s.source.documentDepth=16;
+  const fields=await deriveRelightLayers(source,source,s);assert.equal(fields.summary.structureConfidence,1);assert.equal(fields.channels.length,0);
+});
+
+test('negative variance roundoff cannot poison native16 shadow channels after confidence calculation',async()=>{
+  const source=image((x,y)=>x<33?(x+y)%2?65500:2000:65500+x%30,16),target={...source,rgba:Uint16Array.from(source.rgba,(v,i)=>i%4===3?v:Math.round(v*.9))},s=scene();s.source.documentDepth=16;s.shadow.strength=1;
+  const fields=await deriveRelightLayers(source,target,s);assert.ok(fields.channels.some(c=>c.kind==='shadow'));assert.ok(fields.channels.every(c=>c.amount.every(Number.isFinite)));
+});
+
+test('known smooth illumination on dark colored texture survives integer quantization without importing texture',async()=>{
+  const source=image((x,y)=>[8+(x*13+y*7)%80,15+(x*5+y*11)%100,20+(x*17+y*3)%150]);
+  const target=changed(source,(v,x,_y,c)=>v*(.82+.28*x/(W-1))*(c===0?1.06:c===2?.96:1)),fields=await deriveRelightLayers(source,target,scene());
+  assert.ok(fields.summary.structureConfidence>.9);assert.ok(fields.channels.length>0);
+  const preview=previewRelightLayers(source,fields);assert.ok(preview.rgba.some((v,i)=>i%4!==3&&v!==source.rgba[i]));
+});
+
+test('smooth lighting across black and clipped highlights does not create boundaries from a logarithm floor',async()=>{
+  const source=image((x,y)=>[(x*13+y*7)%256,(x*5+y*11)%256,(x*17+y*3)%256]),target=changed(source,(v,x,_y,c)=>v*(.82+.28*x/(W-1))*(c===0?1.06:c===2?.96:1));
+  const fields=await deriveRelightLayers(source,target,scene());assert.ok(fields.channels.length>0);assert.ok(fields.summary.structureConfidence>.9);
+});
+
+test('known model input resampling is neutral rather than an unsupported new boundary',async()=>{
+  const source=image((x,y)=>(x+y)%2?[35,120,220]:[210,65,12]),target=resize(source,120,90);
+  const fields=await deriveRelightLayers(source,target,scene());assert.equal(fields.summary.structureConfidence,1);assert.equal(fields.channels.length,0);
+});
+
+test('normal model-grid lighting retains usable fields after interpolation of quantized colored texture',async()=>{
+  const source=image((x,y)=>[(x*13+y*7)%256,(x*5+y*11)%256,(x*17+y*3)%256]),model=resize(source,120,90);
+  const target={...model,rgba:Uint8Array.from(model.rgba,(v,i)=>i%4===3?v:Math.round(Math.min(255,v*(.82+.28*(Math.floor(i/4)%120)/119)*(i%4===0?1.06:i%4===2?.96:1))))};
+  const s=scene();s.shadow.strength=1;const fields=await deriveRelightLayers(source,target,s);
+  assert.ok(fields.channels.some(c=>c.kind==='shadow'||c.kind==='light'));assert.ok(fields.channels.every(c=>c.amount.every(Number.isFinite)));
+});
+
+test('native16 source remains neutral through same-size and upsampled sRGB8 model inputs without losing native preview values',async()=>{
+  const source=image((x,y)=>[(x*1301+y*701)%65536,(x*509+y*1103)%65536,(x*1709+y*307)%65536],16),s=scene();s.source.documentDepth=16;
+  for(const [width,height] of [[W,H],[256,192]]){
+    const fields=await deriveRelightLayers(source,convertDepth(resize(source,width,height),8),s);
+    assert.equal(fields.summary.structureConfidence,1);assert.equal(fields.channels.length,0);assert.deepEqual(previewRelightLayers(source,fields),source);
+  }
+});
+
+test('a genuine frame-spanning colored shadow creates independent shadow and color fields',async()=>{
+  const source=image(()=>180),target=changed(source,(v,x,_y,c)=>x<W/2?v*(c===0?.65:c===1?.8:.9):v),s=scene();s.shadow.strength=1;
+  const fields=await deriveRelightLayers(source,target,s);assert.ok(fields.channels.some(c=>c.kind==='shadow'));assert.ok(fields.channels.some(c=>c.kind==='color-atmosphere'));
+  assert.ok(previewRelightLayers(source,fields).rgba[(48*W+20)*4]<source.rgba[(48*W+20)*4]);
+});
+
+test('resampling uncertainty cannot hide newly drawn black or isoluminant colored text',async()=>{
+  const source=image(()=>180),model=resize(source,120,90);
+  for(const colored of [false,true]){
+    const target={...model,rgba:Uint8Array.from(model.rgba,(v,i)=>{
+      if(i%4===3)return v;const x=Math.floor(i/4)%120,y=Math.floor(Math.floor(i/4)/120),letter=y>=20&&y<=70&&(x>=35&&x<=42||x>=75&&x<=82)||x>=35&&x<=82&&y>=42&&y<=49;
+      return letter?(colored?i%4===1?251:0:0):v;
+    })};
+    await assert.rejects(deriveRelightLayers(source,target,scene()),/结构|文字|纹理/);
+  }
+});
+
+test('structure changes confined to context or protection cannot reject or bleed into the editable field',async()=>{
+  const source=image(()=>180),target=changed(source,(v,x,y)=>x>80&&x<112&&y>20&&y<70?40:v),mask=new Uint8Array(W*H);
+  for(let y=0;y<H;y++)mask.fill(255,y*W,y*W+48);
+  const fields=await deriveRelightLayers(source,target,scene(),{editMask:mask});assert.equal(fields.summary.structureConfidence,1);assert.equal(fields.channels.length,0);
+  const inside=changed(source,(v,x,y)=>x>15&&x<35&&y>20&&y<70?40:v);
+  await assert.rejects(deriveRelightLayers(source,inside,scene(),{editMask:mask}),/结构|文字|纹理/);
+});
+
+test('global disagreement and unsupported local boundaries report distinct finite redacted extraction reasons',async()=>{
+  const source=image((x,y)=>((Math.floor(x/3)+Math.floor(y/3))%2)?210:45),shifted=image((x,y)=>((Math.floor((x+3)/3)+Math.floor(y/3))%2)?210:45);
+  const error=(reason:string)=>(value:any)=>value?.code==='relight-extraction'&&value?.stage==='lighting-extraction'&&value?.reason===reason&&Object.values(value.metrics).every(v=>typeof v==='number'&&Number.isFinite(v));
+  await assert.rejects(deriveRelightLayers(source,shifted,scene()),error('structure-mismatch'));
+  const flat=image(()=>180),letter=changed(flat,(v,x,y)=>y>=20&&y<=75&&(x>=40&&x<=47||x>=80&&x<=87)||x>=40&&x<=87&&y>=44&&y<=51?40:v);
+  await assert.rejects(deriveRelightLayers(flat,letter,scene()),error('unsupported-boundary'));
 });
