@@ -3,6 +3,11 @@ import type {Language} from '../infrastructure/config/profile';
 // Chinese source messages are stable keys. Model prompts and saved parameter values
 // are deliberately independent of the display language.
 export const english:Record<string,string>={
+  '检查来源':'Check source',
+  '来源检查通过；请再次明确应用候选。':'Source check passed. Choose Apply explicitly to write the candidate.',
+  '查看提取失败原因':'View extraction failure',
+  '返回创建检查来源':'Return to Create to check source',
+  '请在 Photoshop 选择正确的来源文档和编辑模式，再预览当前选区；旧候选不会重新绑定。':'Select the correct source document and edit mode in Photoshop, then preview the current selection. The old candidate will not be rebound.',
   '提取失败；AI 参考图仅供检查和导出，不能作为光影层应用':'Extraction failed. This AI reference is for inspection and export and cannot be applied as lighting layers.',
   '光影合成预览':'Lighting composite preview',
   'AI 参考图（提取失败，仅供检查）':'AI reference (extraction failed, inspection only)',

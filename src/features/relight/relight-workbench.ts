@@ -12,10 +12,11 @@ export interface RelightWorkbenchHost {
   uuid():string;save(scene:RelightScene):Promise<void>;loadDraft():Promise<RelightScene|undefined>;
   prepare(frozen:FrozenRelightSubmission):Promise<void>;
   generate(frozen:FrozenRelightSubmission,onJob:(id:string)=>void):Promise<void>;
-  cancel():Promise<void>;reread(options?:{explicit?:boolean;excludeResults?:boolean}):Promise<void>;rebindCurrent?(options?:{excludeResults?:boolean}):Promise<void>;appliedResults?(rebind?:boolean):boolean;apply(jobId:string):Promise<void>;export(jobId:string):Promise<void>;
+  cancel():Promise<void>;reread(options?:{explicit?:boolean;excludeResults?:boolean}):Promise<void>;rebindCurrent?(options?:{excludeResults?:boolean}):Promise<void>;appliedResults?(rebind?:boolean):boolean;apply(jobId:string):Promise<void>;inspectResult?(jobId:string):Promise<void>;export(jobId:string):Promise<void>;
   results():RelightResult[];diagnostics(jobId:string):Promise<string>;
   busy?():boolean;pendingTasks?():number;openPendingTasks?():Promise<void>;reportError?(error:Error):void;
   sourceState?():'current'|'changed'|'closed'|'rebind-required'|'applied-results';observeSource?(invalidate:()=>void):()=>void;
+  resultSourceState?(jobId:string):'current'|'changed';
 }
 type Tab='original'|'illustration'|'result';
 type Drag={kind:'light'|'target'|'pan';id?:string;startX:number;startY:number;panX:number;panY:number;pointerId?:number;node?:any};
@@ -218,7 +219,7 @@ export class RelightWorkbench {
     }));
     this.click('generate',()=>this.generate());
     this.click('cancel',async()=>{if(this.request)this.request.cancelled=true;await this.host.cancel();this.message(t('已请求取消或停止后续候选；平台当前任务可能继续并计费，结果保留在历史中'));this.refresh();});
-    this.click('apply',()=>{this.assertHostIdle();const r=this.result();if(!r)throw new Error(t('请先选择实际 AI 结果'));if(r.sourceSnapshotId!==undefined&&r.sourceSnapshotId!==this.session.editor.snapshot().source.snapshotId)throw new Error(t('此结果属于旧来源快照，仅可查看或导出；请对当前来源重新生成'));const kind=relightOutputKind(r);if(kind==='lighting-layers'&&r.lightingState!=='composite')throw r.lightingFailure??new DiagnosticError('relight-extraction','lighting-extraction',t('本地光影提取未完成；原始 AI 参考图已保留，请检查参考图和来源的作用范围。'));this.closeForNative(async()=>{await this.host.apply(r.jobId);this.message(t(kind==='lighting-layers'?'光影层已应用；原图细节保留在来源图层，可编辑并一次撤销':'完整结果已应用；可编辑蒙版并一次撤销'));});});
+    this.click('apply',()=>{if(this.pending||this.nativeBusy)return;this.assertHostIdle();const r=this.result();if(!r)throw new Error(t('请先选择实际 AI 结果'));const kind=relightOutputKind(r),inspect=this.el('apply').getAttribute('data-result-action')==='inspect';this.closeForNative(async()=>{if(inspect){if(!this.host.inspectResult)throw r.lightingFailure??new DiagnosticError('source-changed','apply',t('此结果属于旧来源快照，仅可查看或导出；请对当前来源重新生成'));await this.host.inspectResult(r.jobId);this.message(t('来源检查通过；请再次明确应用候选。'));return;}await this.host.apply(r.jobId);this.message(t(kind==='lighting-layers'?'光影层已应用；原图细节保留在来源图层，可编辑并一次撤销':'完整结果已应用；可编辑蒙版并一次撤销'));});});
     this.click('export',async()=>{const r=this.result();if(!r)throw new Error(t('请先选择实际 AI 结果'));await this.host.export(r.jobId);});
     this.click('compensation',async()=>{const r=this.result();if(!r)throw new Error(t('请先选择实际 AI 结果'));this.el('compensation-info').textContent=await this.host.diagnostics(r.jobId);});
     this.listen(this.el('acknowledge'),'change',()=>{this.acknowledged=!!this.el('acknowledge').checked;});
@@ -355,11 +356,13 @@ export class RelightWorkbench {
     const sharedBusy=!!this.host.busy?.();
     const pendingTasks=this.host.pendingTasks?.()??0;this.el('pending-tasks').style.display=pendingTasks?'block':'none';this.el('pending-tasks').disabled=this.pending||this.nativeBusy||sharedBusy;this.el('pending-tasks').textContent=t('处理未确认任务（{0}）；保留布光并返回历史',pendingTasks);
     this.el('generate').disabled=this.pending||this.nativeBusy||this.sourceInvalid||this.scopePending||this.outputPending||sharedBusy;this.el('cancel').disabled=!this.pending;
-    const result=this.result();this.el('apply').disabled=this.pending||this.nativeBusy||this.sourceInvalid||sharedBusy||!result||relightOutputKind(result)==='lighting-layers'&&result.lightingState!=='composite'||!!result.warning||result.sourceSnapshotId!==undefined&&result.sourceSnapshotId!==scene.source.snapshotId;this.el('export').disabled=!result;this.el('compensation').disabled=!result;this.el('reread').disabled=this.pending||this.nativeBusy||sharedBusy;
+    const result=this.result(),referenceOnly=!!result&&relightOutputKind(result)==='lighting-layers'&&result.lightingState!=='composite',checkSource=!!result&&(result.sourceSnapshotId!==undefined&&result.sourceSnapshotId!==scene.source.snapshotId||(this.host.resultSourceState?.(result.jobId)??(this.sourceInvalid?'changed':'current'))!=='current');
+    this.el('apply').disabled=this.pending||this.nativeBusy||sharedBusy||!result||!!result.warning&&!referenceOnly;this.el('export').disabled=!result;this.el('compensation').disabled=!result;this.el('reread').disabled=this.pending||this.nativeBusy||sharedBusy;
     this.el('tab-result').textContent=t(result?resultLabel(result):'AI 结果');
     const recover=this.el('exclude-results');recover.style.display=this.host.appliedResults?.(this.recoveryRebind)?'block':'none';recover.disabled=this.pending||this.nativeBusy||sharedBusy;recover.textContent=t(this.recoveryRebind?'排除当前文档的已应用结果并绑定':'排除已应用结果并重新读取');this.el('recovery-info').style.display=recover.style.display;
     if(this.el('rebind-current')){this.el('rebind-current').style.display=this.host.rebindCurrent?'block':'none';this.el('rebind-current').disabled=this.pending||this.nativeBusy||sharedBusy;}
-    this.el('apply').textContent=t(result&&relightOutputKind(result)==='lighting-layers'?'应用光影层组':'应用整图结果');
+    this.el('apply').textContent=t(referenceOnly?'查看提取失败原因':checkSource?'检查来源':result&&relightOutputKind(result)==='lighting-layers'?'应用光影层组':'应用整图结果');
+    this.el('apply').setAttribute('data-result-action',referenceOnly||checkSource?'inspect':'apply');
     this.el('output').value=this.session.outputKind;
     if(this.el('output-info'))this.el('output-info').textContent=t(this.session.outputKind==='lighting-layers'?'光影层使用 AI 低分辨率参考估算照明影响；人脸、文字和材质仍需检查。':'整图重绘由 AI 生成完整编辑图，可能改变原图细节。');
     this.el('stale').textContent=result&&(result.fingerprint!==this.session.fingerprint||relightOutputKind(result)!==this.session.outputKind)?t('布光已修改，当前结果尚未更新；应用仍使用该结果提交时的配置'):'';

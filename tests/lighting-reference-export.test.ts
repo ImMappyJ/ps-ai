@@ -44,7 +44,7 @@ test('ordinary and legacy full-image candidates hide the AI-reference-only expor
 
 test('rejected lighting references remain explicitly exportable without claiming a usable local reconstruction',async()=>{
  const f=fixture(),raw=taggedRaw(encodePng({width:2,height:2,rgba:new Uint8Array(16)}),'rejected'),h=await panelHarness({settings:defaultSettings(),history:[f.record],files:{...f.files,[`${A}-output.png`]:raw}});try{
-  await h.wait();h.selectHistory(A);h.click('load-history');await h.wait();assert.equal(h.el('apply').disabled,true);assert.equal(h.el('export-ai-reference').disabled,false);assert.match(h.el('ai-reference-export-info').textContent,/未形成可用光影重组/);h.click('export-ai-reference');await h.wait();assert.deepEqual(h.files['ps-ai-11111111-ai-reference.png'],raw);assert.equal(h.posts.length,0);assert.equal(h.gatewayPosts.length,0);
+  await h.wait();h.selectHistory(A);h.click('load-history');await h.wait();assert.equal(h.el('apply').disabled,false);assert.match(h.el('apply').textContent,/查看.*原因/);h.click('apply');await h.wait();assert.equal(JSON.parse(h.el('diagnostic-details').value).taskId,A);assert.equal(h.appliedLayers.length,0);assert.equal(h.el('export-ai-reference').disabled,false);assert.match(h.el('ai-reference-export-info').textContent,/未形成可用光影重组/);h.click('export-ai-reference');await h.wait();assert.deepEqual(h.files['ps-ai-11111111-ai-reference.png'],raw);assert.equal(h.posts.length,0);assert.equal(h.gatewayPosts.length,0);
   assert.match(h.el('candidate-caption').textContent,/AI 参考图.*提取失败/);
   assert.doesNotMatch(h.el('candidate-target').textContent,/应用到绑定文档/);
  }finally{await h.close();}
@@ -59,13 +59,13 @@ test('lighting generation, original-ID recovery and historical loading preserve 
   const job=h.records()[0],raw=(h.files[`${job.id}-output.png`] as Uint8Array).slice();
   assert.equal(h.posts.length,1);assert.equal(job.state,'output-error');assert.equal((job.relight as any).outputKind,'lighting-layers');
   const checkDiagnostic=()=>{const d=JSON.parse(h.el('diagnostic-details').value);assert.equal(d.taskId,job.id);assert.equal(d.code,'relight-extraction');assert.equal(d.stage,'lighting-extraction');assert.equal(d.reason,'structure-mismatch');assert.ok(Number.isFinite(d.metrics.structureConfidence));assert.doesNotMatch(d.action,/PNG|ICC|sRGB/);};
-  checkDiagnostic();assert.match(h.el('relight-result-list').textContent,/AI 参考图.*提取失败/);assert.equal(h.el('relight-apply').disabled,true);assert.equal(h.el('relight-export').disabled,false);
-  h.el('relight-output').value='full-result';h.change('relight-output');assert.equal(h.el('relight-apply').disabled,true);assert.match(h.el('relight-result-list').textContent,/AI 参考图.*提取失败/);
+  checkDiagnostic();assert.match(h.el('relight-result-list').textContent,/AI 参考图.*提取失败/);assert.equal(h.el('relight-apply').disabled,false);assert.match(h.el('relight-apply').textContent,/查看.*原因/);assert.equal(h.el('relight-export').disabled,false);
+  h.el('relight-output').value='full-result';h.change('relight-output');assert.equal(h.el('relight-apply').disabled,false);assert.match(h.el('relight-apply').textContent,/查看.*原因/);h.click('relight-apply');await pause();checkDiagnostic();assert.equal(h.appliedLayers.length,0);assert.match(h.el('relight-result-list').textContent,/AI 参考图.*提取失败/);
   h.click('relight-close');await pause();h.click('nav-history');h.selectHistory(job.id);h.click('recover');await h.wait();checkDiagnostic();
   assert.equal(h.posts.length,1,'recovering the original UUID never submits generation');assert.deepEqual(h.files[`${job.id}-output.png`],raw);
   assert.ok(h.requests.some(r=>r.url.endsWith(`/history/${job.id}`)));
   h.selectHistory(job.id);await new Promise(r=>setTimeout(r,60));assert.match(h.el('history-preview-status').textContent,/AI 参考图.*提取失败/);
-  h.click('load-history');await h.wait();checkDiagnostic();assert.equal(h.el('view-results').style.display,'block');assert.equal(h.el('diagnostic-box').style.display,'block');assert.match(h.el('candidate-caption').textContent,/AI 参考图.*提取失败/);assert.equal(h.el('apply').disabled,true);
+  h.click('load-history');await h.wait();checkDiagnostic();assert.equal(h.el('view-results').style.display,'block');assert.equal(h.el('diagnostic-box').style.display,'block');assert.match(h.el('candidate-caption').textContent,/AI 参考图.*提取失败/);assert.equal(h.el('apply').disabled,false);assert.match(h.el('apply').textContent,/查看.*原因/);h.click('apply');await h.wait();checkDiagnostic();assert.equal(h.appliedLayers.length,0);
   h.click('export-ai-reference');await h.wait();assert.deepEqual(h.files[`ps-ai-${job.id.slice(0,8)}-ai-reference.png`],raw);assert.equal(h.posts.length,1);assert.equal(h.appliedLayers.length,0);
   const trace=JSON.parse(String(h.files['runtime-trace.json']));assert.ok(trace.events.some((event:any)=>event.taskId===job.id&&event.stage==='relight.extraction.failed.structure-mismatch'));
  }finally{await h.close();}
