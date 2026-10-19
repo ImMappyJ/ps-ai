@@ -1,6 +1,29 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {ComfyClient,uuid} from '../src/infrastructure/backends/client';
 import {diagnostic,DiagnosticError} from '../src/diagnostics/diagnostics';import {setLanguage} from '../src/localization/i18n';
+import {RelightExtractionError} from '../src/features/relight/relight-layers';
+
+test('typed lighting extraction reports its local stage and precise reason in both languages without PNG guidance',()=>{
+  for(const language of ['zh-CN','en-US'] as const)for(const reason of ['structure-mismatch','unsupported-boundary'] as const){
+    setLanguage(language);
+    try{
+      const error=new RelightExtractionError(reason,{structureConfidence:.3,rejectedFraction:.7,boundaryPixels:21});
+      error.message='private source filename portrait.png; private image description';
+      (error as any).cause=new Error('private nested image description');
+      (error.metrics as any).privatePrompt='private prompt';
+      (error.metrics as any).invalid=Infinity;
+      const d=diagnostic(error,'output',true);
+      assert.equal(d.code,'relight-extraction');assert.equal(d.stage,'lighting-extraction');assert.equal(d.reason,reason);
+      assert.deepEqual(d.metrics,{structureConfidence:.3,rejectedFraction:.7,boundaryPixels:21});
+      assert.match(d.stageLabel,language==='en-US'?/Local lighting extraction/:/本地光影提取/);
+      assert.match(d.summary,reason==='structure-mismatch'?(language==='en-US'?/structure or texture/:/整体结构或纹理/):(language==='en-US'?/local.*boundar/:/局部.*边界/));
+      assert.match(d.action,language==='en-US'?/original AI reference/:/原始 AI 参考图/);
+      assert.match(d.retry,language==='en-US'?/original task ID/:/原 ID/);
+      assert.doesNotMatch(JSON.stringify(d),/PNG|ICC|sRGB|portrait\.png|private|Infinity/);
+      if(language==='en-US')assert.doesNotMatch(d.title+d.action+d.summary+d.stageLabel+d.effect+d.retry,/[一-龥]/);
+    }finally{setLanguage('zh-CN');}
+  }
+});
 
 test('only exact local selection errors at capture are normalized after an ordinary Error boundary',()=>{
   for(const message of ['请先建立编辑选区','选区为空','Make an edit selection first','The selection is empty']){

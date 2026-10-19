@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {prepareCandidate} from '../src/app/candidate-preparation';
+import {prepareCandidate,prepareLightingLayerApplication} from '../src/app/candidate-preparation';
 import {createRelightScene} from '../src/features/relight/relight-scene';
 import {encodePng,type Raster} from '../src/imaging/image';
 import type {JobRecord} from '../src/generation/jobs';
@@ -24,10 +24,39 @@ test('lighting history keeps native mask geometry separate from analysis preview
   const f=fixture('lighting-layers');
   const result=await prepareCandidate(f.record,encodePng(f.image),f.read);
   assert.equal((result as any).outputKind,'lighting-layers');
+  assert.equal(result.lightingState,'composite');
   assert.equal(result.warning,undefined);
   assert.equal(result.image.width,64);
   assert.deepEqual(result.image.rgba,f.image.rgba,'neutral lighting must retain actual source values');
   assert.equal(result.snapshot?.mask.length,128*128,'native effective mask must survive history restoration');
+});
+
+test('a failed lighting extraction is an inspection reference with the same typed failure on apply',async()=>{
+  const f=fixture('lighting-layers'),target={...f.image,rgba:f.image.rgba.slice()};
+  for(let p=0;p<target.width*target.height;p++){const v=p%2?220:20;target.rgba.set([v,v,v,255],p*4);}
+  const bytes=encodePng(target),saved=JSON.stringify(f.record),result=await prepareCandidate(f.record,bytes,f.read);
+  assert.equal(result.outputKind,'lighting-layers');
+  assert.equal(result.lightingState,'reference-only');
+  assert.equal((result.lightingFailure as any)?.code,'relight-extraction');
+  assert.equal((result.lightingFailure as any)?.reason,'structure-mismatch');
+  assert.deepEqual(result.image.rgba,target.rgba,'failed extraction keeps the original reference inspectable');
+  assert.equal(result.lightingSummary,undefined);
+  assert.match(result.warning!,/参考图.*不能回填/);
+  assert.equal(JSON.stringify(f.record),saved,'local extraction does not change task identity or saved mode');
+  await assert.rejects(prepareLightingLayerApplication(f.record,bytes,f.read),(error:any)=>error.code==='relight-extraction'&&error.reason==='structure-mismatch');
+});
+
+test('successful lighting preview is a source composite rather than the original AI reference',async()=>{
+  const f=fixture('lighting-layers'),target={...f.image,rgba:f.image.rgba.slice()};
+  for(let p=0;p<target.width*target.height;p++){target.rgba[p*4]+=30;target.rgba[p*4+1]+=10;target.rgba[p*4+2]+=10;}
+  const result=await prepareCandidate(f.record,encodePng(target),f.read);
+  assert.equal(result.lightingState,'composite');
+  assert.equal(result.lightingFailure,undefined);
+  assert.equal(result.warning,undefined);
+  assert.ok(result.lightingSummary);
+  assert.notDeepEqual(result.image.rgba,target.rgba,'an AI reference is never used as the successful lighting preview');
+  assert.notDeepEqual(result.image.rgba,f.image.rgba,'the derived preview has an observable lighting effect');
+  for(let p=0;p<target.width*target.height;p++)assert.equal(result.image.rgba[p*4+3],255);
 });
 
 test('legacy relight record never becomes lighting layers by default',async()=>{

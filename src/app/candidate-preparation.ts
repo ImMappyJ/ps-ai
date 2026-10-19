@@ -4,8 +4,8 @@ import {prepareEditCandidate,prepareEditModel,prepareBackgroundCandidate,backgro
 import {editBehavior,backgroundCoverage} from '../features/editing/edit-behavior';
 import {isBackgroundMode} from '../generation/intent';
 import type {Snapshot} from '../infrastructure/photoshop/photoshop';
-import {DiagnosticError} from '../diagnostics/diagnostics';
-import {t,errorText} from '../localization/i18n';
+import {diagnostic,DiagnosticError} from '../diagnostics/diagnostics';
+import {t} from '../localization/i18n';
 import {checkDocumentSize,downsampleSnapshotMask,resampleGray,IMAGE_BUDGETS,planEditApplyMemory} from '../imaging/budget';
 import {validateRelightScene} from '../features/relight/relight-scene';
 import type {RelightOutputKind} from '../features/relight/relight-session';
@@ -13,7 +13,7 @@ import type {RelightLayerFields} from '../features/relight/relight-layers';
 import {sha256} from '@noble/hashes/sha2.js';
 
 type ReadBinary=(name:string)=>Promise<Uint8Array>;
-export interface PreparedCandidate {image:Raster;snapshot?:Snapshot;warning?:string;outputKind?:RelightOutputKind;lightingSummary?:RelightLayerFields['summary']}
+export interface PreparedCandidate {image:Raster;snapshot?:Snapshot;warning?:string;outputKind?:RelightOutputKind;lightingState?:'composite'|'reference-only';lightingFailure?:Error;lightingSummary?:RelightLayerFields['summary']}
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function assertTaskNames(record:JobRecord):void {
   if(record.snapshot&&!UUID.test(record.id))throw new Error(t('历史本地文件名不安全，无法读取候选'));
@@ -189,11 +189,13 @@ export async function prepareCandidate(record:JobRecord,bytes:Uint8Array,read:Re
       const fields=await deriveRelightLayers(inputs.source,image,inputs.scene,{editMask:inputs.mask}),composite=previewRelightLayers(inputs.source,fields);
       // The native group uses this effective mask once. Match that in the bounded preview.
       for(let p=0;p<inputs.mask.length;p++){const amount=inputs.mask[p]/255;for(let c=0;c<3;c++){const i=p*4+c;composite.rgba[i]=Math.round(inputs.source.rgba[i]+(composite.rgba[i]-inputs.source.rgba[i])*amount);}composite.rgba[p*4+3]=inputs.source.rgba[p*4+3];}
-      return {image:composite,snapshot,outputKind,lightingSummary:fields.summary};
+      return {image:composite,snapshot,outputKind,lightingState:'composite',lightingSummary:fields.summary};
     }catch(error){
       // A rejected reference stays inspectable/exportable, never an applyable redraw fallback.
-      warning=t('无法提取可靠的光影层，当前显示 AI 参考图；可另存检查，不能回填：{0}',errorText(error instanceof Error?error.message:String(error)));
-      return {image,snapshot,outputKind,warning};
+      const {RelightExtractionError}=await import('../features/relight/relight-layers');
+      const lightingFailure=error instanceof RelightExtractionError?error:new DiagnosticError('relight-extraction','lighting-extraction',t('本地光影提取未完成；原始 AI 参考图已保留，请检查参考图和来源的作用范围。'));
+      warning=t('无法提取可靠的光影层，当前显示 AI 参考图；可另存检查，不能回填：{0}',diagnostic(lightingFailure,'lighting-extraction').summary);
+      return {image,snapshot,outputKind,lightingState:'reference-only',lightingFailure,warning};
     }
   }
   if(params?.outputKind==='edit'&&snapshot){

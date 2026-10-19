@@ -3,6 +3,14 @@ import type {Language} from '../infrastructure/config/profile';
 // Chinese source messages are stable keys. Model prompts and saved parameter values
 // are deliberately independent of the display language.
 export const english:Record<string,string>={
+  '本地光影提取已停止':'Local lighting extraction stopped',
+  '本地光影提取':'Local lighting extraction',
+  '检查原始 AI 参考图与来源在作用范围内的结构、文字和纹理；参考图仅供检查与导出，不能作为光影层回填。':'Inspect the original AI reference against the source structure, text and texture inside the edit range. The reference is for inspection and export; it cannot be applied as lighting layers.',
+  '本地光影提取未完成；原始 AI 参考图保留，仅供检查和导出，不能作为光影层应用。':'Local lighting extraction did not complete. The original AI reference is retained for inspection and export and cannot be applied as lighting layers.',
+  '无需重新生成；可检查或导出已保存参考图，恢复只查询原 ID，不会自动重新提交。':'Inspect or export the saved reference. Recovery only queries the original task ID and never automatically resubmits generation.',
+  'AI 参考的整体结构或纹理与原图不一致，保细节照明提取已停止；原始参考图已保留':'The AI reference structure or texture differs from the source. Detail-preserving lighting extraction stopped; the original reference is retained.',
+  'AI 参考含无法确认的局部结构、文字或光照边界，保细节照明提取已停止；原始参考图已保留':'The AI reference has unverified local structure, text or lighting boundaries. Detail-preserving lighting extraction stopped; the original reference is retained.',
+  '本地光影提取未完成；原始 AI 参考图已保留，请检查参考图和来源的作用范围。':'Local lighting extraction did not complete. The original AI reference is retained; inspect it against the source edit range.',
   '隐藏 PS-AI 结果并重新读取':'Hide PS-AI results and reread',
   '隐藏当前文档的 PS-AI 结果并绑定':'Hide current document PS-AI results and bind',
   '恢复只隐藏本次插件会话可靠记录的结果图层／组，保留其他编辑；成功后保持隐藏并产生一次 Photoshop 撤销，失败恢复可见性。合并或无法识别的结果请手动处理。':'Recovery hides only result layers/groups recorded by this plugin session and keeps other edits. Success leaves them hidden as one Photoshop undo step; failure restores visibility. Handle merged or unrecognized results manually.',

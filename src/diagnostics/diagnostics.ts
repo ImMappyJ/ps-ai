@@ -1,8 +1,9 @@
 import {ColorContractError} from '../imaging/color';
 import {t,english,errorText} from '../localization/i18n';
 import {BUILD_ID} from './build';
-export type DiagnosticCode='unreachable'|'missing-node'|'missing-model'|'incompatible-api'|'resource-exhausted'|'timeout'|'invalid-output'|'apply-failed'|'source-profile'|'selection-required'|'pending-task'|'pending-backend'|'no-document'|'empty-range'|'source-unavailable'|'source-changed'|'unauthorized'|'rate-limited'|'quota-exceeded'|'cancelled'|'unsupported'|'image-budget'|'decode-failed'|'host-busy'|'clipboard-failed'|'unknown';
-export type Stage='connection'|'environment'|'capture'|'inference'|'output'|'apply';
+import {RelightExtractionError} from '../features/relight/relight-layers';
+export type DiagnosticCode='unreachable'|'missing-node'|'missing-model'|'incompatible-api'|'resource-exhausted'|'timeout'|'invalid-output'|'relight-extraction'|'apply-failed'|'source-profile'|'selection-required'|'pending-task'|'pending-backend'|'no-document'|'empty-range'|'source-unavailable'|'source-changed'|'unauthorized'|'rate-limited'|'quota-exceeded'|'cancelled'|'unsupported'|'image-budget'|'decode-failed'|'host-busy'|'clipboard-failed'|'unknown';
+export type Stage='connection'|'environment'|'capture'|'inference'|'output'|'lighting-extraction'|'apply';
 export class DiagnosticError extends Error {
   constructor(public code:DiagnosticCode,public stage:Stage,message:string){super(message);this.name='DiagnosticError';}
 }
@@ -21,6 +22,7 @@ const guidance:Record<DiagnosticCode,[string,string]>={
   'resource-exhausted':['后端报告内存不足','先在 ComfyUI 确认本任务已结束，再降低分辨率或减少并发。'],
   'timeout':['请求超时','确认后端状态；已提交任务请按原 ID 恢复，避免重复生成。'],
   'invalid-output':['候选输出不符合约定','检查尺寸、PNG 位深与 sRGB 配置。已下载文件保留；未下载的候选可按原任务 ID 恢复。'],
+  'relight-extraction':['本地光影提取已停止','检查原始 AI 参考图与来源在作用范围内的结构、文字和纹理；参考图仅供检查与导出，不能作为光影层回填。'],
   'apply-failed':['Photoshop 应用失败','候选仍可另存或新建文档；确认来源文档状态，必要时重新捕获。'],
   'source-profile':['无法确定来源色彩空间','确认选择了当前文档的原文件；无法识别颜色声明时，请在副本中指定正确配置文件，再重新捕获。'],
   'selection-required':['需要编辑选区','撤销可能移除了选区。请在 Photoshop 重新圈选，或在原模式点击“恢复上次选区并重新读取”后检查预览。背景与场景模式请选择要保留的主体；光影重塑也可明确选择“整张图像”后重新读取原图。'],
@@ -64,8 +66,11 @@ const legacy:Partial<Record<DiagnosticCode,string[]>>={
   'decode-failed':['需要有效 PNG 图片','RGBA 缓冲区尺寸错误']
 };
 export function diagnostic(error:unknown,stage:Stage,hasPending=false,context:{mode?:string;selectionScope?:string}={}){
+  // Reconstruct only known enums and bounded aggregates. Error messages/causes
+  // may contain host or provider content and are unnecessary for this failure.
+  const extraction=error instanceof RelightExtractionError&&(error.reason==='structure-mismatch'||error.reason==='unsupported-boundary')?new RelightExtractionError(error.reason,error.metrics):undefined;
   const ordinaryError=error instanceof Error||Object.prototype.toString.call(error)==='[object Error]';
-  const message=ordinaryError&&typeof (error as Error).message==='string'?(error as Error).message:undefined;
+  const message=extraction?.message??(ordinaryError&&typeof (error as Error).message==='string'?(error as Error).message:undefined);
   const selectionMissing=stage==='capture'&&['请先建立编辑选区','选区为空'].some(key=>message===key||message===english[key]);
   const suppliedCode=ordinaryError?(error as Error&{code?:DiagnosticCode}).code:undefined;
   const explicit=error instanceof DiagnosticError||error instanceof ColorContractError?error.code:suppliedCode&&guidance[suppliedCode]?suppliedCode:undefined;
@@ -73,16 +78,16 @@ export function diagnostic(error:unknown,stage:Stage,hasPending=false,context:{m
   const httpStatus=ordinaryError?(error as Error&{status?:number}).status:undefined;
   const httpCode=httpStatus===401||httpStatus===403?'unauthorized':httpStatus===429?'rate-limited':httpStatus===413?'image-budget':undefined;
   const code:DiagnosticCode=explicit&&guidance[explicit]?explicit:normalized??httpCode??(selectionMissing?'selection-required':stage==='apply'?'apply-failed':'unknown');
-  const actualStage=error instanceof DiagnosticError?error.stage:stage;
+  const actualStage=extraction?.stage??(error instanceof DiagnosticError?error.stage:stage);
   let [title,action]=guidance[code];
   if(code==='selection-required')action=context.mode==='relight'?'请在 Photoshop 重新圈选布光范围，或明确选择“整张图像”后重新读取原图。':context.mode==='background'||context.mode==='scene'?'请在 Photoshop 圈选要保留的主体，再预览范围并重新生成。':context.mode?'请在 Photoshop 重新圈选要修改的区域，再预览选区或恢复上次选区。':action;
-  const stages:Record<Stage,string>={connection:'连接',environment:'环境检查',capture:'读取来源',inference:'模型生成',output:'下载候选',apply:'Photoshop 回填'};
-  const detail=redactDiagnostic(ordinaryError?`${(error as Error).name}: ${message}`:String(error)).slice(0,5000),causes:string[]=[];
-  let cause=ordinaryError?(error as Error&{cause?:unknown}).cause:undefined;
+  const stages:Record<Stage,string>={connection:'连接',environment:'环境检查',capture:'读取来源',inference:'模型生成',output:'下载候选','lighting-extraction':'本地光影提取',apply:'Photoshop 回填'};
+  const detail=redactDiagnostic(extraction?`${extraction.name}: ${message}`:ordinaryError?`${(error as Error).name}: ${message}`:String(error)).slice(0,5000),causes:string[]=[];
+  let cause=!extraction&&ordinaryError?(error as Error&{cause?:unknown}).cause:undefined;
   for(let i=0;cause&&i<3;i++){causes.push(redactDiagnostic(cause instanceof Error?`${cause.name}: ${cause.message}`:String(cause)).slice(0,1000));cause=(cause as {cause?:unknown})?.cause;}
   return {code,stage:actualStage,stageLabel:t(stages[actualStage]),title:t(title),action:t(action),summary:redactDiagnostic(message?errorTextForSummary(message):t(title)).slice(0,240),build:BUILD_ID,
-    effect:t(actualStage==='apply'?'应用未完成，候选保留；请检查来源文档和历史记录。':actualStage==='capture'?'捕获未完成，尚未上传此范围。':'此步骤未通过；不要把它视为已完成。'),
-    retry:t(hasPending?'先按原 ID 恢复或取消；不要重复提交。':'修正后可重试；生成前仍会重新检查。'),
-    detail,...(causes.length?{causes}:{})};
+    effect:t(actualStage==='lighting-extraction'?'本地光影提取未完成；原始 AI 参考图保留，仅供检查和导出，不能作为光影层应用。':actualStage==='apply'?'应用未完成，候选保留；请检查来源文档和历史记录。':actualStage==='capture'?'捕获未完成，尚未上传此范围。':'此步骤未通过；不要把它视为已完成。'),
+    retry:t(actualStage==='lighting-extraction'?'无需重新生成；可检查或导出已保存参考图，恢复只查询原 ID，不会自动重新提交。':hasPending?'先按原 ID 恢复或取消；不要重复提交。':'修正后可重试；生成前仍会重新检查。'),
+    detail,...(extraction?{reason:extraction.reason,metrics:extraction.metrics}:{}),...(causes.length?{causes}:{})};
 }
 function errorTextForSummary(message:string):string {const key=Object.keys(english).find(key=>message===key||message===english[key]);return key?t(key):errorText(message);}
