@@ -14,9 +14,11 @@ export interface EditAnalysisApplyOptions {preserveAlpha:boolean;subjectMask?:Ui
 export interface Protection {documentId:number;width:number;height:number;bounds:Bounds;mask:Uint8Array;sessionId:string}
 /** Geometry only: restoring it grants no permission to apply an old candidate. */
 export interface SelectionRange {documentId:number;sessionId:string;width:number;height:number;mode:string;depth:unknown;bounds:Bounds;mask:Uint8Array}
+interface ColorCopyProvenance {sessionId:string;workingCopyOf:number;origin:string;colorReason:SourceColorReason}
 export class PhotoshopAdapter {
   private applications=new Map<string,{documentId:number;historyId:number;layerId:number;sourceIdentity:string}>();
   private maskKeys=new WeakMap<Uint8Array,number>();
+  private colorCopies=new Map<number,ColorCopyProvenance>();
   constructor(public ps:any,public sessionId:string,private checkpoint:(stage:string)=>Promise<void>=async()=>{},private readSourceColor:SourceColorReader=async()=>undefined){}
   private activeDocument():any {return this.ps.app.documents.length?this.ps.app.activeDocument:undefined;}
   private profiled(doc:any):boolean {return hasSourceProfile(doc,this.ps.constants.ColorProfileType?.NONE);}
@@ -30,12 +32,74 @@ export class PhotoshopAdapter {
     if(color?.kind!=='srgb'||color.width!==doc.width||color.height!==doc.height||color.depth!==depth||doc.mode!==this.ps.constants.DocumentMode.RGB)requireSourceProfile(doc,this.ps.constants.ColorProfileType?.NONE);
     return color;
   }
-  private async colorCopy(doc:any,context:any):Promise<any> {
+  private colorOrigin(doc:any):string|undefined {
+    // Use scalar native identities, never DOM wrapper identity or historyStates
+    // length: inactive native collections can expose trailing undefined IDs.
+    if(this.profiled(doc)||doc.path!==undefined&&doc.path!==null&&doc.path!==''||doc.quickMaskMode||doc.mode!==this.ps.constants.DocumentMode.RGB||![this.ps.constants.BitsPerChannelType.EIGHT,this.ps.constants.BitsPerChannelType.SIXTEEN].includes(doc.bitsPerChannel)||!Number.isSafeInteger(doc.activeHistoryState?.id)||doc.activeHistoryState.id<=0)return;
+    try {
+      checkDocumentSize(doc.width,doc.height);
+      let count=0;const seen=new Set<number>();
+      const identities=(layers:any,depth=0):unknown[]=>Array.from(layers as any[]).map(layer=>{
+        if(depth>64||++count>10000||!Number.isSafeInteger(layer.id)||layer.id<=0||seen.has(layer.id))throw new Error('Invalid layer identity');
+        seen.add(layer.id);return [layer.id,layer.layers?identities(layer.layers,depth+1):null];
+      });
+      return JSON.stringify([this.sourceState(doc),identities(doc.layers)]);
+    }catch{return;}
+  }
+  private pruneColorCopies():void {
+    const live=new Set(Array.from(this.ps.app.documents as any[]).map(doc=>doc.id));
+    for(const [id,record] of this.colorCopies)if(!live.has(id)||record.sessionId!==this.sessionId)this.colorCopies.delete(id);
+  }
+  private rememberColorCopy(doc:any,workingCopyOf:number,origin:string|undefined,colorReason:SourceColorReason|undefined):void {
+    this.pruneColorCopies();
+    if(!origin||!['webp-default','png-srgb'].includes(colorReason??''))return;
+    this.colorCopies.set(doc.id,{sessionId:this.sessionId,workingCopyOf,origin,colorReason:colorReason!});
+    while(this.colorCopies.size>32)this.colorCopies.delete(this.colorCopies.keys().next().value!);
+  }
+  /** Session proof only; this observation grants no candidate apply permission. */
+  colorRecoveryAvailability(documentId:number):'available'|'not-needed'|'unavailable' {
+    this.pruneColorCopies();
+    const doc=Array.from(this.ps.app.documents as any[]).find(doc=>doc.id===documentId);
+    if(!doc)return 'unavailable';
+    if(this.profiled(doc))return 'not-needed';
+    const proof=this.colorCopies.get(documentId);
+    return proof&&this.colorOrigin(doc)===proof.origin?'available':'unavailable';
+  }
+  /** Explicitly duplicate the proven undone origin, retaining its entire redo branch. */
+  async createRecoveredColorCopy(documentId:number):Promise<{documentId:number;workingCopyOf:number;colorReason:SourceColorReason}> {
+    const unavailable=()=>new Error('当前来源没有可验证的会话色彩恢复记录；请在副本中指定正确配置文件');
+    if(this.colorRecoveryAvailability(documentId)!=='available')throw unavailable();
+    const proof=this.colorCopies.get(documentId)!;
+    return this.ps.core.executeAsModal(async(context:any)=>{
+      const previous=this.activeDocument();let copy:any,origin:string|undefined,keep=false,unregistered=false;
+      const check=()=>{if(context.isCancelled)throw new DiagnosticError('cancelled','capture','色彩副本恢复已取消');};
+      try {
+        check();
+        if(this.colorRecoveryAvailability(documentId)!=='available'||this.colorCopies.get(documentId)!==proof)throw unavailable();
+        const doc=Array.from(this.ps.app.documents as any[]).find(doc=>doc.id===documentId)!;
+        copy=await this.colorCopy(doc,context,value=>{origin=value;});check();
+        // Recheck the old source after asynchronous duplication/assignment. All
+        // assignment/history writes belong exclusively to the newly created copy.
+        if(!origin||this.colorRecoveryAvailability(documentId)!=='available')throw unavailable();
+        requireSourceProfile(copy,this.ps.constants.ColorProfileType?.NONE);
+        await context.hostControl.unregisterAutoCloseDocument(copy.id);unregistered=true;check();
+        this.ps.app.activeDocument=copy;
+        this.rememberColorCopy(copy,documentId,origin,proof.colorReason);keep=true;
+        return {documentId:copy.id,workingCopyOf:documentId,colorReason:proof.colorReason};
+      }finally{
+        try{if(copy&&!keep){this.colorCopies.delete(copy.id);await copy.closeWithoutSaving();if(!unregistered)await context.hostControl.unregisterAutoCloseDocument(copy.id);}}
+        finally{if(!keep&&previous&&Array.from(this.ps.app.documents as any[]).some(doc=>doc.id===previous.id))this.ps.app.activeDocument=previous;}
+      }
+    },{commandName:'PS-AI 创建已恢复色彩的副本'});
+  }
+  private async colorCopy(doc:any,context:any,onOrigin?:(origin:string|undefined)=>void):Promise<any> {
     const copy=await doc.duplicate(`${doc.name||'PS-AI'} — sRGB`,false);
     if(!copy||copy.id===doc.id)throw new Error('工作副本的 sRGB 配置失败');
     let suspension:any,pending=false;
     try {
       await context.hostControl.registerAutoCloseDocument(copy.id);
+      onOrigin?.(this.colorOrigin(copy));
+      if(context.isCancelled)throw new DiagnosticError('cancelled','capture','色彩副本创建已取消');
       // Commit the assignment as the duplicate's own history baseline. A live
       // profile setter alone can leave the previous, untagged history state as
       // the target of Undo after the first candidate application.
@@ -247,9 +311,9 @@ export class PhotoshopAdapter {
       }
       if(!background&&!mask.some(v=>v>0))throw new Error('编辑范围完全被保护区覆盖');
       if(background&&editAnalysis&&mask===subjectMask)mask=new Uint8Array(mask.length);
-      let copy:any,keepCopy=false,copyUnregistered=false;
+      let copy:any,colorOrigin:string|undefined,keepCopy=false,copyUnregistered=false;
       try {
-        if(color){copy=await this.colorCopy(doc,context);doc=copy;}
+        if(color){copy=await this.colorCopy(doc,context,value=>{colorOrigin=value;});doc=copy;}
         await this.checkpoint('capture.pixels.read');
         const pixelState=this.sourceState(doc);
         const result=await this.ps.imaging.getPixels({documentID:doc.id,sourceBounds:bounds,...(memory?{targetSize:{width:memory.width,height:memory.height}}:{}),colorSpace:'RGB',colorProfile:'sRGB IEC61966-2.1',componentSize:doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,applyAlpha:false});
@@ -288,7 +352,7 @@ export class PhotoshopAdapter {
         beforeCommit?.(captured);pixelGuard();
         if(copy){await context.hostControl.unregisterAutoCloseDocument(copy.id);copyUnregistered=true;}
         if(exclusionPending){await context.hostControl.resumeHistory(exclusion,true);exclusionPending=false;snapshot.historyId=doc.activeHistoryState.id;}
-        if(copy)keepCopy=true;
+        if(copy){this.rememberColorCopy(copy,original.id,colorOrigin,color?.reason);keepCopy=true;}
         return captured;
       }finally{if(copy&&!keepCopy){await copy.closeWithoutSaving();if(!copyUnregistered)await context.hostControl.unregisterAutoCloseDocument(copy.id);this.ps.app.activeDocument=original;}}
       }catch(error){if(exclusionPending)await context.hostControl.resumeHistory(exclusion,false);throw error;}
