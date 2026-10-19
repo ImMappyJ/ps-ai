@@ -18,7 +18,7 @@ import {RelightWorkbench,type RelightResult} from '../features/relight/relight-w
 import {compileRelightScene,validateRelightScene,type RelightScene,type RelightCapabilities} from '../features/relight/relight-scene';
 import {PanelViews,OperationFeedback,ResultNavigation,CandidatePreview,SourceCaption,captureSizeSummary,localValidationMessage,createCandidateCard,setCandidateCardState,displayPreview as preview} from './panel-view';import type {OperationContext,PanelPage,CaptureSizeDetails} from './panel-view';
 import {HistoryTable,historyTaskType,historyPrompt,historyState,historySource,historyDate} from './history-table';
-import {prepareCandidate,prepareLightingLayerApplication,prepareEditAnalysisApplication,prepareSelectionAssetApplication,preflightEditAnalysisCandidate,historyOutputName,type PreparedCandidate} from './candidate-preparation';
+import {prepareCandidate,prepareLightingLayerApplication,prepareEditAnalysisApplication,prepareSelectionAssetApplication,preflightEditAnalysisCandidate,preflightSelectionAssetCandidate,historyOutputName,type PreparedCandidate} from './candidate-preparation';
 import {planRelightMemory,downsampleSnapshotMask,resampleGray} from '../imaging/budget';
 import {observeRelightSource} from './relight-source-monitor';
 import {HistoryPreview} from './history-preview';
@@ -732,9 +732,9 @@ async function generate(frozenRelight?:FrozenRelightSubmission,onRelightJob?:(id
         try{generationRequest=validateGeneration({model:client.model,kind:request.kind,mode,prompt:request.prompt,seed,width:size.width,height:size.height,outputDepth:depth,...(context?{assetContext:context}:{}),...(hasInputs?{source:`${id}-source.png`,...(guide?{guide:`${id}-guide.png`}:{}),...(ref?{reference:`${id}-reference.png`}:{})}:{})},client.capabilities!);}
         catch(error){if(context&&!client.capabilities!.models.find(model=>model.id===(client as GatewayClient).model)?.assetContexts?.includes(context))throw new DiagnosticError('unsupported','environment',t('此平台模型不支持参考当前图片与选区生成透明素材；请明确选择仅文字素材或更换模型'));throw error;}
       }
-      if(snapshot?.captureGeometry?.kind==='edit-analysis'){
+      if(snapshot&&(context||snapshot.captureGeometry?.kind==='edit-analysis')){
         const mapping=makeMapping(snapshot.bounds,resolution);
-        preflightEditAnalysisCandidate({id,clientId,state:'created',createdAt:new Date().toISOString(),graph:{},snapshot,template:generationRequest?GATEWAY_TEMPLATE:templateForDepth(depth),params:{mode,outputKind:request.kind,...(context?{assetContext:context}:{}),modelSize:{width:mapping.width,height:mapping.height}}},retainedImageBytes(true));
+        (context?preflightSelectionAssetCandidate:preflightEditAnalysisCandidate)({id,clientId,state:'created',createdAt:new Date().toISOString(),graph:{},snapshot,template:generationRequest?GATEWAY_TEMPLATE:templateForDepth(depth),params:{mode,outputKind:request.kind,...(context?{assetContext:context}:{}),modelSize:{width:mapping.width,height:mapping.height}}},retainedImageBytes(true));
       }
       if(snapshot){
         await store.binary(`${id}-mask.bin`,snapshot.mask);await store.binary(`${id}-source.png`,encodePng(captured!.image));
