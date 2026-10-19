@@ -130,6 +130,18 @@ test('failed capture does not register recovery provenance and closed document i
   const reused=live.makeDoc({id,path:undefined});assert.equal(live.adapter.colorRecoveryAvailability(reused.id),'unavailable');
 });
 
+test('cancellation after unregister retains host auto-close protection when explicit copy close fails',async()=>{
+  const h=recoveryHost();await h.capture();const old=h.ps.app.activeDocument;h.undo(old);
+  const before=h.state(old),redo=h.timelines.get(old.id)!.states.map(s=>s.historyId);h.ps.app.activeDocument=h.source;
+  h.onUnregister(()=>{h.cancel();h.ps.app.activeDocument.closeWithoutSaving=async()=>{throw Error('cancelled close');};});
+  await assert.rejects(h.adapter.createRecoveredColorCopy(old.id),/cancelled close/);
+  const failed=h.documents.find(doc=>doc.id!==h.source.id&&doc.id!==old.id)!;
+  assert.ok(failed);assert.deepEqual([...h.registered],[failed.id]);
+  assert.deepEqual(h.state(old),before);assert.deepEqual(h.timelines.get(old.id)!.states.map(s=>s.historyId),redo);
+  assert.equal(h.ps.app.activeDocument.id,h.source.id);assert.equal(h.adapter.colorRecoveryAvailability(old.id),'available');
+  h.undo(failed);assert.equal(h.adapter.colorRecoveryAvailability(failed.id),'unavailable');
+});
+
 test('session recovery provenance is bounded while retaining the newest verified copies',async()=>{
   const h=recoveryHost(),copies:any[]=[];
   for(let i=0;i<33;i++){h.ps.app.activeDocument=h.source;await h.capture();copies.push(h.ps.app.activeDocument);}

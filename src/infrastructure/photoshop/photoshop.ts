@@ -87,7 +87,17 @@ export class PhotoshopAdapter {
         this.rememberColorCopy(copy,documentId,origin,proof.colorReason);keep=true;
         return {documentId:copy.id,workingCopyOf:documentId,colorReason:proof.colorReason};
       }finally{
-        try{if(copy&&!keep){this.colorCopies.delete(copy.id);await copy.closeWithoutSaving();if(!unregistered)await context.hostControl.unregisterAutoCloseDocument(copy.id);}}
+        try{if(copy&&!keep){
+          this.colorCopies.delete(copy.id);
+          try{await copy.closeWithoutSaving();}
+          catch(error){
+            // Cancellation can arrive just after successful unregister. If the
+            // explicit close then fails, restore the host's cleanup fallback.
+            if(unregistered)await context.hostControl.registerAutoCloseDocument(copy.id);
+            throw error;
+          }
+          if(!unregistered)await context.hostControl.unregisterAutoCloseDocument(copy.id);
+        }}
         finally{if(!keep&&previous&&Array.from(this.ps.app.documents as any[]).some(doc=>doc.id===previous.id))this.ps.app.activeDocument=previous;}
       }
     },{commandName:'PS-AI 创建已恢复色彩的副本'});
