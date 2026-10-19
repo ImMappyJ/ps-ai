@@ -120,6 +120,8 @@ Key 按平台加密保存在 UXP secureStorage，服务只在内存持有。cred
 
 ComfyUI 按来源、范围图排序，保留现有 LoadImage 倒置 MASK 到 alpha 的直接连接。百炼 2.1 发送两图及独立素材语义；百炼 3.0 与 Gemini 不声明该能力。OpenAI 使用 edits，images 中为来源，范围图转独立原生蒙版 alpha=255-gray；来源与蒙版同变换、补边受保护，显式透明输出并逆裁。离线测试覆盖请求几何、原始输出保留和原 UUID 恢复。真实 ComfyUI 样本出现来源残留或范围图被画入，视觉验收未通过；平台真实验收等待 API Key。存在透明像素只是必要条件，不能证明素材质量。
 
+本轮六个 PS27 sRGB 合成 API 用例通过 RGB8/16 素材捕获、原生灰度平面、单次有效蒙版、alpha／羽化／保护、单步撤销和注入故障回滚；两个大图用例实际走 `edit-analysis`，并验证写入两条带后取消的完整恢复。外侧／保护区的可见颜色与 alpha 差异为零，透明像素下隐藏 RGB 不属于该证明。保存 UUID 的读取在这些用例中使用内存夹具，不是磁盘持久化、重启或已安装素材控件验收。五个真实 Qwen 样本（四种场景及一次提示词对照）仍为视觉失败，不能用原生 API 通过替代效果验收。
+
 能力清单至少包含 `protocol: ps-ai/1`、`provider`、`configured`、`cancellation: none`、`progress: stages` 和 `models`。每个模型给出 `id`、`label`、`operations`、`maxInputImages`、`outputDepths`、`seedMax`、`minPixels`、`maxPixels`、`maxAspectRatio`。`seedMax: 0` 表示没有可设种子，信封只接受占位值 0，不向平台传种子；未知参数会被拒绝。本协议版本只支持 8 位输出、阶段进度和不保证中断的取消语义；需要真实步数、更多参数或其他取消保证时，应先扩展客户端和协议版本，不能伪造字段。
 
 状态是 `queued`、`running`、`ready`、`failed`、`cancelled` 或 `unknown`。只有 `ready` 才提供：
