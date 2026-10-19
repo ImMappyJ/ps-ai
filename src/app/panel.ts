@@ -12,13 +12,13 @@ import {diagnostic,DiagnosticError} from '../diagnostics/diagnostics';import typ
 import {BUILD_ID} from '../diagnostics/build';
 import {GatewayClient} from '../infrastructure/backends/gateway-client';
 import {DEFAULT_GATEWAY_MODEL,GATEWAY_TEMPLATE,validateGeneration} from '../infrastructure/backends/gateway-protocol';
-import type {GatewayCapabilities,GenerationRequest} from '../infrastructure/backends/gateway-protocol';
+import type {GatewayCapabilities,GenerationRequest,AssetContext} from '../infrastructure/backends/gateway-protocol';
 import {RelightSession,RelightDraftStore,relightTaskMetadata,type FrozenRelightSubmission,type RelightTaskMetadata,type RelightScope,type RelightOutputKind} from '../features/relight/relight-session';
 import {RelightWorkbench,type RelightResult} from '../features/relight/relight-workbench';
 import {compileRelightScene,validateRelightScene,type RelightScene,type RelightCapabilities} from '../features/relight/relight-scene';
 import {PanelViews,OperationFeedback,ResultNavigation,CandidatePreview,SourceCaption,captureSizeSummary,localValidationMessage,createCandidateCard,setCandidateCardState,displayPreview as preview} from './panel-view';import type {OperationContext,PanelPage,CaptureSizeDetails} from './panel-view';
 import {HistoryTable,historyTaskType,historyPrompt,historyState,historySource,historyDate} from './history-table';
-import {prepareCandidate,prepareLightingLayerApplication,prepareEditAnalysisApplication,preflightEditAnalysisCandidate,historyOutputName,type PreparedCandidate} from './candidate-preparation';
+import {prepareCandidate,prepareLightingLayerApplication,prepareEditAnalysisApplication,prepareSelectionAssetApplication,preflightEditAnalysisCandidate,historyOutputName,type PreparedCandidate} from './candidate-preparation';
 import {planRelightMemory,downsampleSnapshotMask,resampleGray} from '../imaging/budget';
 import {observeRelightSource} from './relight-source-monitor';
 import {HistoryPreview} from './history-preview';
@@ -109,20 +109,33 @@ function taskPhase(text:string,percent=0){el('task-progress').style.display='blo
 function startTask(){taskActive=true;taskSucceeded=false;batchPosition='';taskPhase(t("准备任务…"));}
 function endTask(){taskActive=false;taskPhase(taskSucceeded?t("候选已保存"):el('status').textContent,taskSucceeded?100:0);}
 function option(select:any,value:string,text:string){const node=document.createElement('option');node.value=value;node.textContent=t(text);select.appendChild(node);}
+function assetMode(mode=el('mode').value):boolean{return workspace==='cosplay'&&['effect','atmosphere'].includes(mode);}
+function assetContext():AssetContext|undefined {
+  if(!assetMode())return;
+  const value=el('asset-input').value;
+  if(value!=='selection-v1'&&value!=='text')throw new Error(t('素材输入方式无效，请重新选择'));
+  return value==='selection-v1'?value:undefined;
+}
 function inputUi(){
   const mode=el('mode').value,blend=mode==='blend',structuredRelight=mode==='relight',nextPromptKind=blend?'blend':mode==='remove'||structuredRelight?undefined:'ordinary';
   if(nextPromptKind&&nextPromptKind!==promptKind){promptDrafts[promptKind]=el('prompt').value;el('prompt').value=promptDrafts[nextPromptKind];promptKind=nextPromptKind;}
   el('prompt-group').style.display=mode==='remove'||structuredRelight?'none':'block';el('prompt-label').textContent=t(blend?'补充要求（可选）':'描述修改或生成内容');
   el('relight-entry').style.display=structuredRelight?'block':'none';el('generate').textContent=t(structuredRelight?'打开布光工作台':'生成候选');
-  const standalone=el('destination').value==='document'&&(workspace==='t2i'||['effect','atmosphere'].includes(mode));el('selection-tools').style.display=standalone?'none':'block';el('prompt').setAttribute('placeholder',blend?t('可选：补充光影、色彩或融合要求'):workspace==='t2i'?t("描述要生成的画面、主体与风格"):workspace==='cosplay'?t("描述服装道具、光影方向、角色参考或氛围效果"):t("描述选区中要修改的内容，及需要保留的细节"));
-  const restorable=workspace!=='t2i'&&mode!=='relight'&&el('destination').value==='selection';el('restore-selection').style.display=restorable?'block':'none';el('restore-selection').disabled=busy||!restorable||lastSelection?.workspace!==workspace||lastSelection?.mode!==mode;
+  const asset=assetMode(mode),context=assetContext(),standalone=workspace==='t2i'||asset&&!context;el('selection-tools').style.display=standalone?'none':'block';el('prompt').setAttribute('placeholder',blend?t('可选：补充光影、色彩或融合要求'):workspace==='t2i'?t("描述要生成的画面、主体与风格"):workspace==='cosplay'?t("描述服装道具、光影方向、角色参考或氛围效果"):t("描述选区中要修改的内容，及需要保留的细节"));
+  el('asset-input-group').style.display=asset?'block':'none';el('asset-input').disabled=busy;
+  el('asset-input-help').textContent=t(context?'来源图与有效灰度范围图会一起送模，输出位置不改变输入。范围仅供参考，请检查结果是否残留来源人物、背景或范围图。':'仅使用文字生成独立素材，不读取当前图片；可另存 PNG 或新建文档。');
+  if(asset&&!context)el('destination').value='document';el('destination').disabled=busy||asset&&!context;
+  el('toggle-reference').parentElement.style.display=asset?'none':'block';
+  el('range-legend').textContent=t(context?'实际送模预览：左为 sRGB 8-bit 来源图，右为扣除保护区后的灰度范围图；白色可放置，黑色不放置，灰色为羽化。':'橙色：实际编辑 · 蓝色：手动保护 · 灰色：只提供上下文。回填使用真实灰度蒙版。');
+  const restorable=workspace!=='t2i'&&mode!=='relight'&&!standalone&&(!!context||el('destination').value==='selection');el('restore-selection').style.display=restorable?'block':'none';el('restore-selection').disabled=busy||!restorable||lastSelection?.workspace!==workspace||lastSelection?.mode!==mode;
   const platform=isPlatform(el('backend-kind').value),cloud=el('backend-kind').value!=='comfyui',model=gatewayCatalogBase===el('backend-url').value?gatewayCatalog?.models.find(m=>m.id===el('gateway-model').value):undefined;
   const background=isBackgroundMode(mode);
-  for(const [id,forced] of [['preserve-alpha',background],['align-subject',background||blend||structuredRelight],['match-color',background||blend||structuredRelight],['guide',background&&!cloud]] as const){
+  for(const [id,forced] of [['preserve-alpha',background||asset],['align-subject',background||blend||structuredRelight||asset],['match-color',background||blend||structuredRelight||asset],['guide',background&&!cloud||asset]] as const){
     if(forced){if(!overriddenChecks.has(id))overriddenChecks.set(id,!!el(id).checked);el(id).checked=false;}
     else if(overriddenChecks.has(id)){el(id).checked=overriddenChecks.get(id);overriddenChecks.delete(id);}
     el(id).disabled=busy||forced;
   }
+  if(context)el('guide').checked=true;
   el('mode-help').textContent=background?t(cloud?'选中要保留的主体，无需反选。整张画布用于生成不透明背景，保留主体核心并融合半透明边缘；保护区保留原样。':'选中要保留的主体，无需反选。整张画布用于生成背景；选区精确控制回填，不作为黑白参考图送入 ComfyUI。主体核心和保护区保留，半透明边缘与新背景融合。'):blend?t('选中主体，整张画布提供环境参考；只回填主体并扣除保护区。统一光影、颜色、纹理与空间感，保留身份和姿态；全图缩放可能降低小主体细节。'):mode==='remove'?t('圈选要移除的对象后直接生成，周边用于补齐背景。'):'';
   el('mode-help').style.display=background||blend||mode==='remove'?'block':'none';
   const kind=workspace==='t2i'?'t2i':['effect','atmosphere'].includes(el('mode').value)?'asset':'edit';
@@ -182,7 +195,7 @@ function renderLanguage(){
   connection(connectionState);sourceCaption.render();
   // UXP keeps the collapsed caption when existing option text is edited.
   el('source-access-status').textContent=t(sourceAccessMessage);
-  for(const id of ['usage','destination','output-depth','backend-kind','relight-scope']){
+  for(const id of ['usage','destination','output-depth','backend-kind','relight-scope','asset-input']){
     const select=el(id),value=select.value;
     const items=Array.from(select.querySelectorAll('option')) as HTMLOptionElement[];
     const labels=items.map(node=>[node.getAttribute('value')!,node.getAttribute('data-i18n')!]);
@@ -252,18 +265,21 @@ function captureSizes(snapshot:Pick<Snapshot,'width'|'height'|'bounds'|'captureG
 function clearCapturePreview(){capture=undefined;el('selection-previews').style.display='none';for(const id of ['source-preview','mask-preview'])el(id).removeAttribute('src');}
 async function captureArea(expectedDocumentId=activeDocumentId(),showPreview=true,captureProtection=protection,beforeCommit?:(captured:Capture)=>void){
   return withImagePixels(async()=>{
-  const mode=el('mode').value,capturedWorkspace=workspace,operation=activeOperation;
+  const mode=el('mode').value,capturedWorkspace=workspace,operation=activeOperation,context=assetContext();
   clearCapturePreview();
-  const captured=await adapter.capture(Number(el('margin').value)/100,captureProtection,expectedDocumentId,outputDepth(),{analysisResolution:Number(el('resolution').value),retainedBytes:retainedImageBytes(true),...(isBackgroundMode(mode)?{context:'document' as const,selection:'subject-background' as const}:mode==='blend'?{context:'document' as const,selection:'edit' as const}:{})},beforeCommit);
+  const captured=await adapter.capture(Number(el('margin').value)/100,captureProtection,expectedDocumentId,outputDepth(),{analysisResolution:Number(el('resolution').value),retainedBytes:retainedImageBytes(true),...(context?{purpose:'selection-asset' as const,preserveNativeDepth:true}:{}),...(isBackgroundMode(mode)?{context:'document' as const,selection:'subject-background' as const}:mode==='blend'?{context:'document' as const,selection:'edit' as const}:{})},beforeCommit);
   const {snapshot:s,image}=captured;
   if(capturedWorkspace!=='t2i'&&mode!=='relight'){const raw=captured.subjectMask??captured.selectionMask;lastSelection={workspace:capturedWorkspace,mode,range:{documentId:s.documentId,sessionId:s.sessionId,width:s.width,height:s.height,mode:s.mode,depth:s.depth,bounds:{...s.bounds},mask:s.captureGeometry?raw:raw.slice()}};}
   if(captureProtection&&captured.workingCopyOf===captureProtection.documentId)captureProtection={...captureProtection,documentId:s.documentId};
   if(workspace!==capturedWorkspace||el('mode').value!==mode){inputUi();return;}
   capture=captured;
   protection=captureProtection;
-  const mapping=makeMapping(s.bounds,Number(el('resolution').value)),sizes=captureSizes(s,mapping);
+  const mapping=makeMapping(s.bounds,Number(el('resolution').value)),sizes=captureSizes(s,mapping)??(context?{documentWidth:s.width,documentHeight:s.height,nativeWidth:s.bounds.right-s.bounds.left,nativeHeight:s.bounds.bottom-s.bounds.top,workWidth:image.width,workHeight:image.height,modelWidth:mapping.width,modelHeight:mapping.height}:undefined);
   const edit=s.captureGeometry?downsampleSnapshotMask(s,image.width,image.height):s.mask,protectedMask=s.captureGeometry?resampleGray(captured.protectionMask,s.bounds.right-s.bounds.left,s.bounds.bottom-s.bounds.top,image.width,image.height):captured.protectionMask;
-  sourceCaption.show({documentId:s.documentId,width:image.width,height:image.height,protectedArea:!!protection,profile:s.profile,colorReason:s.colorReason,sizes});el('source-preview').src=await preview(image);el('mask-preview').src=await preview(rangePreview(image,edit,protectedMask));if(showPreview&&workspace===capturedWorkspace&&el('mode').value===mode)el('selection-previews').style.display='flex';
+  sourceCaption.show({documentId:s.documentId,width:image.width,height:image.height,protectedArea:!!protection,profile:s.profile,colorReason:s.colorReason,sizes});
+  el('source-preview').src=await preview(context?editModelInput(mode,resize(image,mapping.width,mapping.height)):image);
+  el('mask-preview').src=await preview(context?maskRaster(resampleGray(s.mask,s.bounds.right-s.bounds.left,s.bounds.bottom-s.bounds.top,mapping.width,mapping.height),mapping.width,mapping.height):rangePreview(image,edit,protectedMask));
+  if(showPreview&&workspace===capturedWorkspace&&el('mode').value===mode)el('selection-previews').style.display='flex';
   if(operation&&activeDocumentId()===s.documentId)feedback.resolveCapture(operation);
   inputUi();
   });
@@ -271,7 +287,7 @@ async function captureArea(expectedDocumentId=activeDocumentId(),showPreview=tru
 async function restoreSelectionArea(){
   if(busy)return;
   const saved=lastSelection;
-  if(!saved||saved.workspace!==workspace||saved.mode!==el('mode').value||workspace==='t2i'||saved.mode==='relight'||el('destination').value!=='selection')throw new Error(t('没有可用于当前模式的本次会话选区，请重新圈选后预览'));
+  if(!saved||saved.workspace!==workspace||saved.mode!==el('mode').value||workspace==='t2i'||saved.mode==='relight'||!assetContext()&&el('destination').value!=='selection')throw new Error(t('没有可用于当前模式的本次会话选区，请重新圈选后预览'));
   lock(true);clearCapturePreview();let restored=false;
   try{
     await adapter.restoreSelection(saved.range);restored=true;
@@ -680,14 +696,14 @@ async function generate(frozenRelight?:FrozenRelightSubmission,onRelightJob?:(id
   const pending=(await store.history()).find(blocksGeneration);
   if(pending){await refreshHistory(pending.id);historyDetail=true;views.show('history');pendingDetailReveal=true;throw new DiagnosticError('pending-task','inference',t('任务 {0} 尚未确认，请在历史中按原 ID 恢复或取消',pending.id));}
   const mode=frozenRelight?'relight':el('mode').value,userPrompt=frozenRelight?frozenRelight.scene.supplement:mode==='remove'?'':el('prompt').value,destination=frozenRelight?'selection':el('destination').value,usage=el('usage').value;
-  const behavior=editBehavior(mode,{guide:!!el('guide').checked,preserveAlpha:!!el('preserve-alpha').checked,alignSubject:frozenRelight?false:!!el('align-subject').checked,matchColor:frozenRelight?false:!!el('match-color').checked},settings.backend??'comfyui'),guide=behavior.guide;
-  let request=intent(frozenRelight?'cosplay':workspace,mode,frozenRelight?'Structured relighting':userPrompt,!!reference,guide,usage,client instanceof GatewayClient?'semantic':'images');
+  const context=frozenRelight?undefined:assetContext(),asset=assetMode(mode),behavior=asset?{guide:!!context,preserveAlpha:false,alignSubject:false,matchColor:false}:editBehavior(mode,{guide:!!el('guide').checked,preserveAlpha:!!el('preserve-alpha').checked,alignSubject:frozenRelight?false:!!el('align-subject').checked,matchColor:frozenRelight?false:!!el('match-color').checked},settings.backend??'comfyui'),guide=behavior.guide;
+  let request=intent(frozenRelight?'cosplay':workspace,mode,frozenRelight?'Structured relighting':userPrompt,!asset&&!!reference,guide,usage,client instanceof GatewayClient?'semantic':'images',false,context);
   const depth=outputDepth();const count=Number(el('count').value),steps=Number(el('steps').value),resolution=Number(el('resolution').value),margin=Number(el('margin').value)/100;
   let baseSeed=el('lock-seed').checked?Number(el('seed').value):Math.floor(Math.random()*2**31),seedSupported=true;
   if(!Number.isInteger(count)||count<1||count>4)throw new Error(t("候选数量须为 1–4"));
   if(!(client instanceof GatewayClient))buildGraph({requestId:uuid(),prompt:request.prompt,seed:baseSeed+count-1,steps,resolution,models:settings.models,outputDepth:outputDepth()});
   if(request.kind==='edit'&&destination!=='selection')throw new Error(t("编辑补丁需要捕获来源选区"));
-  if(destination==='selection'&&expectedDocumentId===undefined)throw new Error(t("请先打开 Photoshop 文档并建立选区"));
+  if((request.kind==='edit'||context)&&expectedDocumentId===undefined)throw new Error(t("请先打开 Photoshop 文档并建立选区"));
     if(operation)operation.stage='environment';const checking=t(client instanceof GatewayClient?'检查平台服务与模型能力…':"检查节点与本机模型…");taskPhase(checking);status(checking);await checkBackend(client,{...settings,outputDepth:depth});
     if(client instanceof GatewayClient){const chosenModel=client.model,model=client.capabilities!.models.find(m=>m.id===chosenModel)!;if(!model.operations.includes(request.kind))throw new Error(t('此平台模型不支持当前模式'));seedSupported=model.seedMax!==0;if(!seedSupported)baseSeed=0;else if(!Number.isSafeInteger(baseSeed)||baseSeed<0||baseSeed+count-1>model.seedMax)throw new Error(t('平台种子超出范围，请减小种子或候选数量'));}
     let relightCaps:RelightCapabilities|undefined,relightConflictResolution:'structured-lighting'|undefined;
@@ -702,41 +718,45 @@ async function generate(frozenRelight?:FrozenRelightSubmission,onRelightJob?:(id
       adapter.assertSourceCurrent(frozenRelight.capture.snapshot);
     }
     // Always recapture at submission; a thumbnail saved earlier is not a fresh document state.
-    if(operation)operation.stage='capture';if(!frozenRelight){if(destination==='selection')await captureArea(expectedDocumentId);else capture=undefined;}
-    const captured=frozenRelight?.capture??capture,ref=reference;
+    if(stopBatch){clearCapturePreview();return;}
+    if(operation)operation.stage='capture';if(!frozenRelight){if(request.kind==='edit'||context)await captureArea(expectedDocumentId);else clearCapturePreview();}
+    const captured=frozenRelight?.capture??capture,ref=asset?undefined:reference,hasInputs=request.kind==='edit'||!!context;
     for(let index=0;index<count&&!stopBatch;index++) {
       batchPosition=t("候选 {0} / {1} · ",index+1,count);taskPhase(t("准备与上传输入…"));status(t("上传候选 {0} / {1} 的输入…",index+1,count));const id=uuid(),clientId=uuid();
       const seed=seedSupported?baseSeed+index:0;
       const snapshot=captured?.snapshot;
       let source:string|undefined,guideName:string|undefined,referenceName:string|undefined,modelSize:{width:number;height:number}|undefined,generationRequest:GenerationRequest|undefined;
       if(client instanceof GatewayClient){
-        const size=request.kind==='edit'?makeMapping(snapshot!.bounds,resolution):{width:resolution,height:resolution};
-        generationRequest=validateGeneration({model:client.model,kind:request.kind,mode,prompt:request.prompt,seed,width:size.width,height:size.height,outputDepth:depth,...(request.kind==='edit'?{source:`${id}-source.png`,...(guide?{guide:`${id}-guide.png`}:{}),...(ref?{reference:`${id}-reference.png`}:{})}:{})},client.capabilities!);
+        const size=hasInputs?makeMapping(snapshot!.bounds,resolution):{width:resolution,height:resolution};
+        try{generationRequest=validateGeneration({model:client.model,kind:request.kind,mode,prompt:request.prompt,seed,width:size.width,height:size.height,outputDepth:depth,...(context?{assetContext:context}:{}),...(hasInputs?{source:`${id}-source.png`,...(guide?{guide:`${id}-guide.png`}:{}),...(ref?{reference:`${id}-reference.png`}:{})}:{})},client.capabilities!);}
+        catch(error){if(context&&!client.capabilities!.models.find(model=>model.id===(client as GatewayClient).model)?.assetContexts?.includes(context))throw new DiagnosticError('unsupported','environment',t('此平台模型不支持参考当前图片与选区生成透明素材；请明确选择仅文字素材或更换模型'));throw error;}
       }
       if(snapshot?.captureGeometry?.kind==='edit-analysis'){
         const mapping=makeMapping(snapshot.bounds,resolution);
-        preflightEditAnalysisCandidate({id,clientId,state:'created',createdAt:new Date().toISOString(),graph:{},snapshot,template:generationRequest?GATEWAY_TEMPLATE:templateForDepth(depth),params:{mode,outputKind:request.kind,modelSize:{width:mapping.width,height:mapping.height}}},retainedImageBytes(true));
+        preflightEditAnalysisCandidate({id,clientId,state:'created',createdAt:new Date().toISOString(),graph:{},snapshot,template:generationRequest?GATEWAY_TEMPLATE:templateForDepth(depth),params:{mode,outputKind:request.kind,...(context?{assetContext:context}:{}),modelSize:{width:mapping.width,height:mapping.height}}},retainedImageBytes(true));
       }
       if(snapshot){
         await store.binary(`${id}-mask.bin`,snapshot.mask);await store.binary(`${id}-source.png`,encodePng(captured!.image));
-        if(snapshot.backgroundComposite==='subject-background-v1'){
-          if(!captured!.subjectMask)throw new Error(t('背景历史的蒙版数据缺失或损坏，无法安全重建候选；原始输出已保留'));
-          await store.binary(`${id}-subject-mask.bin`,captured!.subjectMask);await store.binary(`${id}-protection-mask.bin`,captured!.protectionMask);
+        if(context||snapshot.backgroundComposite==='subject-background-v1'){
+          const raw=context?captured!.selectionMask:captured!.subjectMask;
+          if(!raw)throw new Error(t('背景历史的蒙版数据缺失或损坏，无法安全重建候选；原始输出已保留'));
+          await store.binary(`${id}-subject-mask.bin`,raw);await store.binary(`${id}-protection-mask.bin`,captured!.protectionMask);
         }
       }
-      if(request.kind==='edit') {
-        if(frozenRelight)adapter.assertSourceCurrent(snapshot!);
+      if(hasInputs) {
+        if(frozenRelight||context)adapter.assertSourceCurrent(snapshot!);
         const mapping=makeMapping(snapshot!.bounds,resolution);
         modelSize={width:mapping.width,height:mapping.height};
         const image=resize(captured!.image,mapping.width,mapping.height);
         source=await client.upload(encodePng(editModelInput(mode,image)),`${id}-source.png`);
-        if(guide){const gray=snapshot!.captureGeometry?downsampleSnapshotMask(snapshot!,captured!.image.width,captured!.image.height):snapshot!.mask;const mask=resize(maskRaster(gray,captured!.image.width,captured!.image.height),mapping.width,mapping.height);guideName=await client.upload(encodePng(mask),`${id}-guide.png`);}
+        if(guide){const gray=context?resampleGray(snapshot!.mask,snapshot!.bounds.right-snapshot!.bounds.left,snapshot!.bounds.bottom-snapshot!.bounds.top,mapping.width,mapping.height):snapshot!.captureGeometry?downsampleSnapshotMask(snapshot!,captured!.image.width,captured!.image.height):snapshot!.mask;const mask=context?maskRaster(gray,mapping.width,mapping.height):resize(maskRaster(gray,captured!.image.width,captured!.image.height),mapping.width,mapping.height);guideName=await client.upload(encodePng(mask),`${id}-guide.png`);}
         if(ref){const refMap=makeMapping({left:0,top:0,right:ref.width,bottom:ref.height},resolution);referenceName=await client.upload(encodePng(resize(ref,refMap.width,refMap.height)),`${id}-reference.png`);}
       }
       if(stopBatch)break;
+      if(context)adapter.assertSourceCurrent(snapshot!);
       const graph=client instanceof GatewayClient?{}:buildGraph({requestId:id,prompt:request.prompt,seed,steps,resolution,source,guide:guideName,reference:referenceName,models:settings.models,outputDepth:outputDepth()});
       const {mask:ignored,...metadata}=snapshot??{mask:undefined};
-      current={id,clientId,baseUrl:settings.baseUrl,state:'created',createdAt:new Date().toISOString(),graph,...(generationRequest?{backend:'gateway' as const,request:generationRequest}:{}),userPrompt,params:{workspace,mode,steps,resolution,seed,outputDepth:depth,guide,margin,usage,destination,outputKind:request.kind,modelSize,preserveAlpha:behavior.preserveAlpha,alignSubject:behavior.alignSubject,matchColor:behavior.matchColor},snapshot:snapshot?metadata:undefined,template:generationRequest?GATEWAY_TEMPLATE:templateForDepth(depth),...(generationRequest?{providerModel:generationRequest.model}:{models:{...settings.models}})};
+      current={id,clientId,baseUrl:settings.baseUrl,state:'created',createdAt:new Date().toISOString(),graph,...(generationRequest?{backend:'gateway' as const,request:generationRequest}:{}),userPrompt,params:{workspace,mode,steps,resolution,seed,outputDepth:depth,guide,margin,usage,destination,outputKind:request.kind,...(context?{assetContext:context}:{}),modelSize,preserveAlpha:behavior.preserveAlpha,alignSubject:behavior.alignSubject,matchColor:behavior.matchColor},snapshot:snapshot?metadata:undefined,template:generationRequest?GATEWAY_TEMPLATE:templateForDepth(depth),...(generationRequest?{providerModel:generationRequest.model}:{models:{...settings.models}})};
       if(captured?.documentName)current.sourceName=captured.documentName;
       if(frozenRelight&&relightCaps){current.relight={...relightTaskMetadata(frozenRelight,id,relightCaps,modelSize!,depth,seed),...(relightConflictResolution?{conflictResolution:relightConflictResolution}:{})};onRelightJob?.(id);}
       batchIds.push(id);if(operation){operation.stage='inference';operation.taskId=id;}await store.trace('task.submit',id);await coordinator.submit(current);await refreshHistory(id);await store.trace('task.wait',id);
@@ -781,6 +801,14 @@ async function apply(jobId?:string,checkOnly=false){
       taskPhase(t('正在提取光影影响场…'));
       const prepared=await prepareLightingLayerApplication(c.job,await store.readBinary(historyOutputName(c.job)),name=>store.readBinary(name));
       layerId=await adapter.applyRelightLayers(prepared.snapshot,prepared.fields,t('PS-AI 光影层 {0}',c.job.id.slice(0,8)),{onProgress:(done,total)=>taskPhase(t('写入光影层 {0} / {1}',done,total),Math.round(done/total*100))});
+    }else if((c.job.params as any)?.assetContext==='selection-v1'){
+      layerId=await withImagePixels(async()=>{
+        capture=undefined;
+        const prepared=await prepareSelectionAssetApplication(c.job,await store.readBinary(historyOutputName(c.job)),name=>store.readBinary(name),retainedImageBytes(true)),name=`PS-AI ${c.job.id.slice(0,8)}`;
+        return prepared.snapshot.captureGeometry?.kind==='edit-analysis'
+          ?adapter.applyEditAnalysis(prepared.snapshot,prepared.image,name,{preserveAlpha:false,assetContext:prepared.assetContext,retainedBytes:retainedImageBytes(true),onProgress:(done,total)=>taskPhase(t('写入原尺寸结果 {0} / {1}',done,total),Math.round(done/total*100))})
+          :adapter.apply(prepared.snapshot,prepared.image,name);
+      });
     }else if(c.snapshot.captureGeometry?.kind==='edit-analysis'){
       layerId=await withImagePixels(async()=>{
         // Every new task recaptures. Release this ordinary capture before loading
@@ -911,6 +939,8 @@ on('clear-history',()=>clearHistory());on('confirm-clear-history',()=>clearHisto
 on('stop-tracking',()=>stopTracking());on('confirm-stop-tracking',()=>stopTracking(true));on('keep-tracking',async()=>{detachAcknowledgedId=undefined;historyUi();});
 el('mode').addEventListener('change',()=>{invalidateCapture();inputUi();if(workspace==='cosplay'&&el('mode').value==='reference'){fold('reference',true);el('guide').checked=false;status(t("角色参考默认使用原图 + 参考图；范围辅助可能影响颜色，请按需试验"));}});
 el('destination').addEventListener('change',inputUi);
+el('asset-input').addEventListener('change',()=>{invalidateCapture();inputUi();});
+el('resolution').addEventListener('change',invalidateCapture);
 el('margin').addEventListener('change',()=>{capture=undefined;el('selection-previews').style.display='none';sourceCaption.show('范围参数已改变，请重新预览选区');});
 el('candidate-select').addEventListener('change',()=>void guarded(showSelected));
 on('zoom',async()=>{zoomed=!zoomed;el('zoom').textContent=zoomed?t("适应预览"):t("100% 查看");await showSelected();});
@@ -932,7 +962,8 @@ on('repeat-history',async()=>{
   try{const r=(await store.history()).find(r=>r.id===id);if(!r)throw new Error(t("请选择历史记录"));const p=r.params as any;
     if(settings.backend==='gateway'&&p.outputDepth===16)throw new Error(t('此历史为 16 位输出，请切回 ComfyUI 后恢复参数；当前平台配置保留 8 位'));views.show('create');
     if(p.mode==='relight'){const metadata=r.relight as RelightTaskMetadata|undefined;relightReuse=metadata?validateRelightScene(metadata.scene):undefined;relightReuseDescription=metadata?undefined:String(r.userPrompt??'');setWorkspace('cosplay','relight');el('relight-reuse-history').style.display='block';status(t('历史光影参数已准备，请明确点击复用到当前原图；旧候选仍可读取、应用或导出'));return;}
-    setWorkspace(p.workspace,p.mode);if(p.mode!=='remove')el('prompt').value=r.userPrompt;for(const name of ['steps','resolution','seed','destination'])el(name).value=p[name];el('output-depth').value=String(p.outputDepth??8);el('usage').value=['服装','道具','材质','场景'].includes(p.usage)?p.usage:'服装';el('guide').checked=p.guide;el('preserve-alpha').checked=p.preserveAlpha!==false;el('align-subject').checked=p.alignSubject!==false;el('match-color').checked=p.matchColor===true;el('margin').value=p.margin*100;el('lock-seed').checked=true;inputUi();status(t("参数已恢复；参考图和保护区请重新指定，提交时重新捕获"));
+    if(['effect','atmosphere'].includes(p.mode)&&p.assetContext!==undefined&&p.assetContext!=='selection-v1')throw new Error(t('素材输入方式无效，请重新选择'));
+    setWorkspace(p.workspace,p.mode);if(assetMode()){el('asset-input').value=p.assetContext==='selection-v1'?'selection-v1':'text';invalidateCapture();}if(p.mode!=='remove')el('prompt').value=r.userPrompt;for(const name of ['steps','resolution','seed','destination'])el(name).value=p[name];el('output-depth').value=String(p.outputDepth??8);el('usage').value=['服装','道具','材质','场景'].includes(p.usage)?p.usage:'服装';el('guide').checked=p.guide;el('preserve-alpha').checked=p.preserveAlpha!==false;el('align-subject').checked=p.alignSubject!==false;el('match-color').checked=p.matchColor===true;el('margin').value=p.margin*100;el('lock-seed').checked=true;inputUi();status(t("参数已恢复；参考图和保护区请重新指定，提交时重新捕获"));
   }finally{lock(false);}
 });
 on('p0',async()=>{if(busy)return;lock(true);const trace:string[]=[];try{const report=await runHostProbe(ps,adapter,trace);await store.json('p0-host-report.json',report);status(t("P0 宿主往返通过：选区外/保护区像素、原图层、蒙版、异文档与一次撤销"));}catch(error){await store.json('p0-host-report.json',{passed:false,date:new Date().toISOString(),trace,error:error instanceof Error?error.message:String(error),stack:error instanceof Error?error.stack:undefined});throw error;}finally{lock(false);}});

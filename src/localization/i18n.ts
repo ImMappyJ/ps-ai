@@ -519,6 +519,18 @@ Object.assign(english,{
   "作用区域没有可见像素，请选择可见内容后重新读取原图": "The edit range has no visible pixels. Select visible content and read the source again."
 });
 
+Object.assign(english,{
+  '素材输入':'Asset input',
+  '参考当前图片与选区':'Reference current image and selection',
+  '仅文字生成独立素材':'Text-only independent asset',
+  '素材输入方式无效，请重新选择':'Invalid asset input mode. Choose it again.',
+  '来源图与有效灰度范围图会一起送模，输出位置不改变输入。范围仅供参考，请检查结果是否残留来源人物、背景或范围图。':'The source and effective grayscale guide are sent together. Output destination does not change the input. The range is a reference; inspect the result for source people, background or guide residue.',
+  '仅使用文字生成独立素材，不读取当前图片；可另存 PNG 或新建文档。':'Generate an independent asset from text without reading the current image. Save it as PNG or open a new document.',
+  '实际送模预览：左为 sRGB 8-bit 来源图，右为扣除保护区后的灰度范围图；白色可放置，黑色不放置，灰色为羽化。':'Actual model input preview: sRGB 8-bit source on the left; grayscale placement guide after protection on the right. White allows placement, black excludes it, and gray feathers the range.',
+  '此平台模型不支持参考当前图片与选区生成透明素材；请明确选择仅文字素材或更换模型':'This platform model does not support transparent assets using the current image and selection. Explicitly choose a text-only asset or another model.',
+  '素材输出没有透明部分；原始输出可另存检查，暂不回填。':'The asset output has no transparency. Save the raw output for inspection; applying it is unavailable.'
+});
+
 let language:Language='zh-CN';
 export function setLanguage(value:Language){language=value;}
 export function t(key:string,...values:unknown[]):string {
