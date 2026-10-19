@@ -157,3 +157,65 @@ test('source and cancellation guards survive skipped selection context strips an
     await assert.rejects(h.adapter.capture(.15,undefined,7,8,{analysisResolution:32}),reason==='cancel'?/取消/:/改变/);assert.equal(h.calls.some(c=>c[0]==='pixels'),false);assert.ok(h.resources.every(r=>r.disposed));
   }
 });
+
+for(const depth of [8,16] as const)test(`selection asset strip apply keeps raw${depth} alpha and writes feather/protection exactly once`,async()=>{
+  const h=host(800,500,depth),s=h.snapshot();s.requiresClipping=true;s.clipBaseLayerId=999;
+  h.alpha(()=>0);
+  for(let p=0;p<s.mask.length;p++)s.mask[p]=[0,64,128,255][p%4];
+  const model={width:2,height:1,rgba:depth===16?new Uint16Array([12345,23456,34567,32769,12345,23456,34567,32769]):new Uint8Array([40,80,120,128,40,80,120,128])};
+  const marker={assetContext:'selection-v1'} as const;
+  await assert.rejects(h.adapter.applyEditAnalysis(s,model,'invalid',{preserveAlpha:true,...marker} as any),/策略|policy|素材|asset/i);
+  assert.equal(h.calls.length,0,'asset retention is rejected before native IO');
+  const id=await h.adapter.applyEditAnalysis(s,model,'asset',{preserveAlpha:false,...marker} as any);
+  const layer=h.doc.layers.find((l:any)=>l.id===id);
+  assert.deepEqual(layer.pieces[0].first,depth===16?[12345,23456,34567,32769]:[40,80,120,128]);
+  assert.equal(layer.isClippingMask,undefined,'context source alpha never defines an asset silhouette');
+  assert.equal(h.calls.some(c=>c[0]==='pixels'),false,'asset application must not bake source pixels or alpha');
+  const masks=h.calls.filter(c=>c[0]==='mask');
+  assert.ok(masks.length>1);
+  assert.deepEqual([...((await masks[0][1].imageData.getData()).subarray(0,4))],depth===16?[0,64*257,128*257,65535]:[0,64,128,255]);
+  assert.ok(h.calls.filter(c=>c[0]==='write'||c[0]==='mask').every(c=>c[1].replace===false));
+  assert.deepEqual(h.doc.layers.filter((l:any)=>l.id===1),[h.original]);
+  assert.deepEqual(h.calls.filter(c=>c[0]==='resume'),[['resume',true]],'one native history transaction');
+  assert.ok(h.resources.every(r=>r.disposed));
+});
+
+test('selection asset writer rejects unknown markers, background reconstruction and stale source authority',async()=>{
+  const model={width:1,height:1,rgba:new Uint8Array([100,150,200,128])};
+  for(const failure of ['marker','background','session','closed','history']){
+    const h=host(800,500,8),s=h.snapshot();let assetContext='selection-v1';
+    if(failure==='marker')assetContext='selection-v2';
+    if(failure==='background')s.backgroundComposite='subject-background-v1';
+    if(failure==='session')s.sessionId='old';
+    if(failure==='closed')h.ps.app.documents=[];
+    if(failure==='history')h.doc.activeHistoryState.id++;
+    await assert.rejects(h.adapter.applyEditAnalysis(s,model,'invalid',{preserveAlpha:false,assetContext} as any));
+    assert.deepEqual(h.doc.layers,[h.original]);assert.equal(h.calls.length,0);
+  }
+});
+
+test('selection asset failure or cancellation after partial writing rolls back the layer and source history',async()=>{
+  for(const failure of ['mask','cancel']){
+    const h=host(800,500,16),s=h.snapshot(),controller=new AbortController();
+    if(failure==='mask')h.ps.imaging.putLayerMask=async()=>{throw Error('asset mask failed');};
+    await assert.rejects(h.adapter.applyEditAnalysis(s,{width:1,height:1,rgba:new Uint16Array([12345,23456,34567,32769])},'asset',{preserveAlpha:false,assetContext:'selection-v1',signal:controller.signal,onProgress:(done:number)=>{if(failure==='cancel'&&done===3)controller.abort();}} as any));
+    assert.deepEqual(h.doc.layers,[h.original]);assert.equal(h.doc.activeHistoryState.id,3);
+    assert.deepEqual(h.calls.filter(c=>c[0]==='resume'),[['resume',false]]);assert.ok(h.resources.every(r=>r.disposed));
+  }
+});
+
+test('opaque selection asset writing is blocked at the native strategy boundary before any host IO',async()=>{
+  const h=host(800,500,8);
+  await assert.rejects(h.adapter.applyEditAnalysis(h.snapshot(),{width:1,height:1,rgba:new Uint8Array([100,150,200,255])},'opaque',{preserveAlpha:false,assetContext:'selection-v1'}),/透明|transparen/i);
+  assert.equal(h.calls.length,0);assert.deepEqual(h.doc.layers,[h.original]);
+});
+
+test('8-bit asset strips use native offsets, premultiplied sampling and one 16-bit feather without source alpha',async()=>{
+  const h=host(800,500,16),s=h.snapshot(4,1);s.bounds={left:12,top:21,right:16,bottom:22};s.captureGeometry={kind:'edit-analysis',width:2,height:1};s.mask=new Uint8Array([0,64,128,255]);h.alpha(()=>0);
+  let written:any;
+  h.ps.imaging.putPixels=async(o:any)=>{written={bounds:o.targetBounds,rgba:[...await o.imageData.getData()]};};
+  await h.adapter.applyEditAnalysis(s,{width:2,height:1,rgba:new Uint8Array([0,0,0,0,100,150,200,128])},'offset',{preserveAlpha:false,assetContext:'selection-v1'});
+  assert.deepEqual(written,{bounds:{left:12,top:21},rgba:[0,0,0,0,25700,38550,51400,8224,25700,38550,51400,24672,25700,38550,51400,32896]});
+  const mask=h.calls.find(c=>c[0]==='mask')[1];assert.deepEqual(mask.targetBounds,{left:12,top:21});assert.deepEqual([...await mask.imageData.getData()],[0,16448,32896,65535]);
+  assert.equal(h.calls.some(c=>c[0]==='pixels'),false);
+});

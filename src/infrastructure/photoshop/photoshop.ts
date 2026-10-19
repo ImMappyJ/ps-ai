@@ -10,7 +10,7 @@ import {sha256} from '@noble/hashes/sha2.js';
 export interface Snapshot {documentId:number;width:number;height:number;profile:string;mode:string;depth:unknown;nativeDepth?:8|16;historyId:number;sessionId:string;bounds:Bounds;mask:Uint8Array;sourceHash:string;sourceLayerIds?:number[];clipBaseLayerId?:number;requiresClipping?:boolean;colorReason?:SourceColorReason;backgroundComposite?:'subject-background-v1';captureGeometry?:{kind:'relight-analysis'|'edit-analysis';width:number;height:number}}
 export interface Capture {snapshot:Snapshot;image:Raster;selectionMask:Uint8Array;protectionMask:Uint8Array;subjectMask?:Uint8Array;workingCopyOf?:number;documentName?:string}
 export interface CaptureOptions {context?:'selection'|'document';selection?:'edit'|'subject-background'|'document';preserveNativeDepth?:boolean;purpose?:'relight-analysis';analysisResolution?:number;retainedBytes?:number;excludeApplications?:boolean}
-export interface EditAnalysisApplyOptions {preserveAlpha:boolean;subjectMask?:Uint8Array;protectionMask?:Uint8Array;signal?:AbortSignal;onProgress?:(done:number,total:number)=>void;retainedBytes?:number}
+export interface EditAnalysisApplyOptions {preserveAlpha:boolean;assetContext?:'selection-v1';subjectMask?:Uint8Array;protectionMask?:Uint8Array;signal?:AbortSignal;onProgress?:(done:number,total:number)=>void;retainedBytes?:number}
 export interface Protection {documentId:number;width:number;height:number;bounds:Bounds;mask:Uint8Array;sessionId:string}
 /** Geometry only: restoring it grants no permission to apply an old candidate. */
 export interface SelectionRange {documentId:number;sessionId:string;width:number;height:number;mode:string;depth:unknown;bounds:Bounds;mask:Uint8Array}
@@ -507,6 +507,12 @@ export class PhotoshopAdapter {
     checkDocumentSize(snapshot.width,snapshot.height);checkDocumentSize(width,height);checkSize(image.width,image.height);
     if(!Object.values(b).every(Number.isSafeInteger)||b.left<0||b.top<0||b.right>snapshot.width||b.bottom>snapshot.height||g?.kind!=='edit-analysis'||!Number.isSafeInteger(g.width)||!Number.isSafeInteger(g.height)||g.width<1||g.height<1||g.width*g.height>IMAGE_BUDGETS.editPixels||Math.max(g.width,g.height)>IMAGE_BUDGETS.editSide||snapshot.nativeDepth!==8&&snapshot.nativeDepth!==16||typeof snapshot.requiresClipping!=='boolean'||!(snapshot.mask instanceof Uint8Array)||snapshot.mask.length!==width*height||!snapshot.mask.some(v=>v>0)||image.rgba.length!==image.width*image.height*4)throw new Error('编辑工作图来源、尺寸或原生蒙版无效，请重新捕获');
     if(!options||typeof options.preserveAlpha!=='boolean'||options.retainedBytes!==undefined&&(!Number.isSafeInteger(options.retainedBytes)||options.retainedBytes<0)||background&&(options.preserveAlpha||!(options.subjectMask instanceof Uint8Array)||options.subjectMask.length!==width*height||!(options.protectionMask instanceof Uint8Array)||options.protectionMask.length!==width*height||snapshot.requiresClipping)||!background&&(options.subjectMask!==undefined||options.protectionMask!==undefined))throw new Error('编辑工作图回填策略或背景蒙版无效');
+    if(options.assetContext!==undefined&&(options.assetContext!=='selection-v1'||options.preserveAlpha||background||options.subjectMask!==undefined||options.protectionMask!==undefined))throw new Error('编辑工作图回填策略或背景蒙版无效');
+    if(options.assetContext){
+      const max=rasterMax(image);let transparent=false;
+      for(let p=3;p<image.rgba.length;p+=4)if(image.rgba[p]<max){transparent=true;break;}
+      if(!transparent)throw new Error('素材输出没有透明部分；原始输出可另存检查，暂不回填。');
+    }
     const masks=new Set<Uint8Array>([snapshot.mask,...(options.subjectMask?[options.subjectMask]:[]),...(options.protectionMask?[options.protectionMask]:[])]);
     planEditApplyMemory(width,height,snapshot.nativeDepth,image.rgba.byteLength,[...masks].reduce((sum,m)=>sum+m.byteLength,0),options.retainedBytes);
     const check=(context?:any)=>{if(options.signal?.aborted||context?.isCancelled){const error=new Error('候选回填已取消，已回滚本次操作');error.name='AbortError';throw error;}};

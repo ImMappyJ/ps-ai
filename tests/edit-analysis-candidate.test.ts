@@ -105,3 +105,68 @@ test('edit-analysis background rejects missing native matte data and preserves l
   assert.match(result.warning??'',/透明|transparent/i);
   assert.deepEqual(result.image.rgba,f.model.rgba,'unsafe raw output stays exportable and is not made opaque');
 });
+
+for(const mode of ['effect','atmosphere'])for(const depth of [8,16] as const)test(`${mode} selection assets keep raw${depth} alpha and native masks across bounded history and application`,async()=>{
+  const f=fixture(mode,depth),params=f.record.params as any;
+  Object.assign(params,{outputKind:'asset',assetContext:'selection-v1',preserveAlpha:true,alignSubject:true,matchColor:true});
+  for(let p=0;p<f.source.width*f.source.height;p++)f.source.rgba[p*4+3]=0;
+  let hash=2166136261;for(const value of f.source.rgba)hash=Math.imul(hash^value,16777619);
+  (f.record.snapshot as any).sourceHash=(hash>>>0).toString(16);
+  f.files[`${id}-source.png`]=encodePng(f.source);
+  for(let p=0;p<f.mask.length;p++){f.subject[p]=[0,128,128,255][p%4];f.protection[p]=[0,128,0,0][p%4];f.mask[p]=[0,64,128,255][p%4];}
+  const model:Raster=depth===16?{width:3,height:2,rgba:new Uint16Array([12345,23456,34567,16385,23457,34568,45679,32769,45679,23457,12345,65535,12345,23456,34567,0,23457,34568,45679,32769,45679,23457,12345,65535])}:f.model;
+  if(depth===16)f.record.template='qwen21-local-v3-rgba16';
+  const bytes=encodePng(model),candidate=await preparation.prepareCandidate(f.record,bytes,f.read);
+  assert.deepEqual(candidate.image,model,'source alpha, alignment and edit color preferences must not change independent assets');
+  assert.deepEqual(candidate.snapshot?.bounds,{left:12,top:21,right:20,bottom:27});
+  assert.equal(candidate.snapshot?.mask.length,0,'history preview releases full native mask');
+  assert.deepEqual((f.record.params as any).outputKind,'asset');
+  const application=await preparation.prepareEditAnalysisApplication(f.record,bytes,f.read);
+  assert.deepEqual(application.image,model,'application starts from raw model alpha before the native editable mask');
+  assert.equal(application.preserveAlpha,false);
+  assert.equal((application as any).assetContext,'selection-v1');
+  assert.deepEqual(application.snapshot.mask,f.mask);
+  assert.equal(f.record.id,id,'restoration retains the original UUID');
+  assert.doesNotThrow(()=>preparation.preflightEditAnalysisCandidate(f.record));
+});
+
+test('new bounded assets require the frozen marker and cannot claim edit semantics',async()=>{
+  const f=fixture('effect'),params=f.record.params as any;
+  Object.assign(params,{outputKind:'asset',assetContext:'selection-v1'});
+  for(const patch of [{assetContext:undefined},{assetContext:'selection-v2'},{outputKind:'edit'},{mode:'edit'}]){
+    const saved={...params};Object.assign(params,patch);
+    await assert.rejects(preparation.prepareCandidate(f.record,encodePng(f.model),f.read),/历史|history|来源|source/i);
+    Object.assign(params,saved);
+  }
+  assert.deepEqual(f.reads,[],'invalid saved semantics reject before reading local planes');
+});
+
+test('selection asset candidates reject broken native geometry and keep raw output bytes intact',async()=>{
+  const f=fixture('effect');Object.assign(f.record.params as any,{outputKind:'asset',assetContext:'selection-v1'});
+  const bytes=encodePng(f.model),saved=bytes.slice();
+  f.files[`${id}-mask.bin`]=new Uint8Array(4*3).fill(128);
+  await assert.rejects(preparation.prepareCandidate(f.record,bytes,f.read),/历史|history|蒙版|mask/i);
+  assert.deepEqual(bytes,saved);
+});
+
+test('selection assets verify original selection and protection against the saved effective plane',async()=>{
+  const f=fixture('effect');Object.assign(f.record.params as any,{outputKind:'asset',assetContext:'selection-v1'});
+  f.mask.fill(128);f.protection.fill(0);
+  const bytes=encodePng(f.model);
+  await preparation.prepareCandidate(f.record,bytes,f.read);
+  for(const suffix of ['subject-mask.bin','protection-mask.bin']){
+    const name=`${id}-${suffix}`,saved=f.files[name];f.files[name]=saved.subarray(0,saved.length-1);
+    await assert.rejects(preparation.prepareCandidate(f.record,bytes,f.read),/历史|history|蒙版|mask/i);f.files[name]=saved;
+  }
+  f.protection[2]=128;
+  await assert.rejects(preparation.prepareEditAnalysisApplication(f.record,bytes,f.read),/历史|history|蒙版|mask/i);
+});
+
+test('bounded selection assets retain opaque output for export but every application preparation blocks it',async()=>{
+  const f=fixture('effect');Object.assign(f.record.params as any,{outputKind:'asset',assetContext:'selection-v1'});f.protection.fill(0);f.mask.fill(128);
+  for(let p=3;p<f.model.rgba.length;p+=4)f.model.rgba[p]=255;
+  const bytes=encodePng(f.model),candidate=await preparation.prepareCandidate(f.record,bytes,f.read);
+  assert.match(candidate.warning??'',/透明|transparen/i);assert.deepEqual(candidate.image,f.model);
+  await assert.rejects(preparation.prepareEditAnalysisApplication(f.record,bytes,f.read),(error:any)=>error.code==='invalid-output');
+  await assert.rejects((preparation as any).prepareSelectionAssetApplication(f.record,bytes,f.read),(error:any)=>error.code==='invalid-output');
+});
