@@ -112,6 +112,27 @@ test('working-copy color is a committed baseline: apply then native undo can cap
   assert.equal(h.copy.layers.length,1);assert.equal(h.doc.colorProfileName,'None');assert.equal(h.doc.activeHistoryState.id,91);
 });
 
+test('verified color-copy capture keeps the original frozen mask when native duplicate has no selection',async()=>{
+  for(const analysis of [false,true]){
+    const h=colorHistoryHost(),originalSelection=JSON.stringify(h.doc.selection.bounds);h.copy.selection={bounds:null};
+    const captured=await h.adapter.capture(0,undefined,11,8,analysis?{purpose:'relight-analysis',preserveNativeDepth:true}:{});
+    assert.equal(captured.snapshot.documentId,22);assert.equal(captured.workingCopyOf,11);assert.equal(captured.snapshot.profile,'sRGB IEC61966-2.1');
+    const width=captured.snapshot.bounds.right-captured.snapshot.bounds.left,at=(30-captured.snapshot.bounds.top)*width+40-captured.snapshot.bounds.left;
+    assert.deepEqual([...captured.selectionMask.slice(at,at+2)],[255,128]);assert.equal(captured.selectionMask[at+width],0);assert.equal(captured.selectionMask[at+width+1],255);
+    assert.equal(JSON.stringify(h.doc.selection.bounds),originalSelection);assert.equal(h.copy.selection.bounds,null);assert.equal(h.doc.activeHistoryState.id,91);assert.equal(h.reads(),1);
+  }
+});
+
+test('copy capture still rejects original source or either document selection changes during pixel reads',async()=>{
+  const changes=[(h:any)=>h.doc.activeHistoryState.id++,(h:any)=>h.doc.selection.bounds=null,(h:any)=>h.copy.activeHistoryState.id++,(h:any)=>h.copy.selection.bounds={left:40,top:30,right:42,bottom:32}];
+  for(const change of changes){
+    const h=colorHistoryHost();h.copy.selection={bounds:null};const getPixels=h.ps.imaging.getPixels;
+    h.ps.imaging.getPixels=async(options:any)=>{const result=await getPixels(options),getData=result.imageData.getData;result.imageData.getData=async()=>{const values=await getData();change(h);return values;};return result;};
+    await assert.rejects(h.adapter.capture(0,undefined,11,8,{purpose:'relight-analysis',preserveNativeDepth:true}),/来源.*改变/);
+    assert.equal(h.ps.app.documents.length,1);assert.equal(h.ps.app.activeDocument.id,11);assert.equal(h.doc.colorProfileName,'None');
+  }
+});
+
 test('a lost or inconsistent profile is never inferred from a pathless copy or a previous adapter session',async()=>{
   const h=colorHistoryHost(),captured=await h.adapter.capture(0,undefined,11);
   h.copy.colorProfileType='none';
@@ -151,7 +172,7 @@ test('verified saved sRGB uses a tagged working copy for capture and apply witho
   const copy:any={...h.doc,id:22,colorProfileName:'',layers:h.doc.layers.map((l:any,i:number)=>({...l,id:9+i})),activeHistoryState:{id:200},closeWithoutSaving:async()=>{h.calls.push('close-copy');h.ps.app.documents=[h.doc];}};
   copy.createLayer=async()=>{h.calls.push('copy-layer');const layer={id:56,move:async()=>{}};copy.layers.unshift(layer);return layer;};
   h.doc.duplicate=async(_name:string,merge:boolean)=>{assert.equal(merge,false);h.ps.app.documents.push(copy);h.ps.app.activeDocument=copy;return copy;};
-  const modal=h.ps.core.executeAsModal;h.ps.core.executeAsModal=(fn:any)=>modal((ctx:any)=>fn({...ctx,hostControl:{...ctx.hostControl,registerAutoCloseDocument:async()=>{},unregisterAutoCloseDocument:async()=>{}}}));
+  const modal=h.ps.core.executeAsModal;h.ps.core.executeAsModal=(fn:any)=>modal((ctx:any)=>fn({...ctx,hostControl:{...ctx.hostControl,registerAutoCloseDocument:async()=>{},unregisterAutoCloseDocument:async()=>{},resumeHistory:async(_id:number,commit:boolean)=>{if(commit)copy.activeHistoryState={id:copy.activeHistoryState.id+1};}}}));
   const adapter=new PhotoshopAdapter(h.ps,'session-a',async()=>{},async()=>({kind:'srgb',format:'webp',width:100,height:80,depth:8,reason:'webp-default'}));
   const captured=await adapter.capture(0,undefined,11);
   assert.equal(h.doc.colorProfileName,'');assert.equal(copy.colorProfileName,'sRGB IEC61966-2.1');
@@ -165,7 +186,7 @@ test('untagged PNG16 working copy preserves high samples, semi-alpha and origina
   const h=host();h.doc.colorProfileName='';h.doc.saved=false;h.doc.bitsPerChannel='bitDepth16';h.ps.constants.BitsPerChannelType.SIXTEEN='bitDepth16';
   const copy:any={...h.doc,id:22,layers:[{...h.doc.layers[0],id:9}],closeWithoutSaving:async()=>{}};
   h.doc.duplicate=async()=>{h.ps.app.documents.push(copy);h.ps.app.activeDocument=copy;return copy;};
-  const modal=h.ps.core.executeAsModal;h.ps.core.executeAsModal=(fn:any)=>modal((ctx:any)=>fn({...ctx,hostControl:{...ctx.hostControl,registerAutoCloseDocument:async()=>{},unregisterAutoCloseDocument:async()=>{}}}));
+  const modal=h.ps.core.executeAsModal;h.ps.core.executeAsModal=(fn:any)=>modal((ctx:any)=>fn({...ctx,hostControl:{...ctx.hostControl,registerAutoCloseDocument:async()=>{},unregisterAutoCloseDocument:async()=>{},resumeHistory:async(_id:number,commit:boolean)=>{if(commit)copy.activeHistoryState={id:copy.activeHistoryState.id+1};}}}));
   h.ps.imaging.getPixels=async()=>({imageData:{width:1,height:1,components:4,componentSize:16,getData:async()=>new Uint16Array([12345,23456,34567,45678]),dispose(){}},sourceBounds:{left:40,top:30,right:41,bottom:31}});
   const adapter=new PhotoshopAdapter(h.ps,'session-a',async()=>{},async()=>({kind:'srgb',format:'png',width:100,height:80,depth:16,reason:'png-srgb'}));
   const protection={documentId:11,width:100,height:80,bounds:{left:40,top:30,right:42,bottom:32},mask:new Uint8Array([0,255,0,0]),sessionId:'session-a'};

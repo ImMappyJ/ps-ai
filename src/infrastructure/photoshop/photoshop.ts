@@ -306,7 +306,7 @@ export class PhotoshopAdapter {
         for(const layer of results)layer.opacity=0;
         state=this.sourceState(doc);
       }
-      const guard=()=>{if(context.isCancelled)throw new DiagnosticError('cancelled','capture','原图读取已取消');if(state!==this.sourceState(doc)||!whole&&selectionState!==JSON.stringify(doc.selection.bounds))throw new Error('来源或选区已改变，请重新读取原图；原有布光配置已保留');};
+      const guard=()=>{if(context.isCancelled)throw new DiagnosticError('cancelled','capture','原图读取已取消');if(state!==this.sourceState(original)||!whole&&selectionState!==JSON.stringify(original.selection.bounds))throw new Error('来源或选区已改变，请重新读取原图；原有布光配置已保留');};
       let mask=whole?new Uint8Array(doc.width*doc.height).fill(255):bounded?await this.maskStrips(doc,bounds,guard):await this.mask(doc.id,bounds);
       if(!mask.some(v=>v>0))throw new DiagnosticError('selection-required','capture','选区为空');
       let selectionMask=mask;const subjectMask=background?mask:undefined,protectionMask=new Uint8Array(mask.length);
@@ -324,7 +324,12 @@ export class PhotoshopAdapter {
       if(background&&editAnalysis&&mask===subjectMask)mask=new Uint8Array(mask.length);
       let copy:any,colorOrigin:string|undefined,keepCopy=false,copyUnregistered=false;
       try {
+        guard();
         if(color){copy=await this.colorCopy(doc,context,value=>{colorOrigin=value;});doc=copy;}
+        // Native duplication may leave the new document without a selection.
+        // The mask is already frozen from the original; guard each document's
+        // own selection baseline rather than comparing unrelated DOM states.
+        const pixelSelectionState=whole?undefined:JSON.stringify(doc.selection.bounds);
         await this.checkpoint('capture.pixels.read');
         const pixelState=this.sourceState(doc);
         const result=await this.ps.imaging.getPixels({documentID:doc.id,sourceBounds:bounds,...(memory?{targetSize:{width:memory.width,height:memory.height}}:{}),colorSpace:'RGB',colorProfile:'sRGB IEC61966-2.1',componentSize:doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,applyAlpha:false});
@@ -343,7 +348,7 @@ export class PhotoshopAdapter {
         if(context.isCancelled)throw new DiagnosticError('cancelled','capture','原图读取已取消');
         if(pixelState!==this.sourceState(doc))throw new Error('来源文档尺寸、颜色或内容状态已改变，请重新捕获');
         let nativeScan:{requiresClipping:boolean;clipBaseLayerId?:number;selectionMask?:Uint8Array}|undefined;
-        const pixelGuard=()=>{if(context.isCancelled)throw new DiagnosticError('cancelled','capture','原图读取已取消');if(pixelState!==this.sourceState(doc)||!whole&&selectionState!==JSON.stringify(doc.selection.bounds))throw new Error('来源或选区已改变，请重新读取原图');};
+        const pixelGuard=()=>{guard();if(pixelState!==this.sourceState(doc)||!whole&&pixelSelectionState!==JSON.stringify(doc.selection.bounds))throw new Error('来源或选区已改变，请重新读取原图');};
         if(editAnalysis){nativeScan=await this.scanEditSource(doc,bounds,mask,pixelGuard,subjectMask,protectionMask);if(nativeScan.selectionMask)selectionMask=nativeScan.selectionMask;}
         if(background&&!editAnalysis){
           selectionMask=backgroundEditMask(image,subjectMask!);
