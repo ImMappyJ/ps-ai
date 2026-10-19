@@ -116,6 +116,10 @@ Key 按平台加密保存在 UXP secureStorage，服务只在内存持有。cred
 
 `kind` 为 `t2i`、`edit`、`asset`。`mode` 沿用插件的十一种模式，`relight` 和 `blend` 均属于 `edit`。编辑必须提供来源图；范围辅助与参考图按需加入。发给平台的顺序固定为来源、辅助、参考，缺省项不占位置。平台意图不自动写入图片编号，由适配器绑定实际角色。百炼／Gemini 以灰度辅助图提示范围；OpenAI 将它转为独立 mask（alpha=255-gray），images 只保留来源和参考。最终范围仍由 Photoshop 选区与保护区约束。
 
+参考图片素材保留 `kind: asset`，增加 `assetContext: selection-v1`，必须同时携带 source 和 guide，禁止额外 reference。模型的可选 `assetContexts` 必须声明该版本；未声明、未知版本或在其他 kind 使用均在上传前拒绝。无标记素材保持纯文字含义，不得夹带图像。新捕获将原生位深来源与 sRGB8 送模图分开，保存原始选区、保护区及有效蒙版。回填保留输出自身 alpha，只施加一次原生有效蒙版，重新核对保存的 UUID，不重新提交。
+
+ComfyUI 按来源、范围图排序，保留现有 LoadImage 倒置 MASK 到 alpha 的直接连接。百炼 2.1 发送两图及独立素材语义；百炼 3.0 与 Gemini 不声明该能力。OpenAI 使用 edits，images 中为来源，范围图转独立原生蒙版 alpha=255-gray；来源与蒙版同变换、补边受保护，显式透明输出并逆裁。离线测试覆盖请求几何、原始输出保留和原 UUID 恢复。真实 ComfyUI 样本出现来源残留或范围图被画入，视觉验收未通过；平台真实验收等待 API Key。存在透明像素只是必要条件，不能证明素材质量。
+
 能力清单至少包含 `protocol: ps-ai/1`、`provider`、`configured`、`cancellation: none`、`progress: stages` 和 `models`。每个模型给出 `id`、`label`、`operations`、`maxInputImages`、`outputDepths`、`seedMax`、`minPixels`、`maxPixels`、`maxAspectRatio`。`seedMax: 0` 表示没有可设种子，信封只接受占位值 0，不向平台传种子；未知参数会被拒绝。本协议版本只支持 8 位输出、阶段进度和不保证中断的取消语义；需要真实步数、更多参数或其他取消保证时，应先扩展客户端和协议版本，不能伪造字段。
 
 状态是 `queued`、`running`、`ready`、`failed`、`cancelled` 或 `unknown`。只有 `ready` 才提供：

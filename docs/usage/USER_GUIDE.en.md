@@ -29,15 +29,19 @@ Display previews are separate from candidate and export pixels. Existing task pa
 
 ## Changes in this development build
 
+The product version stays **0.5.0**. Use the separate Git build identifier in Settings to distinguish revisions; the v0.4.0 screenshots and historical v0.5.2 evidence below retain their original versions.
+
 Opening the panel restores local settings and history metadata without automatically contacting a backend, scanning models or launching a relay. Choose Connect or Generate when needed. An offline backend does not block local navigation, and history images decode on demand. Installed Photoshop cold-start timing still requires separate measurement.
 
 Automatically view results when complete defaults on and can be disabled in Settings. After an explicitly submitted batch has downloaded, validated, saved and prepared all candidates, the panel locates that batch by task ID once. Text input, dragging, an open lighting dialog or a hidden panel defers this navigation. Nothing is applied automatically. Failure, cancellation and partial success retain available candidates without claiming complete success.
 
 Narrow History starts with the list. Selecting a record opens details; Back to history restores the filter, page, checks and browsing position. Select all still includes every page in the current filter. Create errors do not occupy History, and empty history has no empty task form.
 
+History browsing and current Results are independent. A loaded candidate’s action uses its saved task UUID and source snapshot; browsing an invalid record cannot disable another valid candidate. Changed, closed or earlier-session sources offer a clickable Check source action with the reason and available recovery path, without writing to the document. Failed lighting extraction retains reference inspection/export and cannot become applicable by switching modes.
+
 New lighting sessions default to Lighting layers; Full redraw remains an explicit choice. Old tasks retain their original output type. Lighting layers use one model target as a low-resolution lighting reference, then derive local influence fields over a native base copied from the original document. These fields can still alter the appearance of faces, lettering and materials. Structural mismatch or unsupported color/transparency conditions refuse application while retaining the reference output; there is no automatic redraw fallback. Initial layers support sRGB RGB8/16 with opaque editable pixels. Wide-gamut, grayscale and translucent edit regions require explicitly choosing the existing Full redraw path. Real-photo lighting quality requires human acceptance.
 
-The visible or reopening workbench checks its bound source. A compatible source change can refresh automatically before any result exists, while no task or interaction is active. With results, changed geometry/profile or a changed scope/output choice, use Reread original explicitly; it retains lighting parameters and targets the same document even if another is active. Binding another document requires Bind current document. Existing results stay attached to their submitted snapshots and gain no new apply permission from a reread. Undo or hide an already applied candidate before rereading, so it cannot become the new source. A failed refresh remains visibly stale without repeated automatic captures.
+Reopening retains the source, lights and candidates even when the source was changed or closed. Compatible changes before any result may refresh automatically; otherwise use Reread original, which targets the bound document and retains lights. If an applied plugin result remains visible, use Exclude applied results and reread: it sets only the recorded visible plugin output layers/groups to zero opacity and captures the current edits. One Photoshop undo restores that operation; failure rolls it back. Use Bind current document to change documents. Rereading grants no new apply permission to old candidates, and export remains available when the source is unavailable.
 
 Source documents are limited to 45,000,000 pixels and a 30,000-pixel side. Large selections in ordinary editing, background/scene, blend and full redraw automatically use a budgeted working raster when native-resolution capture would exceed its budget. Selection feathering, protection and application coordinates remain at native size. The panel shows document, working, model-input and application dimensions. Analysis resolution, retained candidates and other session buffers affect the available budget; upsampling does not produce native 45MP model detail.
 
@@ -74,7 +78,19 @@ Disabling remembering removes saved grants while retaining session access. **Cle
 
 Canceling, choosing a different file, exceeding 64 MB, an unverifiable original file or unknown color stops capture before uploading that area. Confirm the true color space, use Edit → Assign Profile on a copy and capture again. Photoshop 27 read this WebP and verified working-copy capture, identity apply (zero pixel difference), single undo and cleanup on a disposable untagged duplicate, with the original unchanged. Native PNG, reference import and new panel interactions remain pending. Published v0.4.0 still needs a tagged copy as described above.
 
-A later development fix commits the working copy's sRGB assignment as a separate history baseline. Undoing one candidate application should therefore retain the profile, avoiding a failed recapture caused by a pathless, untagged copy. This undo/recapture fix has mock regression coverage and still needs native acceptance with the new build. A pathless copy already left untagged by an older build is not automatically assumed to be sRGB: confirm and assign the correct profile, or capture again from the original. Deliberate profile changes, removal, closing and reopening still trigger source checks; old candidates remain exportable.
+The working copy’s sRGB assignment is a separate history baseline. After repeated undo reaches the state before assignment, Create recovered color copy and reread is offered only when this plugin session can prove the copy’s origin and exact history state. It creates a new tagged copy while preserving the old document and its redo history, then rereads current pixels, selection and protection. Old candidates retain their old snapshots. A failed read can retry the same new copy without duplicating it; clearing or changing protection affects the retry. A valid current ICC takes priority without original-file access. Unknown, earlier-session or arbitrary pathless untagged documents still require a verified manual profile assignment. PS27 RGB8/16 synthetic API checks passed repeated undo, recovery, preservation and one apply/undo; installed-panel interaction is verified separately.
+
+<a id="context-assets"></a>
+
+## Assets using the image and selection (0.5.0)
+
+New Effect / Atmosphere asset tasks default to Reference current image and selection. Select where the asset belongs, optionally define protection, then preview the actual inputs: the left image is the sRGB8 source sent to the model; the right is the effective grayscale range after protection. White permits placement, black excludes it and gray retains feathering. The current visible composite and guide share the same crop and scale; native source, selection and protection are saved separately. This required guide is sent regardless of the ordinary optional-guide switch.
+
+Input and destination are independent. New document still sends the current image and selection. Only explicitly choosing Text-only independent asset avoids reading the image and offers PNG export or a new document. Old unmarked tasks keep their saved meaning; reusing their parameters explicitly selects text-only and never adds uploads or resubmits them. Imported character/style references are not used for assets. Unsupported model combinations fail before upload; explicitly choose text-only or a supported model.
+
+Selection application uses the saved native coordinates and effective gray mask once. The asset retains its own alpha without multiplying source alpha, subject alignment or ordinary edit color matching. Large areas use a budgeted working raster and native-size strip application. Apply reloads that UUID’s source and masks and checks depth and history. Changed or closed sources retain export; browsing history cannot bypass source checks. Fully opaque outputs can be saved for inspection but cannot be applied.
+
+**This iteration’s real ComfyUI visual checks failed.** The source and guide were sent for hand arcs, portrait smoke, perspective beams and feathered face protection. Outputs retained source people/environments or painted guide boundaries. One separate prompt comparison still retained source content. Transparent pixels alone do not establish a usable independent asset: inspect against light and dark backgrounds for source and guide residue. Platform request structures have offline coverage, but real platform output remains untested without API keys. Failures retain the original task and raw output; recovery queries the original UUID without automatically generating again.
 
 ## Shared test settings
 
@@ -338,6 +354,8 @@ The garden and path fill the background, rather than a small patch around the le
 
 <a id="effect"></a>
 
+The following v0.4.0 example uses text-only generation. In 0.5.0 explicitly choose Text-only independent asset to reproduce it.
+
 ## 07 · Effect
 
 <table>
@@ -373,6 +391,8 @@ The first prompt asked for smoke around the legs with an empty center and produc
 </details>
 
 <a id="atmosphere"></a>
+
+The following v0.4.0 example uses text-only generation. In 0.5.0 explicitly choose Text-only independent asset to reproduce it.
 
 ## 08 · Atmosphere
 
@@ -447,6 +467,10 @@ The result includes pink hair, a white blouse, a pink / navy coat and complete f
 
 ## 10 · Relighting (development build)
 
+Intensity, temperature, range, depth, softness, cone angle, direction, elevation, ambient and shadow parameters have horizontal sliders with precise numeric inputs. One continuous drag is one workbench undo; Esc cancels the current gesture. Keyboard and numeric edits stay synchronized, and light type/color mode controls parameter visibility. Dragging updates only the local illustration, without capture, submission or per-event draft writes.
+
+This iteration’s PS27 RGB8/16 synthetic API checks passed actual field extraction, native Shadow/Light groups, grayscale masks and protection, source preservation, one undo and failure rollback. Native-versus-preview maxima were 1/255 and 3/65535. The original failed task was read offline by its existing UUID; failures distinguish structural mismatch from unsupported boundaries and retain raw-reference export. These checks do not establish real-photo detail fidelity, every lighting channel or the complete installed-panel workflow. Final lighting visual acceptance belongs to the user.
+
 Relighting uses a separate large lighting workbench. Original, local illustration and AI result are distinct views. **The illustration expresses lighting intent; inspect the prepared result before applying it.** Lighting layers derive fields from the model reference; Full redraw uses the model image itself. Models receive semantic lighting instructions, without a guarantee of precise multi-light control, physical shadows or material simulation.
 
 1. Work in a saved copy and set protection for details that must remain unchanged. Choose **Portrait → Relighting → Lighting scope**: **Current selection** is the default and requires an edit selection; **Entire image** explicitly edits the full canvas minus protection without changing Photoshop's selection. Include the receiving ground in the selected scope if its shadows should change. Capture reads the visible composite; surrounding context alone never expands the editable mask.
@@ -463,7 +487,7 @@ Structured relighting disables subject alignment and context color matching so t
 
 Reopening retains the captured scope and edited lighting. To change scope, close the workbench, choose the new Lighting scope in the main panel, reopen and explicitly **Re-read source**. Until reread succeeds, the caption keeps the old scope and generation is blocked. Reread retains the lighting setup and binds a fresh snapshot; failed rereads keep the old source and edits. Draft/history reuse uses the current explicitly chosen source and scope rather than silently changing the range. These scope and file-authorization interactions have automated mock coverage; their installed-panel acceptance is still pending, separate from the synthetic API checks below.
 
-**The older per-pixel compensation experiment cannot be applied.** Its numerical diagnostics use aligned, opaque, equal-depth encoded-sRGB data to produce Multiply dark and Screen light maps. The new experimental lighting fields use separate filtering and confidence checks; they are still estimates, not independent physical lighting channels. Failed extraction keeps the reference for inspection/export and never silently switches to Full redraw or creates an empty lighting group.
+The workbench offers exactly Full redraw and Lighting layers. The former compensation experiment and its diagnostics have been removed. Lighting fields remain estimates rather than independent physical channels. Failed extraction retains the reference for inspection/export and never switches silently to Full redraw or creates an empty group.
 
 The existing nine-mode screenshots do not validate this workbench. Earlier source modules passed light interaction, resizing and 4K eight-light preview checks in a PS27 script; those timings describe the prior preview implementation. On 2026-10-19 local time, separate synthetic PS27 API checks verified source preservation, hiding the group and one undo for 1024×300 sRGB8/16, plus 9000×5000 RGB8 analysis capture, strip writing and one undo. A follow-up with a feathered mask kept protected pixels unchanged; native versus local-preview maximum differences were 2/255 and 3/65535. These checks did not test real-photo lighting quality, new inference, 45MP RGB16 or the installed panel. Portrait, product-text, fabric, source-sync interactions and the full host workflow still need acceptance. See the [development contract](../development/BACKEND.en.md#relighting-workbench) for implementation and measurement conditions.
 

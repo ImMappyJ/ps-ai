@@ -43,7 +43,7 @@
       "sourceFileByteLimit": 64000000,
       "identity": "Same full path, dimensions and native depth; recheck source state after file selection",
       "workingCopy": "Unmerged sRGB duplicate, preserved original, capture/apply frozen to the copy",
-      "undoRecapture": "Development: profile assignment committed as a separate history baseline; mock apply/undo/recapture and explicit profile-removal rejection covered. Native acceptance of this later fix pending; old pathless untagged copies still require a verified manual profile assignment.",
+      "undoRecapture": "Profile assignment is a separate history baseline. Only exact session-proven preassignment working copies offer explicit recovery into a NEW tagged copy; preserve the old document/redo history and recapture current pixels/protection. PS27 RGB8/16 synthetic API recovery and apply/undo/recapture passed; arbitrary pathless, earlier-session or modified origins still require verified manual assignment. Installed UI is a separate acceptance scope.",
       "nativeAcceptance": {
         "date": "2026-10-18",
         "host": "27.0.0",
@@ -336,7 +336,7 @@
         "fullResult": "Explicit full-result choice retains the existing safe color/alpha application path; changing output kind requires reread; failed field extraction never falls back automatically",
         "lightingLayers": "NORMAL isolated group: native source base, then available Shadow/Multiply, Cast Shadow/Multiply, Color Atmosphere/Color, Light/Screen, Rim Light/Screen; editable channel masks plus exact effective group mask applied once; opacity/fill 100%; neutral Multiply white, Screen black, Color alpha 0; absent channels omitted, no empty groups",
         "export": "Successful lighting composite PNG/new document use saved analysis dimensions; rejected extraction retains actual model-reference dimensions. Full-resolution delivery requires native apply and PSD or Photoshop export",
-        "compensation": "Mathematical opaque encoded-sRGB Multiply then Screen diagnostics only; apply disabled pending both native composition and real-image visual acceptance"
+        "choices": ["full-result", "lighting-layers"]
       },
       "lightingFieldSupport": {
         "status": "experimental; conservative single-target estimates, not physically isolated channels or a detail-fidelity guarantee",
@@ -372,7 +372,7 @@
         "observation": "Only while workbench visible; coalesced documented Photoshop events trigger lightweight metadata checks, no pixel capture per event or closed-workbench background reads",
         "automaticRefresh": "Visible/reopen changed source may refresh once only when document geometry/profile/scope/output capture policy match and there are no results, active/pending tasks or other interactions; failed refresh remains stale without retry loop",
         "explicitActions": "Reread always targets the bound source and retains lights; other documents require Bind current document; geometry/profile/scope/output changes require explicit reread/rebind",
-        "safety": "Visible owned output must be hidden or undone before reread; prior candidates stay bound to exact submitted snapshot IDs and gain no new apply permission",
+        "safety": "Reopen retains source/lights/candidates even if the source is stale or closed. Explicit Exclude applied results and reread sets only recorded visible owned outputs to opacity zero in one undoable history state; failure rolls it back. Prior candidates retain their exact submitted snapshots and gain no new apply permission",
         "closing": "Dispose source listeners, timers, preview/cache/image references and obsolete renders; keep submitted-job recovery/cancellation semantics"
       },
       "previewScheduling": {
@@ -500,5 +500,98 @@
       "prompt": "Hidden input; built-in removal instruction ignores unrelated prompt drafts",
       "status": "development; offline coverage; native controls and real output acceptance pending"
     }
+  },
+  "iteration050": {
+    "productVersion": "0.5.0",
+    "date": "2026-10-20",
+    "timezone": "Asia/Shanghai",
+    "host": "27.0.0",
+    "sourceRecovery": {
+      "evidence": "Synthetic native API; RGB8/16 layer and group cases",
+      "passed": [
+        "Current edits retained",
+        "Only recorded visible output opacity changed",
+        "Single undo",
+        "Capture/binding failure rollback",
+        "Old candidate remains invalid"
+      ],
+      "installedPanel": "pending"
+    },
+    "colorRecovery": {
+      "evidence": "Synthetic native API; RGB8/16 verified PNG sRGB working copies and valid Adobe RGB controls",
+      "passed": [
+        "Repeated undo reaches proven origin",
+        "New tagged copy preserves native pixels",
+        "Old document and redo history retained",
+        "Fresh capture/apply/undo/recapture",
+        "Failure cleanup",
+        "Valid ICC bypasses file access"
+      ],
+      "limits": "Small synthetic sources; installed controls and new real WebP recovery flow pending"
+    },
+    "lightingExtraction": {
+      "evidence": "Actual derive/preparation/native apply, synthetic RGB8/16 64x64",
+      "channels": [
+        "shadow",
+        "light"
+      ],
+      "passed": [
+        "Native source preserved",
+        "Grayscale selection and protection applied once",
+        "Wrong active document safe",
+        "One undo",
+        "Unsupported alpha rollback",
+        "Reference-only failures retain raw export"
+      ],
+      "nativePreviewMaxDifference": {
+        "rgb8": 1,
+        "rgb16": 3
+      },
+      "units": "native full-range sample values (255 / 65535)",
+      "limits": "Not real-photo fidelity, all five channels, large45MP or installed callbacks; final visual acceptance belongs to user"
+    },
+    "sliders": {
+      "parameters": 11,
+      "evidence": "Offline gesture regressions and independent review passed; native sp-slider primitive confirmed fractional step and input/change before bubbled keydown",
+      "installedWorkbench": "pending"
+    },
+    "contextAssets": {
+      "marker": "selection-v1",
+      "inputs": "Paired current visible source and effective grayscale guide; native source depth separate from sRGB8 model input",
+      "capability": "Optional assetContexts; missing declaration rejects before upload",
+      "supportedRequestAdapters": [
+        "ComfyUI Qwen2.1 GGUF",
+        "Bailian2.1 pro/turbo",
+        "OpenAI Images"
+      ],
+      "unsupported": [
+        "Bailian3.0",
+        "Gemini"
+      ],
+      "application": "Output alpha retained; no source-alpha multiplication, alignment or context color matching; exact native effective mask once, original UUID data revalidated; bounded edit-analysis supported",
+      "offline": "Request, persistence, recovery, alpha/mask/depth/budget and application regressions passed",
+      "nativeApplication": "pending",
+      "liveComfy": {
+        "samples": 4,
+        "promptComparisons": 1,
+        "result": "visual-failed",
+        "findings": [
+          "Hand arc retained source character",
+          "Portrait smoke retained person and clothing",
+          "Perspective beam retained environment",
+          "Feather/protection case painted guide boundary",
+          "Separate RGBA prompt comparison still retained source glove and faint ghosting"
+        ],
+        "rawPreserved": true,
+        "automaticResubmission": false,
+        "limits": "Tested pinned Qwen2.1 Q4_K_M / Qwen3-VL INT8 / Qwen2.1 VAE; transparent pixels did not establish independent-asset quality"
+      },
+      "livePlatforms": "pending API keys"
+    },
+    "historyApplication": {
+      "evidence": "Offline per-UUID candidate switching, four apply/delete/undo cycles, disk reload and source inspection regressions; independent review passed",
+      "installedPanel": "pending"
+    },
+    "packaging": "pending final local main merge, full package gate and artifact hash verification; no push"
   }
 }
