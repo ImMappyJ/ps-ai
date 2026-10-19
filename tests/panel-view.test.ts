@@ -7,6 +7,13 @@ import * as panelView from '../src/app/panel-view';
 import {setLanguage} from '../src/localization/i18n';
 import {parseHTML} from 'linkedom';
 
+test('bounded capture captions keep document, native write, work, model and export sizes distinct in both languages',()=>{
+ const format=(panelView as any).captureSizeSummary;assert.equal(typeof format,'function');
+ const sizes={documentWidth:9000,documentHeight:5000,nativeWidth:8000,nativeHeight:4000,workWidth:1024,workHeight:512,modelWidth:1408,modelHeight:704,outputWidth:1024,outputHeight:512};
+ try{for(const language of ['zh-CN','en-US'] as const){setLanguage(language);const caption=format(sizes);for(const value of ['9000×5000','8000×4000','1024×512','1408×704'])assert.ok(caption.includes(value),caption);if(language==='en-US')assert.doesNotMatch(caption,/[一-龥]/);}}
+ finally{setLanguage('zh-CN');}
+});
+
 test('view transitions notify once for both navigation clicks and programmatic shows without remounting controls',()=>{
  const {document,window}=parseHTML('<button data-panel-nav="create"></button><button data-panel-nav="results"></button><div data-panel-page="create"><input id="draft" value="keep"></div><div data-panel-page="results"></div><div data-panel-page="history"></div>'),changes:string[]=[],views=new panelView.PanelViews(document,page=>changes.push(page)),draft=document.getElementById('draft');
  assert.deepEqual(changes,[]);document.querySelector('[data-panel-nav="results"]')!.dispatchEvent(new window.Event('click',{bubbles:true}));views.show('history');views.show('history');views.show('create');assert.deepEqual(changes,['results','history','create']);assert.equal(document.getElementById('draft'),draft);assert.equal(draft?.getAttribute('value'),'keep');

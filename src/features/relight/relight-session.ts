@@ -21,7 +21,7 @@ export interface RelightTaskMetadata {
   seed?:number;conflictResolution?:'structured-lighting';result?:{jobId:string;outputFile:string};
 }
 function cloneCapture(c:Capture):Capture {
-  if(c.snapshot.captureGeometry?.kind==='relight-analysis'){
+  if(c.snapshot.captureGeometry){
     // Capture transfers ownership of native mask planes. They are immutable in
     // the editor; duplicating them would add three document-sized allocations.
     return {...c,image:{...c.image,rgba:c.image.rgba.slice()},snapshot:{...c.snapshot,bounds:{...c.snapshot.bounds},captureGeometry:{...c.snapshot.captureGeometry},...(c.snapshot.sourceLayerIds?{sourceLayerIds:[...c.snapshot.sourceLayerIds]}:{})}};
@@ -62,7 +62,7 @@ export class RelightSession {
   freeze():FrozenRelightSubmission{return {scene:this.editor.snapshot(),fingerprint:this.fingerprint,capture:this.captured,scope:this.capturedScope,outputKind:this.outputKind};}
   assertCaptureMatches(current:Capture):void {
     const a=this.captured,b=current;
-    const fields=['documentId','width','height','profile','mode','depth','nativeDepth','historyId','sessionId','sourceHash','clipBaseLayerId'] as const;
+    const fields=['documentId','width','height','profile','mode','depth','nativeDepth','historyId','sessionId','sourceHash','clipBaseLayerId','requiresClipping','backgroundComposite'] as const;
     if(fields.some(k=>a.snapshot[k]!==b.snapshot[k])||JSON.stringify(a.snapshot.bounds)!==JSON.stringify(b.snapshot.bounds)||
       !sameArray(a.snapshot.mask,b.snapshot.mask)||!sameArray(a.selectionMask,b.selectionMask)||!sameArray(a.protectionMask,b.protectionMask)||!sameArray(a.image.rgba,b.image.rgba)||a.image.width!==b.image.width||a.image.height!==b.image.height||rasterDepth(a.image)!==rasterDepth(b.image)||
       !sameArray(a.snapshot.sourceLayerIds??[],b.snapshot.sourceLayerIds??[])||JSON.stringify(a.snapshot.captureGeometry)!==JSON.stringify(b.snapshot.captureGeometry))throw new Error('来源或选区已改变，请重新读取原图；原有布光配置已保留');

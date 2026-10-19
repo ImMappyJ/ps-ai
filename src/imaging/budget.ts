@@ -1,7 +1,7 @@
 import type {Bounds,Raster} from './image';
 
 /** Local document, analysis and write budgets are independent of untrusted PNG/model limits. */
-export const IMAGE_BUDGETS=Object.freeze({documentPixels:45_000_000,documentSide:30_000,analysisPixels:1_048_576,analysisSide:1536,stripPixels:262_144,workingBytes:512_000_000});
+export const IMAGE_BUDGETS=Object.freeze({documentPixels:45_000_000,documentSide:30_000,analysisPixels:1_048_576,analysisSide:1536,editPixels:4_194_304,editSide:4096,stripPixels:262_144,workingBytes:512_000_000});
 export class ImageBudgetError extends Error {readonly code='image-budget';constructor(message:string){super(message);this.name='ImageBudgetError';}}
 export function checkDocumentSize(width:number,height:number):void {
   if(!Number.isSafeInteger(width)||!Number.isSafeInteger(height)||width<1||height<1||Math.max(width,height)>IMAGE_BUDGETS.documentSide)throw new ImageBudgetError('原文档尺寸无效；单边不得超过 30000 像素');
@@ -33,6 +33,33 @@ export function planRelightMemory(width:number,height:number,depth:8|16,availabl
   if(!Number.isSafeInteger(availableBytes)||availableBytes<1||estimatedPeakBytes>availableBytes)throw new ImageBudgetError(`图像内存预算不足：预计峰值 ${Math.ceil(estimatedPeakBytes/1_000_000)} MB，预算 ${Math.floor(availableBytes/1_000_000)} MB；请缩小作用范围`);
   return {width:w,height:h,estimatedPeakBytes,nativePixels:width*height,stripPixels};
 }
+/** Ordinary edits retain native gray planes, while all RGBA work stays bounded. */
+export function planEditAnalysisMemory(width:number,height:number,depth:8|16,resolution=1024,retainedBytes=0):RelightMemoryPlan {
+  checkDocumentSize(width,height);
+  if(depth!==8&&depth!==16||!Number.isInteger(resolution)||resolution<32||resolution>2048||resolution%32||!Number.isSafeInteger(retainedBytes)||retainedBytes<0)throw new ImageBudgetError('编辑工作图分辨率或内存估算无效');
+  const nativePixels=width*height,stripPixels=Math.min(nativePixels,IMAGE_BUDGETS.stripPixels),workBytes=depth===16?48:28;
+  // Up to four native mask planes (background subject/raw-edit/effective/
+  // protection), bounded read/compare/write strips and transport
+  // reserve. Previous captures, range caches and previews are retainedBytes.
+  // Photoshop's existing document cache is outside this plugin estimate.
+  const fixed=nativePixels*4+stripPixels*(depth===16?48:24)+96_000_000+retainedBytes;
+  const requested=Math.min(nativePixels,resolution*resolution,IMAGE_BUDGETS.editPixels),allowed=Math.min(requested,Math.floor((IMAGE_BUDGETS.workingBytes-fixed)/workBytes));
+  if(allowed<Math.min(requested,65_536))throw new ImageBudgetError('图像内存预算不足，无法分配受控编辑工作图；请缩小作用范围或释放已有预览');
+  const scale=Math.min(1,Math.sqrt(allowed/nativePixels),IMAGE_BUDGETS.editSide/Math.max(width,height));
+  let w=Math.max(1,Math.floor(width*scale)),h=Math.max(1,Math.floor(height*scale));
+  // A one-pixel-wide native image cannot shrink its short side further.
+  if(w*h>allowed){if(w>=h)w=Math.max(1,Math.floor(allowed/h));else h=Math.max(1,Math.floor(allowed/w));}
+  const estimatedPeakBytes=fixed+w*h*workBytes;
+  if(w*h>allowed||estimatedPeakBytes>IMAGE_BUDGETS.workingBytes)throw new ImageBudgetError('编辑工作图超过图像内存预算');
+  return {width:w,height:h,estimatedPeakBytes,nativePixels,stripPixels};
+}
+export function planEditApplyMemory(width:number,height:number,depth:8|16,modelBytes:number,maskBytes:number,retainedBytes=0):{estimatedPeakBytes:number} {
+  checkDocumentSize(width,height);
+  if(depth!==8&&depth!==16||![modelBytes,maskBytes,retainedBytes].every(v=>Number.isSafeInteger(v)&&v>=0))throw new ImageBudgetError('原生回填内存估算无效');
+  const estimatedPeakBytes=maskBytes+modelBytes*2+Math.min(width*height,IMAGE_BUDGETS.stripPixels)*(depth===16?64:32)+96_000_000+retainedBytes;
+  if(estimatedPeakBytes>IMAGE_BUDGETS.workingBytes)throw new ImageBudgetError(`原生回填预计需要 ${Math.ceil(estimatedPeakBytes/1_000_000)} MB，超过图像内存预算`);
+  return {estimatedPeakBytes};
+}
 /** Native masks stay single-channel; no full-size RGBA conversion is needed. */
 export function resampleGray(mask:Uint8Array,sw:number,sh:number,dw:number,dh:number):Uint8Array {
   checkDocumentSize(sw,sh);checkDocumentSize(dw,dh);
@@ -50,8 +77,8 @@ export function downsampleSnapshotMask(snapshot:{bounds:Bounds;mask:Uint8Array},
   return resampleGray(snapshot.mask,snapshot.bounds.right-snapshot.bounds.left,snapshot.bounds.bottom-snapshot.bounds.top,width,height);
 }
 /** Restore trimming/cache coordinates directly to the bounded analysis grid. */
-export function mapCaptureRaster(image:Raster,actual:Bounds,requested:Bounds,level:number,width:number,height:number):Raster {
-  if(!Number.isSafeInteger(level)||level<0||level>10||width*height>IMAGE_BUDGETS.analysisPixels||width<1||height<1||image.rgba.length!==image.width*image.height*4)throw new Error('分析图缓存坐标或预算无效');
+export function mapCaptureRaster(image:Raster,actual:Bounds,requested:Bounds,level:number,width:number,height:number,pixelLimit:number=IMAGE_BUDGETS.analysisPixels):Raster {
+  if(!Number.isSafeInteger(level)||level<0||level>10||!Number.isSafeInteger(pixelLimit)||pixelLimit<1||pixelLimit>IMAGE_BUDGETS.editPixels||!Number.isSafeInteger(width)||!Number.isSafeInteger(height)||width*height>pixelLimit||width<1||height<1||image.rgba.length!==image.width*image.height*4)throw new Error('分析图缓存坐标或预算无效');
   const scale=2**level,left=actual.left*scale,top=actual.top*scale,right=actual.right*scale,bottom=actual.bottom*scale;
   if(right<=left||bottom<=top)throw new Error('分析图实际范围无效');
   const out=image.rgba instanceof Uint16Array?new Uint16Array(width*height*4):new Uint8Array(width*height*4);

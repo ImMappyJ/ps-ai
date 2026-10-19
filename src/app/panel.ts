@@ -17,10 +17,10 @@ import {RelightSession,RelightDraftStore,relightTaskMetadata,type FrozenRelightS
 import {RelightWorkbench,type RelightResult} from '../features/relight/relight-workbench';
 import {compileRelightScene,validateRelightScene,type RelightScene,type RelightCapabilities} from '../features/relight/relight-scene';
 import {decomposeRelightCompensation} from '../features/relight/relight-compensation';
-import {PanelViews,OperationFeedback,ResultNavigation,CandidatePreview,SourceCaption,localValidationMessage,createCandidateCard,setCandidateCardState,displayPreview as preview} from './panel-view';import type {OperationContext,PanelPage} from './panel-view';
+import {PanelViews,OperationFeedback,ResultNavigation,CandidatePreview,SourceCaption,captureSizeSummary,localValidationMessage,createCandidateCard,setCandidateCardState,displayPreview as preview} from './panel-view';import type {OperationContext,PanelPage,CaptureSizeDetails} from './panel-view';
 import {HistoryTable,historyTaskType,historyPrompt,historyState,historySource,historyDate} from './history-table';
-import {prepareCandidate,prepareLightingLayerApplication,historyOutputName,type PreparedCandidate} from './candidate-preparation';
-import {planRelightMemory,downsampleSnapshotMask} from '../imaging/budget';
+import {prepareCandidate,prepareLightingLayerApplication,prepareEditAnalysisApplication,preflightEditAnalysisCandidate,historyOutputName,type PreparedCandidate} from './candidate-preparation';
+import {planRelightMemory,downsampleSnapshotMask,resampleGray} from '../imaging/budget';
 import {observeRelightSource} from './relight-source-monitor';
 import {HistoryPreview} from './history-preview';
 declare const require:(name:string)=>any;
@@ -61,6 +61,8 @@ let historyRecords:JobRecord[]=[],detachAcknowledgedId:string|undefined;
 let applied:{documentId:number;layerId:number;jobId:string}|undefined;
 interface Candidate {job:JobRecord;image:Raster;bytes:Uint8Array;preview:string;snapshot?:Snapshot;warning?:string;outputKind?:RelightOutputKind;lightingSummary?:PreparedCandidate['lightingSummary']}
 let candidates:Candidate[]=[];
+let imageOperation:Promise<void>=Promise.resolve();
+function withImagePixels<T>(action:()=>Promise<T>):Promise<T>{const work=imageOperation.then(action);imageOperation=work.then(()=>{},()=>{});return work;}
 let taskActive=false,taskSucceeded=false,batchPosition='';
 let connectionState='未连接';
 let setupStep=1,checkedSetup='';
@@ -73,10 +75,10 @@ let relightWorkbench:RelightWorkbench|undefined,relightSession:RelightSession|un
 let clearConfirmation:{ids:readonly string[];revision:number;signature:string;unresolved:number}|undefined;
 let cleanupStatus:HistoryCleanupStatus|undefined,historyNotice='',lastHistoryFocus:string|undefined;
 let pendingDetailReveal=false,historyRevealTimer:ReturnType<typeof setTimeout>|undefined;
-const historyPreview=new HistoryPreview(el('history-preview'),el('history-preview-status'),async record=>{
-  const name=historyOutputName(record),bytes=await store.readBinary(name),prepared=await prepareCandidate(record,bytes,name=>store.readBinary(name));
+const historyPreview=new HistoryPreview(el('history-preview'),el('history-preview-status'),record=>withImagePixels(async()=>{
+  const name=historyOutputName(record),bytes=await store.readBinary(name),prepared=await prepareCandidate(record,bytes,name=>store.readBinary(name),retainedImageBytes(true));
   return {url:await preview(prepared.image,480),warning:prepared.warning};
-});
+}));
 const historyTable=new HistoryTable(el('history-browser'),{busy:()=>busy,changed:()=>{detachAcknowledgedId=undefined;clearConfirmation=undefined;historyNotice='';historyUi();},focused:()=>{historyScrollTop=el('history-rows').scrollTop;historyDetail=true;historyUi();},refresh:()=>void guarded(()=>configure(()=>refreshHistory()),{page:'history',feature:'history-refresh'})});
 function outputDepth():8|16{return el('output-depth').value==='16'?16:8;}
 function draftSettings(id:ConnectionId=el('backend-kind').value):BackendSettings{return validateSettings({schemaVersion:1,baseUrl:el('backend-url').value,language:el('language').value,autoViewResults:el('auto-view-results').checked!==false,outputDepth:outputDepth(),connections:draftConnections,...(id!=='comfyui'?{backend:'gateway',gatewayModel:el('gateway-model').value}:{}),...(isPlatform(id)?{platform:id}:{}),models:{unet:el('model-unet').value,clip:el('model-clip').value,vae:el('model-vae').value}});}
@@ -129,10 +131,11 @@ function inputUi(){
   historyUi();renderDiagnostic();
 }
 function candidateUi(){
-  const c=candidates[Number(el('candidate-select').value)],mode=c?.snapshot?(c.outputKind==='lighting-layers'?(adapter.sourceAvailability(c.snapshot,true)==='current'?'new':'unavailable'):adapter.applicationMode(c.snapshot)):'unavailable';
-  el('apply').disabled=busy||!c?.snapshot||!!c.warning||mode==='unavailable';el('apply').textContent=t(mode==='replace'?'替换本轮候选图层':'应用为新图层');
+  const c=candidates[Number(el('candidate-select').value)],bounded=!!c?.snapshot?.captureGeometry,mode=c?.snapshot?(bounded?(adapter.sourceAvailability(c.snapshot,true)==='current'?'bound':'unavailable'):adapter.applicationMode(c.snapshot)):'unavailable';
+  el('apply').disabled=busy||!c?.snapshot||!!c.warning||mode==='unavailable';el('apply').textContent=t(bounded?'应用到来源文档':mode==='replace'?'替换本轮候选图层':'应用为新图层');
   const notes=c?.warning??c?.lightingSummary?.warnings.map(message=>errorText(message)).join(' ');el('candidate-warning').textContent=notes?errorText(notes):'';el('candidate-warning').style.display=notes?'block':'none';
-  const s=c?.snapshot;el('candidate-target').textContent=s?t('来源文档 {0} · {1} · {2}',s.documentId,s.profile,mode==='unavailable'?t('来源已关闭、改变或会话已结束；候选仍可导出'):mode==='replace'?t('替换同次捕获的插件图层，其他图层保留'):t('新增独立结果，保留来源图层')):c?t('独立生成结果，可另存或新建文档'):'';
+  const s=c?.snapshot;el('candidate-target').textContent=s?t('来源文档 {0} · {1} · {2}',s.documentId,s.profile,mode==='unavailable'?t('来源已关闭、改变或会话已结束；候选仍可导出'):bounded?t('应用到绑定文档；同次捕获会替换插件结果，其他图层保留'):mode==='replace'?t('替换同次捕获的插件图层，其他图层保留'):t('新增独立结果，保留来源图层')):c?t('独立生成结果，可另存或新建文档'):'';
+  if(c&&s){const sizes=captureSizes(s,(c.job.params as any)?.modelSize,c.image);if(sizes)el('candidate-target').textContent+='\n'+captureSizeSummary(sizes);}
   for(const id of ['zoom','export','new-document'])el(id).disabled=busy||!c;el('candidate-select').disabled=busy||!c;el('opacity').disabled=busy||!applied;el('candidate-empty').style.display=candidates.length?'none':'block';el('detail-frame').style.display=c?'block':'none';
   const lighting=c?.outputKind==='lighting-layers';el('export-ai-reference').style.display=lighting?'block':'none';el('export-ai-reference').disabled=busy||!lighting;el('ai-reference-export-info').style.display=lighting?'block':'none';
   el('ai-reference-export-info').textContent=t(c?.warning?'此候选未形成可用光影重组；另存 AI 参考图保留模型原始输出。':'另存 PNG 保存本地光影重组；AI 参考图保存模型原始输出。');
@@ -223,19 +226,27 @@ async function copyDiagnostic():Promise<void> {
   }
 }
 function activeDocumentId():number|undefined{return ps.app.documents.length?ps.app.activeDocument?.id:undefined;}
+function captureSizes(snapshot:Pick<Snapshot,'width'|'height'|'bounds'|'captureGeometry'>,model?:{width:number;height:number},output?:{width:number;height:number}):CaptureSizeDetails|undefined {
+  const geometry=snapshot.captureGeometry;if(!geometry)return;
+  return {documentWidth:snapshot.width,documentHeight:snapshot.height,nativeWidth:snapshot.bounds.right-snapshot.bounds.left,nativeHeight:snapshot.bounds.bottom-snapshot.bounds.top,workWidth:geometry.width,workHeight:geometry.height,...(model?{modelWidth:model.width,modelHeight:model.height}:{}),...(output?{outputWidth:output.width,outputHeight:output.height}:{})};
+}
 function clearCapturePreview(){capture=undefined;el('selection-previews').style.display='none';for(const id of ['source-preview','mask-preview'])el(id).removeAttribute('src');}
 async function captureArea(expectedDocumentId=activeDocumentId(),showPreview=true){
+  return withImagePixels(async()=>{
   const mode=el('mode').value,capturedWorkspace=workspace,operation=activeOperation;
   clearCapturePreview();
-  const captured=await adapter.capture(Number(el('margin').value)/100,protection,expectedDocumentId,outputDepth(),{retainedBytes:retainedImageBytes(true),...(isBackgroundMode(mode)?{context:'document' as const,selection:'subject-background' as const}:mode==='blend'?{context:'document' as const,selection:'edit' as const}:{})});
+  const captured=await adapter.capture(Number(el('margin').value)/100,protection,expectedDocumentId,outputDepth(),{analysisResolution:Number(el('resolution').value),retainedBytes:retainedImageBytes(true),...(isBackgroundMode(mode)?{context:'document' as const,selection:'subject-background' as const}:mode==='blend'?{context:'document' as const,selection:'edit' as const}:{})});
   const {snapshot:s,image}=captured;
-  if(capturedWorkspace!=='t2i'&&mode!=='relight')lastSelection={workspace:capturedWorkspace,mode,range:{documentId:s.documentId,sessionId:s.sessionId,width:s.width,height:s.height,mode:s.mode,depth:s.depth,bounds:{...s.bounds},mask:(captured.subjectMask??captured.selectionMask).slice()}};
+  if(capturedWorkspace!=='t2i'&&mode!=='relight'){const raw=captured.subjectMask??captured.selectionMask;lastSelection={workspace:capturedWorkspace,mode,range:{documentId:s.documentId,sessionId:s.sessionId,width:s.width,height:s.height,mode:s.mode,depth:s.depth,bounds:{...s.bounds},mask:s.captureGeometry?raw:raw.slice()}};}
   if(protection&&captured.workingCopyOf===protection.documentId)protection={...protection,documentId:s.documentId};
   if(workspace!==capturedWorkspace||el('mode').value!==mode){inputUi();return;}
   capture=captured;
-  sourceCaption.show({documentId:s.documentId,width:image.width,height:image.height,protectedArea:!!protection,profile:s.profile,colorReason:s.colorReason});el('source-preview').src=await preview(image);el('mask-preview').src=await preview(rangePreview(image,s.mask,captured.protectionMask));if(showPreview&&workspace===capturedWorkspace&&el('mode').value===mode)el('selection-previews').style.display='flex';
+  const mapping=makeMapping(s.bounds,Number(el('resolution').value)),sizes=captureSizes(s,mapping);
+  const edit=s.captureGeometry?downsampleSnapshotMask(s,image.width,image.height):s.mask,protectedMask=s.captureGeometry?resampleGray(captured.protectionMask,s.bounds.right-s.bounds.left,s.bounds.bottom-s.bounds.top,image.width,image.height):captured.protectionMask;
+  sourceCaption.show({documentId:s.documentId,width:image.width,height:image.height,protectedArea:!!protection,profile:s.profile,colorReason:s.colorReason,sizes});el('source-preview').src=await preview(image);el('mask-preview').src=await preview(rangePreview(image,edit,protectedMask));if(showPreview&&workspace===capturedWorkspace&&el('mode').value===mode)el('selection-previews').style.display='flex';
   if(operation&&activeDocumentId()===s.documentId)feedback.resolveCapture(operation);
   inputUi();
+  });
 }
 async function restoreSelectionArea(){
   if(busy)return;
@@ -259,7 +270,9 @@ function retainedImageBytes(includeRelight=false):number {
   if(includeRelight&&relightSession){const c=relightSession.sourceCapture;count(c.image.rgba);count(c.snapshot.mask);count(c.selectionMask);count(c.protectionMask);count(c.subjectMask);}
   count(reference?.rgba);count(lastSelection?.range.mask);
   if(includeRelight)count(protection?.mask);
-  for(const c of candidates){count(c.image.rgba);count(c.bytes);if(c.outputKind!=='lighting-layers')count(c.snapshot?.mask);bytes+=c.preview.length*2;}
+  for(const c of candidates){count(c.image.rgba);count(c.bytes);count(c.snapshot?.mask);bytes+=c.preview.length*2;}
+  bytes+=candidatePreview.retainedBytes;
+  for(const id of ['source-preview','mask-preview','detail-preview','history-preview'])bytes+=(el(id).getAttribute('src')?.length??0)*2;
   return bytes;
 }
 function preflightLightingSource(captured:Capture):void {
@@ -269,6 +282,7 @@ function preflightLightingSource(captured:Capture):void {
   if(mask.some((value,p)=>value>0&&captured.image.rgba[p*4+3]!==max))throw new DiagnosticError('unsupported','capture',t('光影层暂不支持作用范围内的透明/半透明来源；请缩小到不透明区域，或明确使用整图重绘并检查透明度'));
 }
 async function captureRelight(expectedDocumentId=activeDocumentId(),scope:RelightScope=relightScope(),kind:RelightOutputKind='lighting-layers'):Promise<Capture>{
+  return withImagePixels(async()=>{
   const previous=activeDocumentId();
   if(expectedDocumentId===undefined)throw new Error(t('请先打开 Photoshop 文档并建立选区'));
   const target=Array.from(ps.app.documents as any[]).find(d=>d.id===expectedDocumentId);
@@ -276,11 +290,12 @@ async function captureRelight(expectedDocumentId=activeDocumentId(),scope:Religh
   if(kind==='lighting-layers')planRelightMemory(target.width,target.height,target.bitsPerChannel===ps.constants.BitsPerChannelType.SIXTEEN?16:8,undefined,retainedImageBytes());
   if(previous!==expectedDocumentId)await ps.core.executeAsModal(async()=>{ps.app.activeDocument=target;},{commandName:'PS-AI relight source'});
   try {
-    const start=Date.now(),captured=await adapter.capture(Number(el('margin').value)/100,protection,expectedDocumentId,outputDepth(),{selection:scope==='document'?'document':'edit',preserveNativeDepth:true,retainedBytes:retainedImageBytes(kind!=='lighting-layers'),...(kind==='lighting-layers'?{purpose:'relight-analysis' as const}:{})});
+    const start=Date.now(),captured=await adapter.capture(Number(el('margin').value)/100,protection,expectedDocumentId,outputDepth(),{selection:scope==='document'?'document':'edit',preserveNativeDepth:true,analysisResolution:Number(el('resolution').value),retainedBytes:retainedImageBytes(kind!=='lighting-layers'),...(kind==='lighting-layers'?{purpose:'relight-analysis' as const}:{})});
     if(protection&&captured.workingCopyOf===protection.documentId)protection={...protection,documentId:captured.snapshot.documentId};
     await store.trace('relight.capture.complete',undefined,{documentId:captured.snapshot.documentId,width:captured.snapshot.width,height:captured.snapshot.height,analysisWidth:captured.image.width,analysisHeight:captured.image.height,depth:rasterDepth(captured.image),durationMs:Date.now()-start});
     return captured;
   }finally{const prior=Array.from(ps.app.documents as any[]).find(d=>d.id===previous);if(prior&&previous!==expectedDocumentId)await ps.core.executeAsModal(async()=>{ps.app.activeDocument=prior;},{commandName:'PS-AI restore document'});}
+  });
 }
 function relightResults():RelightResult[]{
   return candidates.flatMap(c=>{const metadata=c.job.relight as RelightTaskMetadata|undefined;if(!metadata||metadata.schemaVersion!==1||!relightSession?.ownsSnapshot(metadata.scene?.source?.snapshotId))return [];return [{jobId:c.job.id,fingerprint:metadata.fingerprint,image:c.image,warning:c.warning,outputKind:c.outputKind}];});
@@ -345,8 +360,9 @@ function historyUi(){
   el('history-detail-pane').style.display=record?'':'none';
   el('pending-notice').style.display=pending.length?'block':'none';el('pending-summary').textContent=t('{0} 个未确认任务；请按原 ID 处理后再生成',pending.length);el('open-pending').disabled=busy;
   el('history-id').value=record?.id??'';
-  const source=record?.snapshot as {documentId?:number}|undefined;
+  const source=record?.snapshot as Snapshot|undefined;
   el('history-details').textContent=record?[t('任务类型：{0}',historyTaskType(record)),t('状态：{0}',`${historyState(record)} (${record.state})`),t('后端：{0} · {1}',record.backend==='gateway'?t('平台适配服务'):'ComfyUI',String(record.baseUrl??'http://localhost:8188')),t('时间：{0}',historyDate(record).join(' ')),t('来源文档：{0}{1}',source?.documentId??t('未保存'),` · ${historySource(record)}`),...(record.tracking==='detached'?[t('本地已停止跟踪；远端状态仍未知，可按原 ID 恢复')]:[])].join('\n'):t('请选择历史记录');
+  if(record&&source){const sizes=captureSizes(source,(record.params as any)?.modelSize);if(sizes)el('history-details').textContent+='\n'+captureSizeSummary(sizes);}
   el('history-prompt').value=record?historyPrompt(record):'';
   if(lastHistoryFocus!==record?.id){el('history-detail-pane').scrollTop=0;lastHistoryFocus=record?.id;}
   if(el('view-history').style.display!=='none'&&(!narrow||historyDetail))historyPreview.show(record);
@@ -453,16 +469,18 @@ async function stopTracking(confirm=false){
   }finally{lock(false);}
 }
 async function addCandidate(record:JobRecord,bytes:Uint8Array){
+  return withImagePixels(async()=>{
   await store.trace('candidate.preview',record.id);
-  const {image,snapshot,warning,outputKind,lightingSummary}=await prepareCandidate(record,bytes,name=>store.readBinary(name));
+  const {image,snapshot,warning,outputKind,lightingSummary}=await prepareCandidate(record,bytes,name=>store.readBinary(name),retainedImageBytes(true));
   // All exported candidates, including standalone assets, declare sRGB explicitly.
   bytes=encodePng(image);
-  const c:Candidate={job:record,bytes,image,preview:await preview(image),snapshot:outputKind==='lighting-layers'&&snapshot?{...snapshot,mask:new Uint8Array()}:snapshot,warning,outputKind,lightingSummary};
+  const c:Candidate={job:record,bytes,image,preview:await preview(image),snapshot:snapshot?.captureGeometry?{...snapshot,mask:new Uint8Array()}:snapshot,warning,outputKind,lightingSummary};
   const previous=candidates.findIndex(candidate=>candidate.job.id===record.id);if(previous>=0)candidates.splice(previous,1);
   if(candidates.length===4)candidates.shift();candidates.push(c);
   await renderCandidates(record.id);await store.trace('candidate.ready',record.id);
   relightWorkbench?.notifyResult(record.id);
   return c;
+  });
 }
 async function renderCandidates(preferredId?:string):Promise<void> {
   const list=el('candidate-select');list.innerHTML='';el('candidates').innerHTML='';
@@ -588,6 +606,10 @@ async function generate(frozenRelight?:FrozenRelightSubmission,onRelightJob?:(id
         const size=request.kind==='edit'?makeMapping(snapshot!.bounds,resolution):{width:resolution,height:resolution};
         generationRequest=validateGeneration({model:client.model,kind:request.kind,mode,prompt:request.prompt,seed,width:size.width,height:size.height,outputDepth:depth,...(request.kind==='edit'?{source:`${id}-source.png`,...(guide?{guide:`${id}-guide.png`}:{}),...(ref?{reference:`${id}-reference.png`}:{})}:{})},client.capabilities!);
       }
+      if(snapshot?.captureGeometry?.kind==='edit-analysis'){
+        const mapping=makeMapping(snapshot.bounds,resolution);
+        preflightEditAnalysisCandidate({id,clientId,state:'created',createdAt:new Date().toISOString(),graph:{},snapshot,template:generationRequest?GATEWAY_TEMPLATE:templateForDepth(depth),params:{mode,outputKind:request.kind,modelSize:{width:mapping.width,height:mapping.height}}},retainedImageBytes(true));
+      }
       if(snapshot){
         await store.binary(`${id}-mask.bin`,snapshot.mask);await store.binary(`${id}-source.png`,encodePng(captured!.image));
         if(snapshot.backgroundComposite==='subject-background-v1'){
@@ -647,6 +669,15 @@ async function apply(jobId?:string){
       taskPhase(t('正在提取光影影响场…'));
       const prepared=await prepareLightingLayerApplication(c.job,await store.readBinary(historyOutputName(c.job)),name=>store.readBinary(name));
       layerId=await adapter.applyRelightLayers(prepared.snapshot,prepared.fields,t('PS-AI 光影层 {0}',c.job.id.slice(0,8)),{onProgress:(done,total)=>taskPhase(t('写入光影层 {0} / {1}',done,total),Math.round(done/total*100))});
+    }else if(c.snapshot.captureGeometry?.kind==='edit-analysis'){
+      layerId=await withImagePixels(async()=>{
+        // Every new task recaptures. Release this ordinary capture before loading
+        // exact historical planes; range recovery and saved protection survive.
+        capture=undefined;
+        const prepared=await prepareEditAnalysisApplication(c.job,await store.readBinary(historyOutputName(c.job)),name=>store.readBinary(name),retainedImageBytes(true));
+        const name=c.job.relight?t('PS-AI 光影重塑 · 完整结果 {0}',c.job.id.slice(0,8)):`PS-AI ${c.job.id.slice(0,8)}`;
+        return adapter.applyEditAnalysis(prepared.snapshot,prepared.image,name,{preserveAlpha:prepared.preserveAlpha,subjectMask:prepared.subjectMask,protectionMask:prepared.protectionMask,retainedBytes:retainedImageBytes(true),onProgress:(done,total)=>taskPhase(t('写入原尺寸结果 {0} / {1}',done,total),Math.round(done/total*100))});
+      });
     }else{
       const params=c.job.params as any,behavior=editBehavior(params.mode,params,c.job.backend??'comfyui'),source=params.outputKind==='edit'&&behavior.preserveAlpha?decodePng(await store.readBinary(`${c.job.id}-source.png`)):undefined;
       const name=c.job.relight?t('PS-AI 光影重塑 · 完整结果 {0}',c.job.id.slice(0,8)):`PS-AI ${c.job.id.slice(0,8)}`;layerId=await adapter.apply(c.snapshot,c.image,name,source);
