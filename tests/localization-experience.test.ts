@@ -29,6 +29,14 @@ test('English layer and source action copy translates the newly added UI strings
  }finally{setLanguage('zh-CN');}
 });
 
+test('stale applied opacity guidance translates in English without changing the source error',()=>{
+ const message='来源文档内容已改变，请在 PS 图层面板调整不透明度或重新读取原图',error=new Error(message);
+ setLanguage('en-US');try{
+  assert.match(errorText(message),/source document.*changed/i);assert.match(errorText(message),/Photoshop Layers panel/);assert.match(errorText(message),/opacity.*read the source again/i);
+  assert.doesNotMatch(errorText(message),/[一-龥]/);assert.equal(diagnostic(error,'apply').summary,errorText(message));assert.equal(error.message,message);
+ }finally{setLanguage('zh-CN');}
+});
+
 test('a rejected lighting reference translates the nested cause while keeping its output identity',async()=>{
  const {RelightSession,relightTaskMetadata}=await import('../src/features/relight/relight-session');
  const source={width:2,height:2,rgba:new Uint8Array(16).fill(255)},mask=new Uint8Array(4).fill(255),snapshot={documentId:11,width:2,height:2,profile:'sRGB IEC61966-2.1',mode:'rgb',depth:8,historyId:1,sessionId:'source-session',bounds:{left:0,top:0,right:2,bottom:2},mask,sourceHash:'opaque',sourceLayerIds:[2],captureGeometry:{kind:'relight-analysis' as const,width:2,height:2}};

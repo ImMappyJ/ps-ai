@@ -65,6 +65,7 @@ export const english:Record<string,string>={
   '背景原生蒙版与冻结来源、主体或保护区不一致，请重新捕获':'The native background mask does not match the frozen source, subject or protection. Capture again.',
   '半透明来源的剪贴底层透明度不匹配，请重新捕获':'The clipping base alpha does not match the translucent source. Capture again.',
   '来源文档内容已改变，请重新捕获':'The source document content changed. Capture again.',
+  '来源文档内容已改变，请在 PS 图层面板调整不透明度或重新读取原图':'The source document content changed. Adjust opacity in the Photoshop Layers panel or read the source again.',
   '来源原生透明度记录不匹配，请重新捕获':'The saved native source alpha classification does not match. Capture again.',
   '生成背景的有效覆盖不足 90%；保留原始输出供检查和导出':'Generated background coverage is below 90%. Raw output is retained for inspection and export.',
   '选择':'Select','保存时间':'Saved','任务类型':'Task type','提示词':'Prompt','查看详情':'View details','未知状态':'Unknown state','未保存时间':'Date not saved','正在查看':'Viewing',
