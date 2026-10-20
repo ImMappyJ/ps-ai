@@ -129,13 +129,13 @@ function inputUi(){
   const restorable=workspace!=='t2i'&&mode!=='relight'&&!standalone&&(!!context||el('destination').value==='selection');el('restore-selection').style.display=restorable?'block':'none';el('restore-selection').disabled=busy||!restorable||lastSelection?.workspace!==workspace||lastSelection?.mode!==mode;
   const platform=isPlatform(el('backend-kind').value),cloud=el('backend-kind').value!=='comfyui',model=gatewayCatalogBase===el('backend-url').value?gatewayCatalog?.models.find(m=>m.id===el('gateway-model').value):undefined;
   const background=isBackgroundMode(mode);
-  for(const [id,forced] of [['preserve-alpha',background||asset],['align-subject',background||blend||structuredRelight||asset],['match-color',background||blend||structuredRelight||asset],['guide',background&&!cloud||asset]] as const){
+  for(const [id,forced] of [['preserve-alpha',background||asset],['align-subject',background||blend||structuredRelight||asset],['match-color',background||blend||structuredRelight||asset],['guide',(background||blend)&&!cloud||asset]] as const){
     if(forced){if(!overriddenChecks.has(id))overriddenChecks.set(id,!!el(id).checked);el(id).checked=false;}
     else if(overriddenChecks.has(id)){el(id).checked=overriddenChecks.get(id);overriddenChecks.delete(id);}
     el(id).disabled=busy||forced;
   }
   if(context)el('guide').checked=true;
-  el('mode-help').textContent=background?t(cloud?'选中要保留的主体，无需反选。整张画布用于生成不透明背景，保留主体核心并融合半透明边缘；保护区保留原样。':'选中要保留的主体，无需反选。整张画布用于生成背景；选区精确控制回填，不作为黑白参考图送入 ComfyUI。主体核心和保护区保留，半透明边缘与新背景融合。'):blend?t('选中主体，整张画布提供环境参考；只回填主体并扣除保护区。统一光影、颜色、纹理与空间感，保留身份和姿态；全图缩放可能降低小主体细节。'):mode==='remove'?t('圈选要移除的对象后直接生成，周边用于补齐背景。'):'';
+  el('mode-help').textContent=background?t(cloud?'选中要保留的主体，无需反选。整张画布用于生成不透明背景，保留主体核心并融合半透明边缘；保护区保留原样。':'选中要保留的主体，无需反选。整张画布用于生成背景；选区精确控制回填，不作为黑白参考图送入 ComfyUI。主体核心和保护区保留，半透明边缘与新背景融合。'):blend?t(cloud?'选中主体，整张画布提供环境参考；只回填主体并扣除保护区。重新匹配曝光、受光和环境色，保留插画或摄影风格；请检查身份、细节和边缘。全图缩放可能降低小主体细节。':'选中主体，整张画布提供环境参考；灰度范围图不送入 ComfyUI，只用于精确回填主体并扣除保护区。重新匹配曝光、受光和环境色，保留插画或摄影风格；请检查身份、细节和边缘。全图缩放可能降低小主体细节。'):mode==='remove'?t('圈选要移除的对象后直接生成，周边用于补齐背景。'):'';
   el('mode-help').style.display=background||blend||mode==='remove'?'block':'none';
   const kind=workspace==='t2i'?'t2i':['effect','atmosphere'].includes(el('mode').value)?'asset':'edit';
   el('gateway-key-settings').style.display=platform?'block':'none';el('backend-url').disabled=busy||platform;

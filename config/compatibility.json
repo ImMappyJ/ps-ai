@@ -492,8 +492,26 @@
       "workspace": "cosplay (display Portrait)",
       "kind": "edit",
       "context": "Full visible canvas supplies environment context; apply only to subject selection minus protection",
-      "prompt": "Optional user instruction with built-in environment harmonization intent",
-      "status": "development; offline coverage; native controls, color/alpha and real output acceptance pending"
+      "prompt": "Optional user instruction with built-in environment-based relighting and color adjustment; preserve illustration or photographic style",
+      "comfyuiInputs": "Current full-canvas source, then optional character reference; omit the grayscale visual guide, retain exact native selection/protection for application; gateway guide/native-mask paths unchanged",
+      "realInferenceComparison": {
+        "date": "2026-10-20",
+        "models": "Existing pinned Qwen 2.1 Q4_K_M, Qwen3-VL INT8 and Qwen 2.1 VAE; no extra model",
+        "method": "Two saved RGB8 sources; original model input verified pixel-exact, fixed original seeds, 25 steps, cfg 1, denoise 1; one deliberate new UUID per variant, no historical resubmission",
+        "variants": "Historical guided baseline; current guided control with exact original graph except output UUID; current source-only input with original instruction; source-only input with revised relighting instruction",
+        "illustration": "1000x1555 saved-source masked preview: guide omission produced clear lighting changes; identity, linework and edge quality still need visual acceptance",
+        "portrait": "809x1214 bounded analysis preview of a 3929x5893 source: changes remained weak; portrait blending quality is unresolved",
+        "limits": "Local previews retain outside-mask pixels and source alpha at their saved raster size; not native full-size Photoshop application, installed-control acceptance, universal blending quality or pure lighting extraction"
+      },
+      "installedPanel": {
+        "date": "2026-10-20",
+        "build": "0.5.0 d2966347 Portable",
+        "host": "Photoshop 27.0.0, Windows",
+        "fixture": "Owned 64x48 sRGB8 synthetic source, 1152x864 model exchange, isolated controlled response backend without inference",
+        "passed": ["Guide disabled in ComfyUI Blend and ordinary guide preference restored on exit", "Full-canvas source preview", "One source upload and one POST, no guide upload or duplicate", "Masked independent-layer application retains original layer, outside pixels and source alpha", "One native Undo restores exact composite hash, original layer count and history baseline", "Owned fixture cleanup and exact original settings restoration"],
+        "limits": "Not real-output quality, exact feather weighting, protection, large images, 16-bit, platforms or CCX installation"
+      },
+      "status": "development; focused offline coverage, limited real inference comparison and small RGB8 installed controlled-response flow; broader visual quality, host controls and color/alpha acceptance pending"
     },
     "promptFreeRemoval": {
       "mode": "remove",

@@ -14,10 +14,12 @@ test('remove generates from the selection with no prompt and never includes a hi
 test('Image Blending uses the full source environment and permits optional supplemental instructions',()=>{
   const raw='  保留标签 <image9>，暖色轮廓光  ';
   for(const binding of ['images','semantic'] as const){
-    const base=intent('cosplay','blend','',false,true,'材质',binding);
-    assert.equal(base.kind,'edit');assert.match(base.prompt,/整张.*环境/);assert.match(base.prompt,/光线.*色温.*对比度.*纹理.*景深/);
-    assert.match(base.prompt,/只修改.*主体/);assert.match(base.prompt,/身份.*姿态.*位置.*比例.*结构/);
-    const extra=intent('cosplay','blend',raw,false,true,'材质',binding);assert.ok(extra.prompt.includes(raw.trim()));
+    const base=intent('cosplay','blend','',false,false,'材质',binding),source=binding==='semantic'?'来源图':'<image1>';
+    // This is the action prompt exercised in the real source-only comparison.
+    const expected=`根据 ${source} 主体周围可见的背景环境，重新为前景主体布光和调色，使主体呈现与背景一致的曝光、受光方向、阴影深浅、环境反射色和空间氛围。允许明显改变主体原有的明暗和冷暖，让主体自然置身于这个环境。保持人物身份、五官、姿态、轮廓位置和服装图案，保留主体原有的插画或摄影风格；背景构图保持不变。`;
+    assert.equal(base.kind,'edit');assert.equal(base.prompt,expected);assert.doesNotMatch(base.prompt,/范围蒙版|<image2>/);
+    const extra=intent('cosplay','blend',raw,false,false,'材质',binding);assert.equal(extra.prompt,expected+' 补充要求：'+raw.trim());
+    assert.match(intent('cosplay','blend','',false,true,'材质',binding).prompt,/范围|蒙版/);
     if(binding==='semantic')assert.doesNotMatch(base.prompt,/<image\d/);else assert.match(base.prompt,/<image1>/);
   }
   assert.throws(()=>intent('local','blend','',false,false,'材质'),/工作区|模式/);
@@ -56,6 +58,10 @@ test('素材和文字生图不静默忽略已选择的角色参考',()=>{
 test('平台语义意图不规定图像编号，原始提示中的字面标记保持不变',()=>{
   const raw='把服装换成白色，保留标签 <image9>';
   const edit=intent('cosplay','reference',raw,true,true,'服装','semantic');assert.equal(edit.kind,'edit');assert.equal(edit.referenceSlot,undefined);assert.doesNotMatch(edit.prompt,/<image[123]>/);assert.ok(edit.prompt.includes(raw));assert.match(edit.prompt,/服装参考图/);
+});
+
+test('source-only Blend keeps an imported reference in the second image slot',()=>{
+  const request=intent('cosplay','blend','',true,false,'材质');assert.equal(request.referenceSlot,2);assert.match(request.prompt,/<image2> 是材质参考图/);assert.doesNotMatch(request.prompt,/范围蒙版/);
 });
 
 test('selection-context assets use the photo and guide for independent transparent effects and atmosphere',()=>{

@@ -15,7 +15,7 @@ export function intent(workspace:Workspace,mode:string,prompt:string,hasReferenc
   let text=mode==='remove'?'':structuredRelight&&mode==='relight'?prompt:prompt.trim();
   if(kind==='edit') {
     const source=bindings==='semantic'?'来源图':'<image1>';
-    text=isBackgroundMode(mode)?`把 ${source} 的背景替换为新场景：${text}。背景清晰呈现相应的环境、布景、光线和地面，形成完整、不透明的场景。保持原主体人物的外观、姿态、位置和原画布构图。`:mode==='blend'?`以 ${source} 整张画布中主体之外的可见环境为参考，只修改选中的主体并保留保护区域。统一主体与环境的光线方向、色温、对比度、边缘、纹理、颗粒、锐度和景深，使主体自然融入画面。保留人物身份、姿态、位置、比例和结构，保持原画布构图及主体以外的内容。`+(text?` 补充要求：${text}`:''):`编辑 ${source} 中指定的局部内容，保持原画布、主体大小、位置、姿态、场景透视和未指定内容。不要缩小主体、重新构图或添加留白。`+text;
+    text=isBackgroundMode(mode)?`把 ${source} 的背景替换为新场景：${text}。背景清晰呈现相应的环境、布景、光线和地面，形成完整、不透明的场景。保持原主体人物的外观、姿态、位置和原画布构图。`:mode==='blend'?`根据 ${source} 主体周围可见的背景环境，重新为前景主体布光和调色，使主体呈现与背景一致的曝光、受光方向、阴影深浅、环境反射色和空间氛围。允许明显改变主体原有的明暗和冷暖，让主体自然置身于这个环境。保持人物身份、五官、姿态、轮廓位置和服装图案，保留主体原有的插画或摄影风格；背景构图保持不变。`+(text?` 补充要求：${text}`:''):`编辑 ${source} 中指定的局部内容，保持原画布、主体大小、位置、姿态、场景透视和未指定内容。不要缩小主体、重新构图或添加留白。`+text;
     if(mode==='relight'&&!structuredRelight)text+=' 按描述重塑选区内的光线方向、软硬、明暗与色温；保持五官、人物身份、姿态和材质结构，未指定区域的光影不变。';
     if(mode==='remove')text+=' 移除选中对象，根据周边补齐背景材质、结构、光线和透视。';
     if(guide)text+=bindings==='semantic'?' 根据提供的编辑范围修改，不要在结果中画出辅助图或蒙版。':' <image2> 是与原图对齐的范围蒙版，白色允许修改，黑色保留。不要在结果中画出蒙版。';

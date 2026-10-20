@@ -4,7 +4,7 @@ import {isBackgroundMode} from '../../generation/intent';
 export function editBehavior(mode:string,requested:{guide?:boolean;preserveAlpha?:boolean;alignSubject?:boolean;matchColor?:boolean},backend='comfyui') {
   const background=isBackgroundMode(mode);
   const preserveAlpha=!background&&requested.preserveAlpha!==false;
-  return {guide:requested.guide===true&&!(background&&backend==='comfyui'),preserveAlpha,alignSubject:mode!=='blend'&&preserveAlpha&&requested.alignSubject!==false,matchColor:mode!=='blend'&&requested.matchColor===true};
+  return {guide:requested.guide===true&&!((background||mode==='blend')&&backend==='comfyui'),preserveAlpha,alignSubject:mode!=='blend'&&preserveAlpha&&requested.alignSubject!==false,matchColor:mode!=='blend'&&requested.matchColor===true};
 }
 // The saved capture retains its real alpha. Only the model input gets an opaque
 // canvas for background replacement, so RGBA conditioning does not imply cutout.
