@@ -432,8 +432,8 @@ test('捕获不会把 alpha 不同的来源层当成安全剪贴底层',async()=
 test('其他文档相同图层和历史 ID 的不透明度操作不授权来源文档的新历史',async()=>{
   const h=host(),s=snap();await h.adapter.apply(s,patch,'AI1');
   const other:any={id:22,activeHistoryState:{id:h.doc.activeHistoryState.id},layers:[]};
-  const layer:any={id:55};Object.defineProperty(layer,'opacity',{set(){other.activeHistoryState.id++;}});other.layers=[layer];h.ps.app.documents.push(other);
-  await h.adapter.opacity(22,55,50);assert.equal(await h.adapter.apply(s,patch,'AI2'),56);
+  let opacity=100;const history=other.activeHistoryState.id,layer:any={id:55};Object.defineProperty(layer,'opacity',{get:()=>opacity,set(value){opacity=value;other.activeHistoryState.id++;}});other.layers=[layer];h.ps.app.documents.push(other);
+  await assert.rejects(h.adapter.opacity(22,55,50),/改变/);assert.equal(opacity,100);assert.equal(other.activeHistoryState.id,history);assert.equal(await h.adapter.apply(s,patch,'AI2'),56);
 });
 test('新文档显式使用 sRGB profile，失败时留给宿主自动关闭',async()=>{
   const h=host();h.ps.constants.NewDocumentMode={RGB:'RGBColorMode'};h.ps.constants.DocumentFill={TRANSPARENT:'transparent'};

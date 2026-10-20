@@ -12,10 +12,10 @@ export interface RelightWorkbenchHost {
   uuid():string;save(scene:RelightScene):Promise<void>;loadDraft():Promise<RelightScene|undefined>;
   prepare(frozen:FrozenRelightSubmission):Promise<void>;
   generate(frozen:FrozenRelightSubmission,onJob:(id:string)=>void):Promise<void>;
-  cancel():Promise<void>;reread(options?:{explicit?:boolean;excludeResults?:boolean}):Promise<void>;rebindCurrent?(options?:{excludeResults?:boolean}):Promise<void>;appliedResults?(rebind?:boolean):boolean;apply(jobId:string):Promise<void>;inspectResult?(jobId:string):Promise<void>;export(jobId:string):Promise<void>;
+  cancel():Promise<void>;reread(options?:{explicit?:boolean}):Promise<void>;apply(jobId:string):Promise<void>;inspectResult?(jobId:string):Promise<void>;export(jobId:string):Promise<void>;
   results():RelightResult[];
   busy?():boolean;pendingTasks?():number;openPendingTasks?():Promise<void>;reportError?(error:Error):void;
-  sourceState?():'current'|'changed'|'closed'|'rebind-required'|'applied-results';observeSource?(invalidate:()=>void):()=>void;
+  sourceState?():'current'|'changed'|'closed'|'rebind-required';observeSource?(invalidate:()=>void):()=>void;
   resultSourceState?(jobId:string):'current'|'changed';
   colorRecovery?():'create'|'retry'|undefined;recoverColor?():Promise<void>;
 }
@@ -76,7 +76,6 @@ export class RelightWorkbench {
   private previewToken=0;private previewRequest?:PreviewRequest;private previewRun?:PreviewRequest;private lastRender=0;private previewTimer?:ReturnType<typeof setTimeout>;private resizeTimer?:ReturnType<typeof setTimeout>;private saveTimer?:ReturnType<typeof setTimeout>;
   private finalRenderer?:RelightPreviewRenderer;private dragRenderer?:RelightPreviewRenderer;
   private sourceSyncTimer?:ReturnType<typeof setTimeout>;private sourceSyncFailed=false;
-  private recoveryRebind=false;
   private previewCounters={requested:0,started:0,completed:0,discarded:0,encoded:0,renderMs:0,encodeMs:0};
   private lightListKey='';private resultListKey='';
   private markerNodes=new Map<string,any>();
@@ -98,13 +97,17 @@ export class RelightWorkbench {
   setSourceInvalid(invalid:boolean):void {if(invalid){this.invalidateSource();return;}const previous=this.sourceInvalid;this.sourceInvalid=false;this.sourceSyncFailed=false;if(previous)this.message(t('编辑布光不会发起 AI 请求；主动点击生成'));if(this.visible)this.refresh();}
   private sourceMessage():string {
     const state=this.host.sourceState?.();
-    if(state==='applied-results')return t('来源中仍有已应用的 PS-AI 结果；请点击“排除已应用结果并重新读取”，或在 Photoshop 中撤销或隐藏这些结果。布光和可导出候选已保留。');
-    if(state==='closed')return t('来源文档已关闭；请绑定当前文档。布光配置和可导出候选已保留。');
+    if(state==='closed')return t('来源文档已关闭；请重新读取当前文档。布光配置和可导出候选已保留。');
     return t('来源已关闭或改变，请重新读取原图；布光配置和已有结果仍保留');
   }
   invalidateSource(reason?:string):void {const previous=this.sourceInvalid;this.sourceInvalid=true;this.finishInteraction();this.cancelPreview();if(reason||!previous)this.message(reason??this.sourceMessage());if(this.visible)this.refresh();}
   setScopePending(pending:boolean):void {const previous=this.scopePending;this.scopePending=pending;if(pending){this.finishInteraction();this.message(t('布光范围已改变，请重新读取原图；原有布光配置已保留'));}else if(previous&&!this.sourceInvalid)this.message(t('编辑布光不会发起 AI 请求；主动点击生成'));if(this.visible)this.refresh();}
-  showSourceRecovery(rebind:boolean,reason:string):void {this.recoveryRebind=rebind;this.sourceSyncFailed=true;this.invalidateSource(reason);this.show();}
+  showSourceRecovery(reason:string):void {this.sourceSyncFailed=true;this.invalidateSource(reason);this.show();}
+  /** Called only after a successful explicit native read, never on modal reopen. */
+  sourceRefreshed():void {
+    this.sourceInvalid=false;this.scopePending=false;this.outputPending=false;this.sourceSyncFailed=false;this.selectedResult=undefined;this.pendingDraft=undefined;this.tab='illustration';
+    this.message(t('已读取当前文档的可见合成，布光配置已保留；请检查位置后生成。旧候选仍可检查或导出。'));
+  }
   private el(id:string):any{return this.dialog.querySelector(`#relight-${id}`);}
   private listen(node:any,name:string,fn:(event:any)=>void):void {node.addEventListener(name,fn);this.listeners.push(()=>node.removeEventListener(name,fn));}
   private click(id:string,fn:()=>void|Promise<void>):void {this.listen(this.el(id),'click',()=>void this.guard(()=>{this.finishInteraction();return fn();}));}
@@ -246,12 +249,10 @@ export class RelightWorkbench {
       this.sourceSyncFailed=true;this.invalidateSource();
       this.closeForNative(async()=>{
         await this.host.recoverColor!();
-        this.sourceInvalid=false;this.scopePending=false;this.outputPending=false;this.sourceSyncFailed=false;this.selectedResult=undefined;this.pendingDraft=undefined;
+        this.sourceRefreshed();
         this.message(t('色彩副本已恢复并读取；布光配置已保留，请检查新来源后明确生成。旧候选仍可检查或导出。'));await this.save();
       });
     });
-    if(this.el('rebind-current'))this.click('rebind-current',()=>this.rereadSource(true));
-    this.click('exclude-results',()=>this.rereadSource(this.recoveryRebind,true,true));
     this.listen(this.el('output'),'change',()=>void this.guard(()=>{
       this.finishInteraction();
       const previous=this.session.outputKind;this.session.setOutputKind(this.el('output').value);
@@ -294,16 +295,14 @@ export class RelightWorkbench {
     }
     catch(error){this.message(t('布光示意失败，请重试示意或重新读取原图：{0}',error instanceof Error?error.message:String(error)));this.tab='original';}
   }
-  private rereadSource(rebind=false,explicit=true,excludeResults=false):void {
+  private rereadSource(explicit=true):void {
     if(this.pending||this.nativeBusy||this.host.busy?.())return;
-    if(rebind&&!this.host.rebindCurrent)return;
-    if(explicit){this.sourceSyncFailed=false;this.recoveryRebind=rebind;}
+    if(explicit)this.sourceSyncFailed=false;
     this.invalidateSource();
     this.closeForNative(async()=>{
-      try{if(rebind)await this.host.rebindCurrent!(excludeResults?{excludeResults:true}:undefined);else await this.host.reread({explicit,...(excludeResults?{excludeResults:true}:{})});}
-      catch(error){if(!explicit)this.sourceSyncFailed=true;throw error;}
-      this.sourceInvalid=false;this.scopePending=false;this.outputPending=false;this.sourceSyncFailed=false;this.recoveryRebind=false;this.selectedResult=undefined;this.pendingDraft=undefined;
-      this.message(t(excludeResults?'已将可靠记录的 PS-AI 结果不透明度设为 0 并读取当前编辑；可在 Photoshop 中一次撤销，撤销后须重新读取。布光已保留。':'原图已重新读取，布光已绑定新快照；请检查位置后生成'));await this.save();
+      try{await this.host.reread({explicit});}
+      catch(error){this.sourceSyncFailed=true;throw error;}
+      this.sourceRefreshed();await this.save();
     });
   }
   /** Metadata checks are cheap; the actual read runs only after the dialog closes. */
@@ -312,7 +311,7 @@ export class RelightWorkbench {
     const state=this.host.sourceState?.();if(!state||state==='current')return;
     if(!this.sourceInvalid)this.invalidateSource();
     if(state!=='changed'||!this.canSyncSource()||this.sourceSyncTimer)return;
-    this.sourceSyncTimer=setTimeout(()=>{this.sourceSyncTimer=undefined;if(this.host.sourceState?.()==='changed'&&this.canSyncSource())this.rereadSource(false,false);},0);
+    this.sourceSyncTimer=setTimeout(()=>{this.sourceSyncTimer=undefined;if(this.host.sourceState?.()==='changed'&&this.canSyncSource())this.rereadSource(false);},0);
   }
   private canSyncSource():boolean {return this.visible&&!this.transitioning&&!this.pending&&!this.nativeBusy&&!this.drag&&!this.sliderGesture&&!this.scopePending&&!this.outputPending&&!this.sourceSyncFailed&&!this.host.busy?.()&&!(this.host.pendingTasks?.()??0)&&this.host.results().length===0;}
   private interactionIdle():void {
@@ -411,10 +410,8 @@ export class RelightWorkbench {
     const result=this.result(),referenceOnly=!!result&&relightOutputKind(result)==='lighting-layers'&&result.lightingState!=='composite',checkSource=!!result&&(result.sourceSnapshotId!==undefined&&result.sourceSnapshotId!==scene.source.snapshotId||(this.host.resultSourceState?.(result.jobId)??(this.sourceInvalid?'changed':'current'))!=='current');
     this.el('apply').disabled=this.pending||this.nativeBusy||sharedBusy||!result||!!result.warning&&!referenceOnly;this.el('export').disabled=!result;this.el('reread').disabled=this.pending||this.nativeBusy||sharedBusy;
     this.el('tab-result').textContent=t(result?resultLabel(result):'AI 结果');
-    const recover=this.el('exclude-results');recover.style.display=this.host.appliedResults?.(this.recoveryRebind)?'block':'none';recover.disabled=this.pending||this.nativeBusy||sharedBusy;recover.textContent=t(this.recoveryRebind?'排除当前文档的已应用结果并绑定':'排除已应用结果并重新读取');this.el('recovery-info').style.display=recover.style.display;
     const color=this.el('recover-color'),colorAction=this.host.colorRecovery?.();
     if(color){color.style.display=colorAction?'block':'none';color.disabled=this.pending||this.nativeBusy||sharedBusy;color.textContent=t(colorAction==='retry'?'重试读取已恢复的色彩副本':'创建已恢复色彩副本并重新读取');}
-    if(this.el('rebind-current')){this.el('rebind-current').style.display=this.host.rebindCurrent?'block':'none';this.el('rebind-current').disabled=this.pending||this.nativeBusy||sharedBusy;}
     this.el('apply').textContent=t(referenceOnly?'查看提取失败原因':checkSource?'检查来源':result&&relightOutputKind(result)==='lighting-layers'?'应用光影层组':'应用整图结果');
     this.el('apply').setAttribute('data-result-action',referenceOnly||checkSource?'inspect':'apply');
     this.el('output').value=this.session.outputKind;

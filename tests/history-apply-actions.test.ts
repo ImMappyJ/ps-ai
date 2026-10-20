@@ -164,20 +164,20 @@ test('source check labels and recovery guidance remain available in English with
   }finally{await h.close();}
 });
 
-test('the workbench keeps a changed result source check clickable without recapturing or applying it',async()=>{
+test('explicit workbench reopening recaptures current source while old result inspection stays read-only',async()=>{
   const h=await panelHarness();try{
     await openFullRelight(h);const job=h.records()[0];h.click('relight-close');await sleep();h.ps.app.activeDocument.activeHistoryState={id:90};
     const reads=h.pixelRequests.length;h.click('open-relight');await until(()=>h.el('relight-dialog').hasAttribute('open'),'stale workbench reopens');
-    assert.equal(h.el('relight-generate').disabled,true);assert.equal(h.el('relight-apply').disabled,false);assert.match(h.el('relight-apply').textContent,/检查|恢复/);
+    assert.equal(h.el('relight-generate').disabled,false);assert.equal(h.el('relight-apply').disabled,true);assert.ok(h.pixelRequests.length>reads);const choice=h.el('relight-result-list').querySelector('button');choice.id='stale-result';h.click(choice.id);assert.match(h.el('relight-apply').textContent,/检查|恢复/);
     h.click('relight-apply');await sleep();await until(()=>h.el('relight-dialog').hasAttribute('open'),'source check reopens editor');
     assert.equal(diagnostic(h).taskId,job.id);assert.equal(diagnostic(h).documentId,11);assert.equal(diagnostic(h).code,'source-changed');
-    assert.equal(h.pixelRequests.length,reads);assert.equal(h.appliedLayers.length,0);assert.equal(h.posts.length,1);assert.equal(h.el('relight-export').disabled,false);
+    assert.ok(h.pixelRequests.length>reads);assert.equal(h.appliedLayers.length,0);assert.equal(h.posts.length,1);assert.equal(h.el('relight-export').disabled,false);
   }finally{await h.close();}
 });
 
 test('a workbench result from an earlier snapshot exposes a check but gains no new write permission after reread',async()=>{
   const h=await panelHarness();try{
-    await openFullRelight(h);const job=h.records()[0];h.click('relight-reread');await until(()=>!h.el('relight-generate').disabled,'explicit reread completes');
+    await openFullRelight(h);const job=h.records()[0];h.ps.app.activeDocument.activeHistoryState={id:90};h.click('relight-reread');await until(()=>!h.el('relight-generate').disabled,'explicit reread completes');
     const button=h.el('relight-result-list').querySelector('button');button.id='historical-result';h.click('historical-result');
     assert.equal(h.el('relight-apply').disabled,false);assert.match(h.el('relight-apply').textContent,/检查|恢复/);h.click('relight-apply');await sleep();
     await until(()=>h.el('relight-dialog').hasAttribute('open'),'historical check reopens editor');

@@ -21,11 +21,19 @@ test('English budget diagnostics preserve numeric limits and source error contra
 });
 
 test('English layer and source action copy translates the newly added UI strings without rewriting IDs',()=>{
- const keys=['请先撤销或隐藏已应用的 PS-AI 结果，再重新读取原图；已有结果仍可导出','来源范围已改变，请明确重新读取或绑定；布光配置已保留','正在提取光影影响场…','PS-AI 光影层 {0}','写入光影层 {0} / {1}','已应用独立光影层组；可编辑各通道、蒙版与不透明度，Ctrl+Z 一次撤销','光影层暂不支持作用范围内的透明/半透明来源；请缩小到不透明区域，或明确使用整图重绘并检查透明度','光影影响场的选区或保护区已改变，请重新读取原图'];
+ const keys=['重新读取当前文档','来源文档已关闭；请重新读取当前文档。布光配置和可导出候选已保留。','已读取当前文档的可见合成，布光配置已保留；请检查位置后生成。旧候选仍可检查或导出。','来源范围已改变，请明确重新读取当前文档；布光配置已保留','正在提取光影影响场…','PS-AI 光影层 {0}','写入光影层 {0} / {1}','已应用独立光影层组；可编辑各通道、蒙版与不透明度，Ctrl+Z 一次撤销','光影层暂不支持作用范围内的透明/半透明来源；请缩小到不透明区域，或明确使用整图重绘并检查透明度','光影影响场的选区或保护区已改变，请重新读取原图'];
  setLanguage('en-US');try{
   for(const key of keys)assert.doesNotMatch(t(key,'abcd1234',5),/[一-龥]/);
   assert.equal(t('PS-AI 光影层 {0}','abcd1234'),'PS-AI lighting layers abcd1234');assert.equal(t('写入光影层 {0} / {1}',2,5),'Writing lighting layers 2 / 5');
   assert.throws(()=>candidateOutputKind({relight:{outputKind:'unsupported'}} as any),(error:any)=>error.code==='invalid-output'&&!/[一-龥]/.test(error.message));
+ }finally{setLanguage('zh-CN');}
+});
+
+test('stale applied opacity guidance translates in English without changing the source error',()=>{
+ const message='来源文档内容已改变，请在 PS 图层面板调整不透明度或重新读取原图',error=new Error(message);
+ setLanguage('en-US');try{
+  assert.match(errorText(message),/source document.*changed/i);assert.match(errorText(message),/Photoshop Layers panel/);assert.match(errorText(message),/opacity.*read the source again/i);
+  assert.doesNotMatch(errorText(message),/[一-龥]/);assert.equal(diagnostic(error,'apply').summary,errorText(message));assert.equal(error.message,message);
  }finally{setLanguage('zh-CN');}
 });
 
