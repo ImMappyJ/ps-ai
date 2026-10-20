@@ -65,6 +65,9 @@ let candidates:Candidate[]=[];
 let imageOperation:Promise<void>=Promise.resolve();
 function withImagePixels<T>(action:()=>Promise<T>):Promise<T>{const work=imageOperation.then(action);imageOperation=work.then(()=>{},()=>{});return work;}
 let taskActive=false,taskSucceeded=false,batchPosition='';
+let sourceCaptures=0;
+function relightOpenBlocked():boolean{return sourceCaptures>0||busy&&!taskActive;}
+async function withSourceCapture<T>(action:()=>Promise<T>):Promise<T>{sourceCaptures++;inputUi();try{return await action();}finally{sourceCaptures--;inputUi();}}
 let connectionState='未连接';
 let setupStep=1,checkedSetup='';
 let sourceAccessMessage='',sourceAccessNotice=0,sourceAccessOperation=0;
@@ -119,7 +122,7 @@ function inputUi(){
   const mode=el('mode').value,blend=mode==='blend',structuredRelight=mode==='relight',nextPromptKind=blend?'blend':mode==='remove'||structuredRelight?undefined:'ordinary';
   if(nextPromptKind&&nextPromptKind!==promptKind){promptDrafts[promptKind]=el('prompt').value;el('prompt').value=promptDrafts[nextPromptKind];promptKind=nextPromptKind;}
   el('prompt-group').style.display=mode==='remove'||structuredRelight?'none':'block';el('prompt-label').textContent=t(blend?'补充要求（可选）':'描述修改或生成内容');
-  el('relight-entry').style.display=structuredRelight?'block':'none';el('generate').textContent=t(structuredRelight?'打开布光工作台':'生成候选');
+  el('relight-entry').style.display=structuredRelight?'block':'none';el('open-relight').disabled=relightOpenBlocked();el('relight-reuse-history').disabled=busy||sourceCaptures>0;el('generate').textContent=t(structuredRelight?'打开布光工作台':'生成候选');
   const asset=assetMode(mode),context=assetContext(),standalone=workspace==='t2i'&&el('destination').value==='document'||asset&&!context;el('selection-tools').style.display=standalone?'none':'block';el('prompt').setAttribute('placeholder',blend?t('可选：补充光影、色彩或融合要求'):workspace==='t2i'?t("描述要生成的画面、主体与风格"):workspace==='cosplay'?t("描述服装道具、光影方向、角色参考或氛围效果"):t("描述选区中要修改的内容，及需要保留的细节"));
   el('asset-input-group').style.display=asset?'block':'none';el('asset-input').disabled=busy;
   el('asset-input-help').textContent=t(context?'来源图与有效灰度范围图会一起送模，输出位置不改变输入。范围仅供参考，请检查结果是否残留来源人物、背景或范围图。':'仅使用文字生成独立素材，不读取当前图片；可另存 PNG 或新建文档。');
@@ -263,8 +266,9 @@ function captureSizes(snapshot:Pick<Snapshot,'width'|'height'|'bounds'|'captureG
 }
 function clearCapturePreview(){capture=undefined;el('selection-previews').style.display='none';for(const id of ['source-preview','mask-preview'])el(id).removeAttribute('src');}
 async function captureArea(expectedDocumentId=activeDocumentId(),showPreview=true,captureProtection=protection,beforeCommit?:(captured:Capture)=>void){
-  return withImagePixels(async()=>{
-  const mode=el('mode').value,capturedWorkspace=workspace,operation=activeOperation,context=assetContext();
+  const operation=activeOperation;
+  return withSourceCapture(()=>withImagePixels(async()=>{
+  const mode=el('mode').value,capturedWorkspace=workspace,context=assetContext();
   clearCapturePreview();
   const captured=await adapter.capture(Number(el('margin').value)/100,captureProtection,expectedDocumentId,outputDepth(),{analysisResolution:Number(el('resolution').value),retainedBytes:retainedImageBytes(true),...(context?{purpose:'selection-asset' as const,preserveNativeDepth:true}:{}),...(isBackgroundMode(mode)?{context:'document' as const,selection:'subject-background' as const}:mode==='blend'?{context:'document' as const,selection:'edit' as const}:{})},beforeCommit);
   const {snapshot:s,image}=captured;
@@ -272,6 +276,7 @@ async function captureArea(expectedDocumentId=activeDocumentId(),showPreview=tru
   if(captureProtection&&captured.workingCopyOf===captureProtection.documentId)captureProtection={...captureProtection,documentId:s.documentId};
   if(workspace!==capturedWorkspace||el('mode').value!==mode){inputUi();return;}
   capture=captured;
+  if(operation)operation.documentId=s.documentId;
   protection=captureProtection;
   const mapping=makeMapping(s.bounds,Number(el('resolution').value)),sizes=captureSizes(s,mapping)??(context?{documentWidth:s.width,documentHeight:s.height,nativeWidth:s.bounds.right-s.bounds.left,nativeHeight:s.bounds.bottom-s.bounds.top,workWidth:image.width,workHeight:image.height,modelWidth:mapping.width,modelHeight:mapping.height}:undefined);
   const edit=s.captureGeometry?downsampleSnapshotMask(s,image.width,image.height):s.mask,protectedMask=s.captureGeometry?resampleGray(captured.protectionMask,s.bounds.right-s.bounds.left,s.bounds.bottom-s.bounds.top,image.width,image.height):captured.protectionMask;
@@ -281,7 +286,7 @@ async function captureArea(expectedDocumentId=activeDocumentId(),showPreview=tru
   if(showPreview&&workspace===capturedWorkspace&&el('mode').value===mode)el('selection-previews').style.display='flex';
   if(operation&&activeDocumentId()===s.documentId)feedback.resolveCapture(operation);
   inputUi();
-  });
+  }));
 }
 async function restoreSelectionArea(){
   if(busy)return;
@@ -317,7 +322,7 @@ function preflightLightingSource(captured:Capture):void {
   if(mask.some((value,p)=>value>0&&captured.image.rgba[p*4+3]!==max))throw new DiagnosticError('unsupported','capture',t('光影层暂不支持作用范围内的透明/半透明来源；请缩小到不透明区域，或明确使用整图重绘并检查透明度'));
 }
 async function captureRelight(expectedDocumentId=activeDocumentId(),scope:RelightScope=relightScope(),kind:RelightOutputKind='lighting-layers',beforeCommit?:(capture:Capture)=>void,captureProtection=protection):Promise<Capture>{
-  return withImagePixels(async()=>{
+  return withSourceCapture(()=>withImagePixels(async()=>{
   const previous=activeDocumentId();
   if(expectedDocumentId===undefined)throw new Error(t('请先打开 Photoshop 文档并建立选区'));
   const target=Array.from(ps.app.documents as any[]).find(d=>d.id===expectedDocumentId);
@@ -331,7 +336,7 @@ async function captureRelight(expectedDocumentId=activeDocumentId(),scope:Religh
     await store.trace('relight.capture.complete',undefined,{documentId:captured.snapshot.documentId,width:captured.snapshot.width,height:captured.snapshot.height,analysisWidth:captured.image.width,analysisHeight:captured.image.height,depth:rasterDepth(captured.image),durationMs:Date.now()-start});
     return captured;
   }finally{const prior=Array.from(ps.app.documents as any[]).find(d=>d.id===previous);if(prior&&previous!==expectedDocumentId)await ps.core.executeAsModal(async()=>{ps.app.activeDocument=prior;},{commandName:'PS-AI restore document'});}
-  });
+  }));
 }
 function relightResults():RelightResult[]{
   return candidates.flatMap(c=>{const metadata=c.job.relight as RelightTaskMetadata|undefined;if(!metadata||metadata.schemaVersion!==1||!relightSession?.ownsSnapshot(metadata.scene?.source?.snapshotId))return [];return [{jobId:c.job.id,fingerprint:metadata.fingerprint,sourceSnapshotId:metadata.scene.source.snapshotId,image:c.image,warning:c.warning,outputKind:c.outputKind,lightingState:c.lightingState,lightingFailure:c.lightingFailure}];});
@@ -421,7 +426,7 @@ async function rereadRelight(session:RelightSession,explicit=true):Promise<void>
     });
     if(!explicit&&(JSON.stringify(fresh.snapshot.bounds)!==JSON.stringify(bound.bounds)||fresh.selectionMask.length!==session.sourceCapture.selectionMask.length||fresh.selectionMask.some((v,i)=>v!==session.sourceCapture.selectionMask[i])||fresh.protectionMask.some((v,i)=>v!==session.sourceCapture.protectionMask[i])))throw new DiagnosticError('source-changed','capture',t('来源范围已改变，请明确重新读取当前文档；布光配置已保留'));
     commit!(fresh.snapshot.historyId);relightMargin=Number(el('margin').value)/100;
-    if(operation)feedback.resolveCapture(operation,{...operation,documentId:fresh.snapshot.documentId});
+    if(operation){operation.documentId=fresh.snapshot.documentId;feedback.resolveCapture(operation);}
   });
 }
 function candidateById(id:string):Candidate {const candidate=candidates.find(c=>c.job.id===id);if(!candidate)throw new Error(t('此 AI 结果已离开内存，请从历史重新读取后应用'));return candidate;}
@@ -430,8 +435,8 @@ export async function openRelightWorkbench(reuse?:RelightScene,description?:stri
   if(typeof el('relight-dialog')?.uxpShowModal!=='function')throw new Error(t('当前宿主无法打开布光对话框，请使用 Photoshop 27+ 并重新加载开发插件'));
   // Reopening during a running operation preserves its frozen request. Native
   // callbacks reopen the dialog themselves without calling this explicit read.
-  if(relightWorkbench&&relightSession&&!reuse&&description===undefined&&busy){relightWorkbench.show();return;}
-  if(busy)throw new Error(t('请等待当前任务结束后重新读取原图'));
+  if(relightWorkbench&&relightSession&&!reuse&&description===undefined&&busy&&!relightOpenBlocked()){relightWorkbench.show();return;}
+  if(busy||relightOpenBlocked())throw new Error(t('请等待当前任务结束后重新读取原图'));
   const targetId=activeDocumentId(),operation=activeOperation;
   if(relightWorkbench&&relightSession&&!reuse&&description===undefined){
     try{await rereadRelight(relightSession);relightWorkbench.sourceRefreshed();relightWorkbench.show();}
@@ -447,7 +452,7 @@ export async function openRelightWorkbench(reuse?:RelightScene,description?:stri
       if(description!==undefined)staged.session.editor.updateScene({supplement:description});
     });
     publishRelightSession(staged!.commit(fresh.snapshot.historyId));
-    if(operation)feedback.resolveCapture(operation,{...operation,documentId:fresh.snapshot.documentId});
+    if(operation){operation.documentId=fresh.snapshot.documentId;feedback.resolveCapture(operation);}
   }finally{lock(false);}
 }
 function publishRelightSession(session:RelightSession):void {
@@ -763,6 +768,9 @@ async function generate(frozenRelight?:FrozenRelightSubmission,onRelightJob?:(id
       completedIds.push(id);
       if(index===count-1)taskSucceeded=true;
     }
+    // A normal return also covers cancellation before POST or after a saved
+    // late result. Only a completed, uncancelled batch supersedes task feedback.
+    if(operation&&completedIds.length===count&&!stopBatch)operation.successfulTaskId=completedIds[completedIds.length-1];
   }catch(error){status(error instanceof Error?error.message:String(error));throw error;}finally{endTask();try{await refreshHistory();}finally{lock(false);const valid=completedIds.filter(id=>!candidates.find(c=>c.job.id===id)?.warning),saved=batchIds.filter(id=>candidates.some(c=>c.job.id===id));if(taskSucceeded&&valid.length)resultNavigation.complete(navigationIntent,valid);el('view-ready-results').style.display=(!taskSucceeded||!valid.length)&&saved.length?'block':'none';queueResultNavigation();}}
 }
 async function recover(){
@@ -770,7 +778,7 @@ async function recover(){
   const operation=activeOperation,navigationIntent=resultNavigation.begin();
   try {const records=await store.history();current=records.find(r=>r.id===id);
   if(!current)throw new Error(t("没有可恢复的任务"));
-  assertBackend(current);if(operation)operation.taskId=current.id;if(current.tracking==='detached'){delete current.tracking;await store.save(current);await refreshHistory(id);}if(settings.platform&&client instanceof GatewayClient){const ready=await connectDraft(settings) as GatewayClient;client.token=ready.token;}taskSucceeded=await waitRecord(current,operation);}catch(error){status(error instanceof Error?error.message:String(error));throw error;}finally{endTask();try{await refreshHistory(id);}finally{lock(false);if(taskSucceeded&&id)resultNavigation.complete(navigationIntent,[id]);queueResultNavigation();}}
+  assertBackend(current);if(operation)operation.taskId=current.id;if(current.tracking==='detached'){delete current.tracking;await store.save(current);await refreshHistory(id);}if(settings.platform&&client instanceof GatewayClient){const ready=await connectDraft(settings) as GatewayClient;client.token=ready.token;}const completed=await waitRecord(current,operation);taskSucceeded=completed;if(operation&&completed)operation.successfulTaskId=current.id;}catch(error){status(error instanceof Error?error.message:String(error));throw error;}finally{endTask();try{await refreshHistory(id);}finally{lock(false);if(taskSucceeded&&id)resultNavigation.complete(navigationIntent,[id]);queueResultNavigation();}}
 }
 async function cancelSelected(){
   // Busy cancellation belongs to the active batch, regardless of visible history.

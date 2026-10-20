@@ -619,3 +619,12 @@ test('diagnostic retry clears an unclassified source-read failure only after fre
   h.ps.imaging.getPixels=read;h.click('diagnostic-primary');await new Promise(r=>setTimeout(r,80));assert.equal(h.el('relight-dialog').hasAttribute('open'),true);h.click('relight-close');await new Promise(r=>setTimeout(r,20));assert.equal(h.el('diagnostic-box').style.display,'none');assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);
  }finally{await h.close();}
 });
+
+test('a queued second open cannot expose the stale workbench or steal a pending native capture failure',async()=>{
+ const h=await panelHarness();let release=()=>{};try{
+  await open(h);h.el('relight-intensity').value='3.4';h.change('relight-intensity');const before=await draft(h);h.click('relight-close');await new Promise(r=>setTimeout(r,20));
+  let started=()=>{};const entered=new Promise<void>(resolve=>{started=resolve;}),barrier=new Promise<void>(resolve=>{release=resolve;});h.ps.imaging.getPixels=async()=>{started();await barrier;throw Error('source read failed');};
+  h.click('open-relight');await entered;assert.equal(h.el('relight-dialog').hasAttribute('open'),false);h.click('open-relight');await new Promise(r=>setTimeout(r,20));assert.equal(h.el('relight-dialog').hasAttribute('open'),false,'a capture in flight cannot reopen stale pixels');
+  release();await h.wait();assert.equal(h.el('relight-dialog').hasAttribute('open'),false);assert.equal(h.el('diagnostic-box').style.display,'block');assert.match(h.el('diagnostic-summary').textContent,/source read failed/);assert.equal(JSON.parse(String(h.files['relight-draft.json'])).scene.source.snapshotId,before.source.snapshotId);assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);
+ }finally{release();await h.wait();await h.close();}
+});
