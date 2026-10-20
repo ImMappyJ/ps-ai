@@ -11,7 +11,8 @@ test('background behavior omits only the ComfyUI visual guide and keeps provider
   assert.deepEqual(editBehavior('remove',{guide:false,preserveAlpha:false,alignSubject:true}),{guide:false,preserveAlpha:false,alignSubject:false,matchColor:false});
 });
 test('Image Blending preserves source alpha without alignment or context color correction',()=>{
-  assert.deepEqual(editBehavior('blend',{guide:true,preserveAlpha:true,alignSubject:true,matchColor:true}),{guide:true,preserveAlpha:true,alignSubject:false,matchColor:false});
+  assert.deepEqual(editBehavior('blend',{guide:true,preserveAlpha:true,alignSubject:true,matchColor:true}),{guide:false,preserveAlpha:true,alignSubject:false,matchColor:false});
+  assert.deepEqual(editBehavior('blend',{guide:true,preserveAlpha:true,alignSubject:true,matchColor:true},'gateway'),{guide:true,preserveAlpha:true,alignSubject:false,matchColor:false});
   assert.deepEqual(editBehavior('costume',{guide:true,preserveAlpha:true,alignSubject:true,matchColor:true}),{guide:true,preserveAlpha:true,alignSubject:true,matchColor:true});
 });
 test('model-only background matte handles straight alpha at both depths and leaves capture pixels intact',()=>{
