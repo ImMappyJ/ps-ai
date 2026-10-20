@@ -143,12 +143,12 @@ test('busy cancellation stays bound to the active query while another history ro
   }finally{h.setJobStatus('ready',A);await h.close();}
 });
 
-test('the workbench hands pending history back to the panel and reopens with the edited lighting and frozen source',async()=>{
+test('the workbench hands pending history back to the panel and explicitly reopens with current source and retained lighting',async()=>{
   const h=await panelHarness({history:[record(A)]});try{await h.wait();h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');h.click('open-relight');await pause();
     h.el('relight-intensity').value='2.5';h.change('relight-intensity');const reads=h.captured.length,source=h.el('relight-source').textContent;
     assert.notEqual(h.el('relight-pending-tasks')?.style.display,'none');h.click('relight-pending-tasks');await pause();await h.wait();
     assert.equal(h.el('relight-dialog').hasAttribute('open'),false);assert.notEqual(h.el('view-history').style.display,'none');assert.equal(h.historySelectedId(),A);
-    h.click('open-relight');await pause();assert.equal(h.el('relight-intensity').value,'2.5');assert.equal(h.el('relight-source').textContent,source);assert.equal(h.captured.length,reads);noResubmit(h);
+    h.click('open-relight');await pause();assert.equal(h.el('relight-intensity').value,'2.5');assert.equal(h.el('relight-source').textContent,source);assert.ok(h.captured.length>reads);noResubmit(h);
   }finally{await h.close();}
 });
 

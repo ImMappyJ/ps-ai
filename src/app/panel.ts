@@ -73,7 +73,6 @@ let promptKind:'ordinary'|'blend'='ordinary';
 const promptDrafts={ordinary:'',blend:''};
 const relightDrafts=new RelightDraftStore(store);
 let relightWorkbench:RelightWorkbench|undefined,relightSession:RelightSession|undefined,relightMargin=.15,relightReuse:RelightScene|undefined,relightReuseDescription:string|undefined;
-let relightInitialRecoveryDocument:number|undefined;
 // A successful recovery copy can outlive a failed read. It grants no snapshot
 // or application rights; only the matching explicit UI action may retry it.
 let pendingColorCapture:{sourceDocumentId:number;documentId:number;colorReason:NonNullable<Snapshot['colorReason']>;workspace:Workspace;mode:string;geometry:{width:number;height:number;mode:unknown;depth:unknown};session?:RelightSession;scope?:RelightScope}|undefined;
@@ -206,7 +205,7 @@ function renderLanguage(){
   const mode=el('mode').value;el('mode').innerHTML='';for(const [id,label] of modes[workspace])option(el('mode'),id,label);el('mode').value=mode;
   for(const name of Object.keys(foldLabels))fold(name,el(`${name}-body`).style.display!=='none');
   const index=el('candidate-select').value;el('candidate-select').innerHTML='';candidates.forEach((c,i)=>option(el('candidate-select'),String(i),t('候选 {0} · {1}×{2}',i+1,c.image.width,c.image.height)));if(candidates.length)el('candidate-select').value=index;
-  el('zoom').textContent=zoomed?t('适应预览'):t('100% 查看');inputUi();renderSetup();candidateUi();renderInitialRelightRecovery();
+  el('zoom').textContent=zoomed?t('适应预览'):t('100% 查看');inputUi();renderSetup();candidateUi();
 }
 function selected():Candidate {const c=candidates[Number(el('candidate-select').value)];if(!c)throw new Error(t("请先生成或读取一个候选"));return c;}
 async function guarded(action:(operation:OperationContext)=>Promise<void>,options:Partial<Pick<OperationContext,'page'|'feature'|'stage'>>={}){
@@ -317,7 +316,7 @@ function preflightLightingSource(captured:Capture):void {
   const mask=downsampleSnapshotMask(s,captured.image.width,captured.image.height),max=rasterDepth(captured.image)===16?65535:255;
   if(mask.some((value,p)=>value>0&&captured.image.rgba[p*4+3]!==max))throw new DiagnosticError('unsupported','capture',t('光影层暂不支持作用范围内的透明/半透明来源；请缩小到不透明区域，或明确使用整图重绘并检查透明度'));
 }
-async function captureRelight(expectedDocumentId=activeDocumentId(),scope:RelightScope=relightScope(),kind:RelightOutputKind='lighting-layers',excludeApplications=false,beforeCommit?:(capture:Capture)=>void,captureProtection=protection):Promise<Capture>{
+async function captureRelight(expectedDocumentId=activeDocumentId(),scope:RelightScope=relightScope(),kind:RelightOutputKind='lighting-layers',beforeCommit?:(capture:Capture)=>void,captureProtection=protection):Promise<Capture>{
   return withImagePixels(async()=>{
   const previous=activeDocumentId();
   if(expectedDocumentId===undefined)throw new Error(t('请先打开 Photoshop 文档并建立选区'));
@@ -326,7 +325,7 @@ async function captureRelight(expectedDocumentId=activeDocumentId(),scope:Religh
   if(kind==='lighting-layers')planRelightMemory(target.width,target.height,target.bitsPerChannel===ps.constants.BitsPerChannelType.SIXTEEN?16:8,undefined,retainedImageBytes());
   if(previous!==expectedDocumentId)await ps.core.executeAsModal(async()=>{ps.app.activeDocument=target;},{commandName:'PS-AI relight source'});
   try {
-    const start=Date.now(),captured=await adapter.capture(Number(el('margin').value)/100,captureProtection,expectedDocumentId,outputDepth(),{selection:scope==='document'?'document':'edit',preserveNativeDepth:true,...(excludeApplications?{excludeApplications:true}:{}),analysisResolution:Number(el('resolution').value),retainedBytes:retainedImageBytes(kind!=='lighting-layers'),...(kind==='lighting-layers'?{purpose:'relight-analysis' as const}:{})},beforeCommit);
+    const start=Date.now(),captured=await adapter.capture(Number(el('margin').value)/100,captureProtection,expectedDocumentId,outputDepth(),{selection:scope==='document'?'document':'edit',preserveNativeDepth:true,analysisResolution:Number(el('resolution').value),retainedBytes:retainedImageBytes(kind!=='lighting-layers'),...(kind==='lighting-layers'?{purpose:'relight-analysis' as const}:{})},beforeCommit);
     if(captureProtection&&captured.workingCopyOf===captureProtection.documentId)captureProtection={...captureProtection,documentId:captured.snapshot.documentId};
     protection=captureProtection;
     await store.trace('relight.capture.complete',undefined,{documentId:captured.snapshot.documentId,width:captured.snapshot.width,height:captured.snapshot.height,analysisWidth:captured.image.width,analysisHeight:captured.image.height,depth:rasterDepth(captured.image),durationMs:Date.now()-start});
@@ -343,19 +342,11 @@ async function relightOperation(feature:string,stage:Stage,action:()=>Promise<vo
   await guarded(async()=>{try{await action();}catch(error){failed=true;failure=error;if(error&&typeof error==='object')reportedRelightErrors.add(error);throw error;}},{page:'create',feature,stage});
   if(failed)throw failure;
 }
-function relightSourceState(session:RelightSession):'current'|'changed'|'closed'|'rebind-required'|'applied-results'{
+function relightSourceState(session:RelightSession):'current'|'changed'|'closed'|'rebind-required'{
   const s=session.sourceCapture.snapshot,doc=Array.from(ps.app.documents as any[]).find(d=>d.id===s.documentId);
   if(!doc)return 'closed';
   if(activeDocumentId()!==s.documentId||doc.width!==s.width||doc.height!==s.height||doc.mode!==s.mode||doc.bitsPerChannel!==s.depth||doc.colorProfileName!==s.profile||relightScope()!==session.scope||Number(el('margin').value)/100!==relightMargin)return 'rebind-required';
-  return adapter.sourceAvailability(s,true)==='current'?'current':adapter.hasVisibleApplication(s.documentId)?'applied-results':'changed';
-}
-function assertCleanRelightSource(documentId:number|undefined):void {
-  if(documentId!==undefined&&adapter.hasVisibleApplication(documentId))throw new DiagnosticError('source-changed','capture',t('来源中仍有已应用的 PS-AI 结果；请点击“排除已应用结果并重新读取”，或在 Photoshop 中撤销或隐藏这些结果。布光和可导出候选已保留。'));
-}
-function renderInitialRelightRecovery():void {
-  const button=el('open-relight'),key=relightInitialRecoveryDocument===undefined?'打开布光工作台':'排除已应用结果并重新读取';
-  button.setAttribute('data-i18n',key);button.textContent=t(key)+(relightInitialRecoveryDocument===undefined?'':` · ${relightInitialRecoveryDocument}`);
-  el('relight-initial-recovery-info').style.display=relightInitialRecoveryDocument===undefined?'none':'block';
+  return adapter.sourceAvailability(s,true)==='current'?'current':'changed';
 }
 function colorRecoveryAction(documentId:number,session?:RelightSession):'create'|'retry'|undefined {
   const retry=pendingColorCapture;
@@ -396,9 +387,8 @@ async function recoverSourceColor(documentId:number,session?:RelightSession):Pro
         if(/^sRGB(?: IEC61966-2\.1)?$/i.test(captured.snapshot.profile.trim())){captured.workingCopyOf=retry.sourceDocumentId;captured.snapshot.colorReason=retry.colorReason;}
       };
       if(retry.mode==='relight'){
-        assertCleanRelightSource(retry.documentId);
         let commit:((historyId?:number)=>void)|undefined,staged:ReturnType<typeof RelightSession.stageCreation>|undefined;
-        const scope=retry.scope!,fresh=await captureRelight(retry.documentId,scope,session?.outputKind??'lighting-layers',false,captured=>{
+        const scope=retry.scope!,fresh=await captureRelight(retry.documentId,scope,session?.outputKind??'lighting-layers',captured=>{
           identifyCopy(captured);
           if(session)commit=session.stageRebind(captured,uuid(),scope);
           else staged=RelightSession.stageCreation(captured,uuid(),uuid(),scope);
@@ -415,36 +405,40 @@ async function recoverSourceColor(documentId:number,session?:RelightSession):Pro
     status(t('已创建并读取恢复色彩的副本；请检查新来源后明确生成。旧候选仍绑定原来源，可继续导出。'));
   });
 }
-async function rereadRelight(session:RelightSession,rebind=false,explicit=true,excludeResults=false):Promise<void>{
+async function rereadRelight(session:RelightSession,explicit=true):Promise<void>{
   await configure(async()=>{
-    const bound=session.sourceCapture.snapshot,targetId=rebind?activeDocumentId():bound.documentId;
-    if(!excludeResults)assertCleanRelightSource(targetId);
+    const bound=session.sourceCapture.snapshot,targetId=explicit?activeDocumentId():bound.documentId;
     if(!explicit&&relightSourceState(session)!=='changed')return;
     const scope=explicit?relightScope():session.scope;let commit:((historyId?:number)=>void)|undefined;
-    const fresh=await captureRelight(targetId,scope,session.outputKind,excludeResults,captured=>{commit=session.stageRebind(captured,uuid(),scope);});
-    if(!explicit&&(JSON.stringify(fresh.snapshot.bounds)!==JSON.stringify(bound.bounds)||fresh.selectionMask.length!==session.sourceCapture.selectionMask.length||fresh.selectionMask.some((v,i)=>v!==session.sourceCapture.selectionMask[i])||fresh.protectionMask.some((v,i)=>v!==session.sourceCapture.protectionMask[i])))throw new DiagnosticError('source-changed','capture',t('来源范围已改变，请明确重新读取或绑定；布光配置已保留'));
+    const fresh=await captureRelight(targetId,scope,session.outputKind,captured=>{
+      // A fresh native read is still required on every explicit open. Reuse an
+      // identical binding so ordinary reopening cannot exhaust snapshot IDs.
+      let unchanged=scope===session.scope;
+      if(unchanged)try{session.assertCaptureMatches(captured);}catch{unchanged=false;}
+      commit=unchanged?()=>{}:session.stageRebind(captured,uuid(),scope);
+    });
+    if(!explicit&&(JSON.stringify(fresh.snapshot.bounds)!==JSON.stringify(bound.bounds)||fresh.selectionMask.length!==session.sourceCapture.selectionMask.length||fresh.selectionMask.some((v,i)=>v!==session.sourceCapture.selectionMask[i])||fresh.protectionMask.some((v,i)=>v!==session.sourceCapture.protectionMask[i])))throw new DiagnosticError('source-changed','capture',t('来源范围已改变，请明确重新读取当前文档；布光配置已保留'));
     commit!(fresh.snapshot.historyId);relightMargin=Number(el('margin').value)/100;
   });
 }
 function candidateById(id:string):Candidate {const candidate=candidates.find(c=>c.job.id===id);if(!candidate)throw new Error(t('此 AI 结果已离开内存，请从历史重新读取后应用'));return candidate;}
 async function exportCandidate(id:string):Promise<void>{if(busy)throw new Error(t('已有任务正在进行，请等待完成后再生成或应用；可以继续编辑布光'));await configure(async()=>{const c=candidateById(id),file=await uxp.storage.localFileSystem.getFileForSaving(`ps-ai-${c.job.id.slice(0,8)}.png`,{types:['png']});if(file)await file.write(new Uint8Array(c.bytes).buffer,{format:uxp.storage.formats.binary});});}
-export async function openRelightWorkbench(reuse?:RelightScene,description?:string,excludeDocumentId?:number):Promise<void>{
-  if(relightWorkbench&&relightSession&&!reuse&&description===undefined){
-    relightWorkbench.setSourceInvalid(relightSourceState(relightSession)!=='current');relightWorkbench.setScopePending(relightScope()!==relightSession.scope);relightWorkbench.show();return;
-  }
+export async function openRelightWorkbench(reuse?:RelightScene,description?:string):Promise<void>{
   if(typeof el('relight-dialog')?.uxpShowModal!=='function')throw new Error(t('当前宿主无法打开布光对话框，请使用 Photoshop 27+ 并重新加载开发插件'));
+  // Reopening during a running operation preserves its frozen request. Native
+  // callbacks reopen the dialog themselves without calling this explicit read.
+  if(relightWorkbench&&relightSession&&!reuse&&description===undefined&&busy){relightWorkbench.show();return;}
   if(busy)throw new Error(t('请等待当前任务结束后重新读取原图'));
   const targetId=activeDocumentId();
-  if(excludeDocumentId!==undefined&&excludeDocumentId!==targetId){relightInitialRecoveryDocument=undefined;renderInitialRelightRecovery();throw new Error(t('活动文档已切换，请在来源文档重新生成'));}
-  if(excludeDocumentId===undefined)try{assertCleanRelightSource(targetId);}catch(error){
-    if(relightWorkbench&&relightSession)relightWorkbench.showSourceRecovery(targetId!==relightSession.sourceCapture.snapshot.documentId,error instanceof Error?error.message:String(error));
-    else {relightInitialRecoveryDocument=targetId;renderInitialRelightRecovery();}
-    throw error;
+  if(relightWorkbench&&relightSession&&!reuse&&description===undefined){
+    try{await rereadRelight(relightSession);relightWorkbench.sourceRefreshed();relightWorkbench.show();}
+    catch(error){relightWorkbench.showSourceRecovery(error instanceof DiagnosticError&&error.code==='selection-required'?diagnostic(error,'capture').action:error instanceof Error?error.message:String(error));throw error;}
+    return;
   }
   lock(true);
   try {
     if(activeOperation)activeOperation.stage='capture';const scope=relightScope();let staged:ReturnType<typeof RelightSession.stageCreation>|undefined;
-    const fresh=await captureRelight(targetId,scope,'lighting-layers',excludeDocumentId!==undefined,captured=>{
+    const fresh=await captureRelight(targetId,scope,'lighting-layers',captured=>{
       staged=RelightSession.stageCreation(captured,uuid(),uuid(),scope);
       if(reuse)staged.session.restore(reuse,true);
       if(description!==undefined)staged.session.editor.updateScene({supplement:description});
@@ -454,14 +448,13 @@ export async function openRelightWorkbench(reuse?:RelightScene,description?:stri
 }
 function publishRelightSession(session:RelightSession):void {
     if(pendingColorCapture?.session&&pendingColorCapture.session!==session)pendingColorCapture=undefined;
-    relightSession=session;relightMargin=Number(el('margin').value)/100;relightInitialRecoveryDocument=undefined;renderInitialRelightRecovery();
+    relightSession=session;relightMargin=Number(el('margin').value)/100;
     relightWorkbench=new RelightWorkbench(el('relight-dialog'),session,{
       uuid,save:scene=>relightDrafts.save(scene),loadDraft:()=>relightDrafts.load(),busy:()=>busy,reportError:error=>{if(!reportedRelightErrors.has(error))void guarded(async()=>{throw error;},{page:'create',feature:'relight',stage:'capture'});},
       sourceState:()=>relightSourceState(session),observeSource:invalidate=>observeRelightSource(ps.action,()=>{if(relightSourceState(session)!=='current')invalidate();},()=>void store.trace('relight.source-notifications.unavailable')),
       prepare:frozen=>relightOperation('relight-prepare','capture',()=>configure(async()=>{if(relightScope()!==frozen.scope)throw new Error(t('布光范围已改变，请重新读取原图；原有布光配置已保留'));if(Number(el('margin').value)/100!==relightMargin)throw new Error(t('范围参数已改变，请重新读取原图'));adapter.assertSourceCurrent(frozen.capture.snapshot);const fresh=await captureRelight(frozen.capture.snapshot.documentId,frozen.scope,frozen.outputKind);session.assertCaptureMatches(fresh);if(frozen.outputKind==='lighting-layers')preflightLightingSource(fresh);})),
       generate:(frozen,onJob)=>relightOperation('generate','inference',()=>generate(frozen,onJob)),cancel:async()=>{stopBatch=true;},pendingTasks:()=>historyRecords.filter(blocksGeneration).length,openPendingTasks:()=>showPending(),
-      reread:options=>relightOperation('relight-reread','capture',()=>rereadRelight(session,false,options?.explicit!==false,options?.excludeResults===true)),rebindCurrent:options=>relightOperation('relight-rebind','capture',()=>rereadRelight(session,true,true,options?.excludeResults===true)),
-      appliedResults:rebind=>adapter.hasVisibleApplication(rebind?activeDocumentId()??-1:session.sourceCapture.snapshot.documentId),
+      reread:options=>relightOperation('relight-reread','capture',()=>rereadRelight(session,options?.explicit!==false)),
       colorRecovery:()=>colorRecoveryAction(session.sourceCapture.snapshot.documentId,session),recoverColor:()=>relightOperation('recover-color','capture',()=>recoverSourceColor(session.sourceCapture.snapshot.documentId,session)),
       resultSourceState:id=>candidateApplicationMode(candidates.find(c=>c.job.id===id))==='unavailable'?'changed':'current',
       apply:id=>relightOperation('apply','apply',()=>apply(id)),inspectResult:id=>relightOperation('apply','apply',()=>apply(id,true)),export:exportCandidate,results:relightResults,
@@ -928,7 +921,7 @@ on('protect',()=>configure(async()=>{protection=await adapter.protection();captu
 on('clear-protection',()=>configure(async()=>{protection=undefined;capture=undefined;el('selection-previews').style.display='none';sourceCaption.show('保护区已清除，请重新捕获');}));
 on('reference',()=>configure(async()=>{const file=await uxp.storage.localFileSystem.getFileForOpening({types:['png','jpg','jpeg','webp']});if(!file)return;reference=await adapter.importReference(file,retainedImageBytes(true));el('reference-info').textContent=`${file.name} · ${reference.width}×${reference.height} · sRGB 8-bit`;}));
 on('clear-reference',async()=>{reference=undefined;el('reference-info').setAttribute('data-i18n','未选择参考图');el('reference-info').textContent=t("未选择参考图");});
-on('open-relight',()=>openRelightWorkbench(undefined,undefined,relightInitialRecoveryDocument));
+on('open-relight',()=>openRelightWorkbench());
 on('relight-reuse-history',()=>openRelightWorkbench(relightReuse,relightReuseDescription));
 el('relight-scope').addEventListener('change',()=>{if(relightSession)relightWorkbench?.setScopePending(relightScope()!==relightSession.scope);});
 el('remember-source-access').addEventListener('change',()=>void guarded(async()=>{const operation=++sourceAccessOperation,notice=sourceAccessNotice;await sourceColorReader.setRemember(!!el('remember-source-access').checked);if(operation!==sourceAccessOperation)return;el('remember-source-access').checked=sourceColorReader.remember;if(notice===sourceAccessNotice)sourceAccessStatus(sourceColorReader.remember?'已开启记住原图文件授权；仍会重新检查文件内容和颜色声明':'已关闭记住原图文件授权；已移除保存的授权，本次会话访问仍可使用');}));

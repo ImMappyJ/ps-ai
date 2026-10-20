@@ -10,6 +10,43 @@ async function open(h:Awaited<ReturnType<typeof panelHarness>>){await h.wait();h
 async function useFullResult(h:Awaited<ReturnType<typeof panelHarness>>){h.el('relight-output').value='full-result';h.change('relight-output');h.click('relight-reread');await new Promise(r=>setTimeout(r,80));assert.equal(h.el('relight-output').value,'full-result');assert.equal(h.el('relight-generate').disabled,false);}
 async function draft(h:Awaited<ReturnType<typeof panelHarness>>){h.click('relight-save');await new Promise(r=>setTimeout(r,15));return JSON.parse(String(h.files['relight-draft.json'])).scene;}
 
+test('explicit reopen reads the current merged composite even when its layer keeps an applied result ID',async()=>{
+  const h=await panelHarness();try{
+    await open(h);await useFullResult(h);h.el('relight-intensity').value='2.8';h.change('relight-intensity');h.click('relight-generate');await h.wait();
+    const job=h.records()[0],frozen=JSON.stringify(job.relight);h.click('relight-apply');await new Promise(r=>setTimeout(r,70));
+    const merged=h.appliedLayers[0].layer;merged.visible=true;merged.opacity=100;h.ps.app.activeDocument.layers=[merged];h.ps.app.activeDocument.activeHistoryState={id:90};
+    const read=h.ps.imaging.getPixels;h.ps.imaging.getPixels=async(o:any)=>{const result=await read(o);const get=result.imageData.getData;result.imageData.getData=async()=>{const pixels=(await get()).slice();pixels[0]=37;return pixels;};return result;};
+    const before=await draft(h);h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.click('open-relight');await new Promise(r=>setTimeout(r,90));
+    const after=await draft(h);assert.equal(after.source.historyId,90);assert.notEqual(after.source.snapshotId,before.source.snapshotId);assert.deepEqual(after.source.layerIds,[merged.id]);
+    assert.equal(merged.opacity,100);assert.equal(merged.visible,true);assert.equal(h.ps.app.activeDocument.layers.length,1);assert.equal(after.lights[0].intensity,2.8);assert.equal(h.el('relight-generate').disabled,false);
+    h.click('relight-tab-original');assert.equal(decodePng(Uint8Array.from(Buffer.from(h.el('relight-image').getAttribute('src').split(',')[1],'base64'))).rgba[0],37);
+    assert.equal(h.el('relight-apply').disabled,true);assert.equal(h.el('relight-result-list').querySelectorAll('button').length,1);assert.equal(JSON.stringify(job.relight),frozen);
+    const result=h.el('relight-result-list').querySelector('button');result.id='old-merged-result';h.click(result.id);assert.match(h.el('relight-apply').textContent,/检查来源/);assert.equal(h.el('relight-export').disabled,false);
+    const applied=h.appliedLayers.length;h.click('relight-apply');await new Promise(r=>setTimeout(r,50));assert.equal(h.appliedLayers.length,applied);assert.equal(h.posts.length,1);
+    assert.equal(h.el('relight-rebind-current'),null);assert.equal(h.el('relight-exclude-results'),null);
+  }finally{await h.close();}
+});
+
+test('explicit reread follows the active document and reopening replaces a closed old source while retaining lights',async()=>{
+  const h=await panelHarness();try{
+    await open(h);h.el('relight-intensity').value='3.4';h.change('relight-intensity');const old=await draft(h);
+    h.switchDocument(22);h.click('relight-reread');await new Promise(r=>setTimeout(r,80));assert.equal((await draft(h)).source.documentId,22);assert.equal(h.ps.app.activeDocument.id,22);
+    h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.setDocument(33);h.click('open-relight');await new Promise(r=>setTimeout(r,80));const next=await draft(h);
+    assert.equal(next.source.documentId,33);assert.notEqual(next.source.snapshotId,old.source.snapshotId);assert.equal(next.lights[0].intensity,3.4);assert.equal(h.el('relight-generate').disabled,false);assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);
+  }finally{await h.close();}
+});
+
+test('more than one hundred unchanged explicit opens still read pixels without exhausting source identities',async()=>{
+  const h=await panelHarness();try{
+    await open(h);h.el('relight-intensity').value='2.6';h.change('relight-intensity');const initial=await draft(h),reads=h.pixelRequests.length;
+    for(let i=0;i<105;i++){
+      h.click('relight-close');await new Promise(r=>setTimeout(r,5));h.click('open-relight');await new Promise(r=>setTimeout(r,5));
+      assert.equal(h.el('relight-dialog').hasAttribute('open'),true,'open '+i);assert.equal(h.el('relight-generate').disabled,false,'generation remains available after open '+i);
+    }
+    const final=await draft(h);assert.equal(final.source.snapshotId,initial.source.snapshotId);assert.equal(final.lights[0].intensity,2.6);assert.equal(h.pixelRequests.length,reads+105);assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);
+  }finally{await h.close();}
+});
+
 test('relight missing-selection guidance appears before file authorization and points at the explicit whole-image choice',async()=>{
   const h=await panelHarness({untaggedSource:{bytes:encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)})}});try{
     await h.wait();h.click('nav-create');h.setSelection({bounds:null as any,mask:new Uint8Array(4)});h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');
@@ -33,15 +70,13 @@ test('whole-image relight freezes opaque native16 and protection without reading
   }finally{await h.close();}
 });
 
-test('a changed scope keeps the frozen caption on reopen and requires reread before generation, retaining the scene',async()=>{
+test('reopening reads the current scope and retains edited lighting without submitting',async()=>{
   const h=await panelHarness({selection:{bounds:{left:0,top:0,right:1,bottom:2},mask:new Uint8Array([255,0,255,0])}});try{
     await open(h);h.el('relight-intensity').value='2.5';h.change('relight-intensity');const old=await draft(h);assert.match(h.el('relight-source').textContent,/当前选区/);
-    h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.el('relight-scope').value='document';h.change('relight-scope');h.click('open-relight');await new Promise(r=>setTimeout(r,40));
-    assert.match(h.el('relight-source').textContent,/当前选区/);assert.match(h.el('relight-status').textContent,/范围.*重新读取/);assert.equal(h.el('relight-generate').disabled,true);
-    h.click('relight-generate');await new Promise(r=>setTimeout(r,20));assert.equal(h.posts.length,0);
-    h.click('relight-reread');await new Promise(r=>setTimeout(r,70));assert.match(h.el('relight-source').textContent,/整张图像/);assert.equal(h.el('relight-intensity').value,'2.5');assert.equal(h.el('relight-generate').disabled,false);
+    h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.el('relight-scope').value='document';h.change('relight-scope');h.click('open-relight');await new Promise(r=>setTimeout(r,70));
+    assert.match(h.el('relight-source').textContent,/整张图像/);assert.equal(h.el('relight-intensity').value,'2.5');assert.equal(h.el('relight-generate').disabled,false);assert.equal(h.posts.length,0);
     const next=await draft(h);assert.notEqual(next.source.snapshotId,old.source.snapshotId);h.setSelection({bounds:null as any,mask:new Uint8Array(4)});
-    h.click('relight-generate');await h.wait();assert.equal(h.posts.length,1);assert.deepEqual([...h.files[`${h.records()[0].id}-mask.bin`] as Uint8Array],[255,255,255,255]);
+    h.click('relight-generate');await h.wait();assert.equal(h.posts.length,1);assert.deepEqual([...h.files[h.records()[0].id+'-mask.bin'] as Uint8Array],[255,255,255,255]);
   }finally{await h.close();}
 });
 
@@ -64,8 +99,8 @@ test('unavailable token persistence keeps actionable status and translated scope
     h.el('remember-source-access').checked=true;h.change('remember-source-access');await new Promise(r=>setTimeout(r,30));
     assert.match(h.el('source-access-status').textContent,/could not be saved.*session.*continue/i);assert.doesNotMatch(h.el('source-access-status').textContent,/[一-龥]/);
     assert.match(h.el('remember-source-access').textContent,/Remember/);assert.equal(h.el('relight-scope').displayedCaption,'Current selection');
-    h.el('relight-scope').value='document';h.change('relight-scope');h.click('open-relight');await new Promise(r=>setTimeout(r,35));assert.match(h.el('relight-source').textContent,/Current selection.*sRGB working copy/);assert.equal(h.el('relight-intensity').value,'2.5');
-    assert.match(h.el('relight-status').textContent,/scope changed.*Re-read/i);assert.equal(h.posts.length,0);
+    h.el('relight-scope').value='document';h.change('relight-scope');h.click('open-relight');await new Promise(r=>setTimeout(r,35));assert.match(h.el('relight-source').textContent,/Document 22.*Entire image/);assert.equal(h.el('relight-intensity').value,'2.5');
+    assert.doesNotMatch(h.el('relight-status').textContent,/[一-龥]/);assert.equal(h.posts.length,0);
   }finally{await h.close();}
 });
 
@@ -268,7 +303,7 @@ test('valid parameter edits preserve visible source, generation and application 
   for(const kind of ['source','generation','application']){
     const h=await panelHarness();try{
       await open(h);await useFullResult(h);
-      if(kind==='source'){h.click('relight-generate');await h.wait();assert.equal(h.records()[0].state,'ready');h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.ps.app.activeDocument.activeHistoryState={id:9};h.click('open-relight');await new Promise(r=>setTimeout(r,40));assert.match(h.el('relight-status').textContent,/来源.*重新读取/);assert.equal(h.el('relight-generate').disabled,true);}
+      if(kind==='source'){h.click('relight-generate');await h.wait();assert.equal(h.records()[0].state,'ready');h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.ps.app.activeDocument.activeHistoryState={id:9};h.ps.imaging.getPixels=async()=>{throw Error('source read failed');};h.click('open-relight');await new Promise(r=>setTimeout(r,40));assert.match(h.el('relight-status').textContent,/source read failed/);assert.equal(h.el('relight-generate').disabled,true);}
       else if(kind==='generation'){h.el('backend-url').value='http://localhost:8199';h.click('relight-generate');await h.wait();assert.match(h.el('relight-status').textContent,/后端配置已改变/);}
       else {h.click('relight-generate');await h.wait();h.ps.app.activeDocument.activeHistoryState={id:99};h.click('relight-apply');await new Promise(r=>setTimeout(r,80));assert.match(h.el('relight-status').textContent,/改变|重新捕获/);}
       const failure=h.el('relight-status').textContent;h.el('relight-intensity').value='2';h.change('relight-intensity');assert.equal(h.el('relight-status').textContent,failure,kind+' error must remain actionable after editing');
@@ -298,13 +333,13 @@ test('cancelled or user-closed requests keep history without selecting the late 
   }
 });
 
-test('same-session reopen keeps lighting and viewport without recapture, while reread explicitly rebinds and clears result',async()=>{
+test('same-session reopen rereads unchanged pixels without consuming another source identity and clears result selection',async()=>{
   const h=await panelHarness();try{
     await open(h);h.el('relight-intensity').value='2.25';h.change('relight-intensity');h.click('relight-zoom-in');const original=await draft(h),reads=h.pixelRequests.length;
     h.click('relight-close');await new Promise(r=>setTimeout(r,25));assert.equal(h.el('relight-image').getAttribute('src'),null);
-    h.click('open-relight');await new Promise(r=>setTimeout(r,40));assert.equal(h.pixelRequests.length,reads);assert.equal(h.el('relight-zoom-label').textContent,'125%');assert.deepEqual(await draft(h),original);
+    h.click('open-relight');await new Promise(r=>setTimeout(r,40));assert.ok(h.pixelRequests.length>reads);assert.equal(h.el('relight-zoom-label').textContent,'125%');assert.deepEqual(await draft(h),original);
     h.click('relight-generate');await h.wait();assert.equal(h.el('relight-apply').disabled,false);
-    h.click('relight-reread');await new Promise(r=>setTimeout(r,60));const rebound=await draft(h);assert.notEqual(rebound.source.snapshotId,original.source.snapshotId);assert.equal(rebound.lights[0].intensity,2.25);assert.equal(h.el('relight-apply').disabled,true);h.click('relight-tab-result');assert.equal(h.el('relight-image').getAttribute('src'),null);
+    h.click('relight-reread');await new Promise(r=>setTimeout(r,60));const rebound=await draft(h);assert.equal(rebound.source.snapshotId,original.source.snapshotId);assert.equal(rebound.lights[0].intensity,2.25);assert.equal(h.el('relight-apply').disabled,true);h.click('relight-tab-result');assert.equal(h.el('relight-image').getAttribute('src'),null);
   }finally{await h.close();}
 });
 
@@ -456,90 +491,79 @@ test('image-load resize feedback settles while tab changes and fresh previews st
     h.click('relight-tab-original');assert.equal(image.getAttribute('src'),original);h.click('relight-tab-result');assert.equal(image.getAttribute('src'),null);
     h.click('relight-generate');await h.wait();const result=image.getAttribute('src');assert.ok(result);assert.notEqual(result,original);const afterResult=writes;
     h.click('relight-tab-result');h.event('relight-dialog','resize');await new Promise(r=>setTimeout(r,25));assert.equal(writes,afterResult);assert.equal(image.getAttribute('src'),result);
-    h.click('relight-close');await new Promise(r=>setTimeout(r,20));assert.equal(image.getAttribute('src'),null);h.click('open-relight');await new Promise(r=>setTimeout(r,40));assert.equal(image.getAttribute('src'),result);
+    h.click('relight-close');await new Promise(r=>setTimeout(r,20));assert.equal(image.getAttribute('src'),null);h.click('open-relight');await new Promise(r=>setTimeout(r,80));assert.notEqual(image.getAttribute('src'),result);assert.equal(h.el('relight-apply').disabled,true);h.click('relight-tab-original');assert.equal(image.getAttribute('src'),original);
   }finally{await h.close();}
 });
 
-test('applied results never prevent reopening the retained workbench through either entry',async()=>{
-  for(const entry of ['open-relight','diagnostic-primary']){
-    const h=await panelHarness();try{
-      await open(h);await useFullResult(h);h.el('relight-intensity').value='2.7';h.change('relight-intensity');h.click('relight-generate');await h.wait();h.click('relight-apply');await new Promise(r=>setTimeout(r,70));
-      h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.click('nav-history');h.click('history-check-all');h.click('clear-history');h.click('confirm-clear-history');await h.wait();h.click('nav-create');
-      h.ps.app.activeDocument.activeHistoryState={id:90};
-      if(entry==='diagnostic-primary'){h.click('open-relight');await new Promise(r=>setTimeout(r,40));if(h.el('relight-dialog').hasAttribute('open')){h.click('relight-reread');await new Promise(r=>setTimeout(r,40));h.click('relight-close');await new Promise(r=>setTimeout(r,20));}}
-      const reads=h.pixelRequests.length,posts=h.posts.length;h.click(entry);await new Promise(r=>setTimeout(r,80));
-      assert.equal(h.el('relight-dialog').hasAttribute('open'),true,entry+' opens even when reread is blocked');assert.equal(h.el('relight-intensity').value,'2.7');assert.equal(h.el('relight-generate').disabled,true);assert.match(h.el('relight-status').textContent,/排除.*结果/);assert.notEqual(h.el('relight-exclude-results')?.style.display,'none');
-      assert.equal(h.pixelRequests.length,reads);assert.equal(h.posts.length,posts);
-    }finally{await h.close();}
-  }
+test('diagnostic recovery explicitly reads visible applied results while retaining edited lighting',async()=>{
+  const h=await panelHarness();try{
+    await open(h);await useFullResult(h);h.el('relight-intensity').value='2.7';h.change('relight-intensity');h.click('relight-generate');await h.wait();h.click('relight-apply');await new Promise(r=>setTimeout(r,70));
+    const applied=h.appliedLayers[0].layer;applied.visible=true;applied.opacity=100;h.ps.app.activeDocument.activeHistoryState={id:90};const read=h.ps.imaging.getPixels;
+    h.ps.imaging.getPixels=async()=>{throw Error('source read failed');};h.click('relight-reread');await new Promise(r=>setTimeout(r,70));h.click('relight-close');await new Promise(r=>setTimeout(r,20));
+    h.ps.imaging.getPixels=read;h.click('nav-create');const reads=h.pixelRequests.length;h.click('diagnostic-primary');await new Promise(r=>setTimeout(r,90));
+    assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.equal(h.el('relight-intensity').value,'2.7');assert.equal(h.el('relight-generate').disabled,false);assert.ok(h.pixelRequests.length>reads);
+    assert.equal(applied.opacity,100);assert.equal(applied.visible,true);assert.equal(h.posts.length,1);
+  }finally{await h.close();}
 });
 
-test('explicit result exclusion rereads current edits, commits the final baseline and leaves old candidates exportable',async()=>{
+test('explicit reread includes visible applied output and uploads current pixels only on the next explicit generation',async()=>{
   const h=await panelHarness();try{
     await open(h);await useFullResult(h);h.el('relight-intensity').value='2.8';h.change('relight-intensity');h.click('relight-generate');await h.wait();h.click('relight-apply');await new Promise(r=>setTimeout(r,70));
-    const applied=h.appliedLayers[0].layer;applied.visible=true;h.ps.app.activeDocument.activeHistoryState={id:90};h.click('relight-reread');await new Promise(r=>setTimeout(r,60));assert.match(h.el('relight-status').textContent,/排除.*结果/);
-    const before=await draft(h),read=h.ps.imaging.getPixels;let excludes=false;
-    h.ps.imaging.getPixels=async(o:any)=>{excludes=applied.opacity===0&&applied.visible===true;const result=await read(o);const get=result.imageData.getData;result.imageData.getData=async()=>{const values=(await get()).slice();values[0]=37;return values;};return result;};
-    assert.ok(h.el('relight-exclude-results'),'a concrete recovery action is available');h.click('relight-exclude-results');await new Promise(r=>setTimeout(r,80));
-    const next=await draft(h);assert.equal(excludes,true);assert.equal(applied.opacity,0);assert.equal(applied.visible,true);assert.equal(next.source.historyId,h.ps.app.activeDocument.activeHistoryState.id);assert.notEqual(next.source.snapshotId,before.source.snapshotId);assert.equal(next.lights[0].intensity,2.8);assert.equal(h.el('relight-generate').disabled,false);
-    const result=h.el('relight-result-list').querySelector('button');result.id='old-result';h.click('old-result');assert.equal(h.el('relight-apply').disabled,false);assert.match(h.el('relight-apply').textContent,/检查来源/);const appliedCount=h.appliedLayers.length;h.click('relight-apply');await new Promise(r=>setTimeout(r,40));assert.equal(h.appliedLayers.length,appliedCount);assert.equal(JSON.parse(h.el('diagnostic-details').value).code,'source-changed');assert.equal(h.el('relight-export').disabled,false);assert.equal(h.posts.length,1);
+    const applied=h.appliedLayers[0].layer;applied.visible=true;applied.opacity=100;h.ps.app.activeDocument.activeHistoryState={id:90};const before=await draft(h),read=h.ps.imaging.getPixels;
+    h.ps.imaging.getPixels=async(o:any)=>{assert.equal(applied.opacity,100);const result=await read(o),get=result.imageData.getData;result.imageData.getData=async()=>{const values=(await get()).slice();values[0]=37;return values;};return result;};
+    h.click('relight-reread');await new Promise(r=>setTimeout(r,80));const next=await draft(h);assert.equal(next.source.historyId,90);assert.notEqual(next.source.snapshotId,before.source.snapshotId);assert.equal(next.lights[0].intensity,2.8);assert.equal(applied.visible,true);assert.equal(applied.opacity,100);assert.equal(h.posts.length,1);
+    const result=h.el('relight-result-list').querySelector('button');result.id='old-result';h.click('old-result');assert.match(h.el('relight-apply').textContent,/检查来源/);const count=h.appliedLayers.length;h.click('relight-apply');await new Promise(r=>setTimeout(r,40));assert.equal(h.appliedLayers.length,count);assert.equal(h.el('relight-export').disabled,false);
     h.click('relight-generate');await h.wait();assert.equal(h.posts.length,2);const sources=h.uploads.filter(u=>u.name.includes('source'));assert.equal(sources[sources.length-1]?.image.rgba[0],37);
   }finally{await h.close();}
 });
 
-test('a failed automatic refresh still reopens the frozen editor and does not retry until explicit reread',async()=>{
+test('a failed explicit reopen retains a stale editor without retry loops and another explicit open retries',async()=>{
   const h=await panelHarness();try{
     await open(h);h.el('relight-intensity').value='3.1';h.change('relight-intensity');const before=await draft(h);h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.ps.app.activeDocument.activeHistoryState={id:40};
     const read=h.ps.imaging.getPixels;let attempts=0;h.ps.imaging.getPixels=async()=>{attempts++;throw Error('source read failed');};h.click('open-relight');await new Promise(r=>setTimeout(r,130));
     assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.equal(attempts,1);assert.equal(h.el('relight-intensity').value,'3.1');assert.equal(h.el('relight-generate').disabled,true);assert.match(h.el('relight-status').textContent,/source read failed/);assert.equal((await draft(h)).source.snapshotId,before.source.snapshotId);
-    h.el('relight-intensity').value='3.2';h.change('relight-intensity');h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.click('diagnostic-primary');await new Promise(r=>setTimeout(r,100));assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.equal(attempts,1);assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);
+    h.el('relight-intensity').value='3.2';h.change('relight-intensity');h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.click('diagnostic-primary');await new Promise(r=>setTimeout(r,100));assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.equal(attempts,2);assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);
     h.ps.imaging.getPixels=read;h.click('relight-reread');await new Promise(r=>setTimeout(r,80));assert.equal(h.el('relight-generate').disabled,false);assert.equal(h.el('relight-intensity').value,'3.2');
   }finally{await h.close();}
 });
 
-test('failed result exclusion preserves the frozen source, lighting and exportable candidate, then a later explicit retry succeeds',async()=>{
+test('failed current-composite reread retains the old source and candidate without modifying layers, then explicit retry succeeds',async()=>{
   const h=await panelHarness();try{
     await open(h);await useFullResult(h);h.el('relight-intensity').value='3.3';h.change('relight-intensity');h.click('relight-generate');await h.wait();h.click('relight-apply');await new Promise(r=>setTimeout(r,60));
-    const applied=h.appliedLayers[0].layer;applied.visible=true;h.ps.app.activeDocument.activeHistoryState={id:50};const before=await draft(h),read=h.ps.imaging.getPixels;
-    // Preserve the native transaction's visibility rollback in this panel mock.
-    const modal=h.ps.core.executeAsModal;h.ps.core.executeAsModal=(fn:any)=>modal((context:any)=>{const resume=context.hostControl.resumeHistory;const visible=applied.visible,opacity=applied.opacity;context.hostControl.resumeHistory=async(id:number,commit:boolean)=>{await resume(id,commit);if(!commit){applied.visible=visible;applied.opacity=opacity;}};return fn(context);});
-    h.ps.imaging.getPixels=async()=>{assert.equal(applied.opacity,0);assert.equal(applied.visible,true);throw Error('source read failed');};h.click('relight-exclude-results');await new Promise(r=>setTimeout(r,80));
-    assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.equal(applied.visible,true);assert.equal((await draft(h)).source.snapshotId,before.source.snapshotId);assert.equal(h.el('relight-intensity').value,'3.3');assert.equal(h.el('relight-generate').disabled,true);assert.equal(h.el('relight-export').disabled,false);assert.equal(h.posts.length,1);assert.equal(h.ps.app.activeDocument.activeHistoryState.id,50);
-    h.ps.imaging.getPixels=read;h.click('relight-exclude-results');await new Promise(r=>setTimeout(r,80));assert.equal(applied.opacity,0);assert.equal(applied.visible,true);assert.equal(h.el('relight-generate').disabled,false);assert.equal(h.posts.length,1);
+    const applied=h.appliedLayers[0].layer;applied.visible=true;applied.opacity=100;h.ps.app.activeDocument.activeHistoryState={id:50};const before=await draft(h),read=h.ps.imaging.getPixels;
+    h.ps.imaging.getPixels=async()=>{assert.equal(applied.opacity,100);assert.equal(applied.visible,true);throw Error('source read failed');};h.click('relight-reread');await new Promise(r=>setTimeout(r,80));
+    assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.equal((await draft(h)).source.snapshotId,before.source.snapshotId);assert.equal(h.el('relight-intensity').value,'3.3');assert.equal(h.el('relight-generate').disabled,true);assert.equal(h.el('relight-export').disabled,false);assert.equal(h.ps.app.activeDocument.activeHistoryState.id,50);
+    h.ps.imaging.getPixels=read;h.click('relight-reread');await new Promise(r=>setTimeout(r,80));assert.equal(applied.opacity,100);assert.equal(applied.visible,true);assert.equal(h.el('relight-generate').disabled,false);assert.equal(h.posts.length,1);
   }finally{await h.close();}
 });
 
-test('explicit binding of another document offers result exclusion for that document and keeps the original source frozen on failure',async()=>{
+test('reread switches active source in both directions while preserving visible outputs and lighting',async()=>{
   const h=await panelHarness();try{
-    await open(h);await useFullResult(h);h.el('relight-intensity').value='3.4';h.change('relight-intensity');h.click('relight-generate');await h.wait();h.click('relight-apply');await new Promise(r=>setTimeout(r,60));const applied=h.appliedLayers[0].layer;applied.visible=true;
-    h.switchDocument(22);h.click('relight-rebind-current');await new Promise(r=>setTimeout(r,60));assert.equal((await draft(h)).source.documentId,22);assert.equal(applied.visible,true);
-    h.switchDocument(11);h.ps.app.activeDocument.activeHistoryState={id:80};h.click('relight-rebind-current');await new Promise(r=>setTimeout(r,60));assert.equal((await draft(h)).source.documentId,22);assert.match(h.el('relight-exclude-results').textContent,/当前文档/);
-    h.click('relight-exclude-results');await new Promise(r=>setTimeout(r,80));const after=await draft(h);assert.equal(after.source.documentId,11);assert.equal(after.source.historyId,81);assert.equal(applied.opacity,0);assert.equal(applied.visible,true);assert.equal(h.el('relight-intensity').value,'3.4');assert.equal(h.posts.length,1);
+    await open(h);await useFullResult(h);h.el('relight-intensity').value='3.4';h.change('relight-intensity');h.click('relight-generate');await h.wait();h.click('relight-apply');await new Promise(r=>setTimeout(r,60));const applied=h.appliedLayers[0].layer;applied.visible=true;applied.opacity=100;
+    h.switchDocument(22);h.click('relight-reread');await new Promise(r=>setTimeout(r,60));assert.equal((await draft(h)).source.documentId,22);
+    h.switchDocument(11);h.ps.app.activeDocument.activeHistoryState={id:80};h.click('relight-reread');await new Promise(r=>setTimeout(r,80));const after=await draft(h);assert.equal(after.source.documentId,11);assert.equal(after.source.historyId,80);assert.equal(applied.opacity,100);assert.equal(applied.visible,true);assert.equal(h.el('relight-intensity').value,'3.4');assert.equal(h.posts.length,1);
   }finally{await h.close();}
 });
 
-test('a closed source still opens its frozen editor and an explicit bind retains lights',async()=>{
+test('reopening after the old source closes immediately reads the active replacement and retains lighting',async()=>{
   const h=await panelHarness();try{
     await open(h);h.el('relight-intensity').value='3.5';h.change('relight-intensity');const before=await draft(h);h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.setDocument(22);h.click('open-relight');await new Promise(r=>setTimeout(r,70));
-    assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.match(h.el('relight-status').textContent,/已关闭.*绑定/);assert.equal((await draft(h)).source.snapshotId,before.source.snapshotId);assert.equal(h.el('relight-generate').disabled,true);assert.equal(h.el('relight-intensity').value,'3.5');
-    h.click('relight-rebind-current');await new Promise(r=>setTimeout(r,70));assert.equal((await draft(h)).source.documentId,22);assert.equal(h.el('relight-intensity').value,'3.5');assert.equal(h.el('relight-generate').disabled,false);assert.equal(h.posts.length,0);
+    assert.equal(h.el('relight-dialog').hasAttribute('open'),true);const next=await draft(h);assert.equal(next.source.documentId,22);assert.notEqual(next.source.snapshotId,before.source.snapshotId);assert.equal(h.el('relight-generate').disabled,false);assert.equal(h.el('relight-intensity').value,'3.5');assert.equal(h.posts.length,0);
   }finally{await h.close();}
 });
 
-test('history reuse blocks visible applied output, retains prior editor and completes only after explicit recovery',async()=>{
+test('explicit history lighting reuse reads the current composite including visible applied output without another submission',async()=>{
   const h=await panelHarness();try{
     await open(h);await useFullResult(h);h.el('relight-intensity').value='1.3';h.change('relight-intensity');h.click('relight-generate');await h.wait();const job=h.records()[0];h.click('relight-apply');await new Promise(r=>setTimeout(r,60));
-    const applied=h.appliedLayers[0].layer;applied.visible=true;h.el('relight-intensity').value='2.9';h.change('relight-intensity');const prior=await draft(h);h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.ps.app.activeDocument.activeHistoryState={id:90};h.selectHistory(job.id);h.click('repeat-history');await h.wait();
-    const reads=h.pixelRequests.length;h.click('relight-reuse-history');await new Promise(r=>setTimeout(r,80));assert.equal(h.pixelRequests.length,reads,'history reuse cannot read visible generated output');assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.equal((await draft(h)).source.snapshotId,prior.source.snapshotId);assert.equal(h.el('relight-intensity').value,'2.9');assert.equal(h.el('relight-generate').disabled,true);assert.equal(h.el('relight-export').disabled,false);assert.notEqual(h.el('relight-exclude-results').style.display,'none');assert.equal(h.posts.length,1);
-    h.click('relight-exclude-results');await new Promise(r=>setTimeout(r,80));assert.equal(applied.opacity,0);assert.equal(applied.visible,true);assert.equal(h.el('relight-intensity').value,'2.9');h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.click('relight-reuse-history');await new Promise(r=>setTimeout(r,80));const reused=await draft(h);assert.equal(h.el('relight-intensity').value,'1.3');assert.equal(reused.source.layerIds.includes(applied.id),false);assert.equal(h.el('relight-generate').disabled,false);assert.equal(h.posts.length,1);
+    const applied=h.appliedLayers[0].layer;applied.visible=true;applied.opacity=100;h.el('relight-intensity').value='2.9';h.change('relight-intensity');h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.ps.app.activeDocument.activeHistoryState={id:90};h.selectHistory(job.id);h.click('repeat-history');await h.wait();
+    const reads=h.pixelRequests.length;h.click('relight-reuse-history');await new Promise(r=>setTimeout(r,80));const reused=await draft(h);assert.ok(h.pixelRequests.length>reads);assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.equal(reused.lights[0].intensity,1.3);assert.equal(reused.source.layerIds.includes(applied.id),true);assert.equal(applied.opacity,100);assert.equal(applied.visible,true);assert.equal(h.el('relight-generate').disabled,false);assert.equal(h.posts.length,1);
   }finally{await h.close();}
 });
 
-test('a fresh relight entry offers explicit exclusion even without a retained workbench',async()=>{
+test('a fresh relight entry reads visible generated layers immediately without a recovery prerequisite',async()=>{
   const h=await panelHarness();try{
-    await h.wait();h.el('resolution').value='32';h.click('generate');await h.wait();h.click('apply');await h.wait();const applied=h.appliedLayers[0].layer;applied.visible=true;h.ps.app.activeDocument.activeHistoryState={id:80};
-    h.click('nav-create');h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');const reads=h.pixelRequests.length;h.click('open-relight');await new Promise(r=>setTimeout(r,70));assert.equal(h.pixelRequests.length,reads);assert.equal(h.el('relight-dialog').hasAttribute('open'),false);assert.match(h.el('open-relight').textContent,/排除.*结果/);
-    h.click('diagnostic-primary');await new Promise(r=>setTimeout(r,40));assert.equal(h.pixelRequests.length,reads,'generic diagnostic action must not silently exclude output');h.click('open-relight');await new Promise(r=>setTimeout(r,80));assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.equal(applied.opacity,0);assert.equal(applied.visible,true);const captured=await draft(h);assert.equal(captured.source.layerIds.includes(applied.id),false);assert.equal(captured.source.historyId,h.ps.app.activeDocument.activeHistoryState.id);assert.equal(h.posts.length,1);
+    await h.wait();h.el('resolution').value='32';h.click('generate');await h.wait();h.click('apply');await h.wait();const applied=h.appliedLayers[0].layer;applied.visible=true;applied.opacity=100;h.ps.app.activeDocument.activeHistoryState={id:80};
+    h.click('nav-create');h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');const reads=h.pixelRequests.length;h.click('open-relight');await new Promise(r=>setTimeout(r,80));assert.ok(h.pixelRequests.length>reads);assert.equal(h.el('relight-dialog').hasAttribute('open'),true);const captured=await draft(h);assert.equal(captured.source.layerIds.includes(applied.id),true);assert.equal(captured.source.historyId,80);assert.equal(applied.opacity,100);assert.equal(applied.visible,true);assert.equal(h.posts.length,1);
   }finally{await h.close();}
 });
 
@@ -551,11 +575,10 @@ test('an invalid historical supplement never replaces the retained session or lo
   }finally{await h.close();}
 });
 
-test('a fresh-entry recovery confirmation is bound to its displayed document and survives a language change',async()=>{
+test('translated reopening reads the active document without touching previously applied layers',async()=>{
   const h=await panelHarness();try{
-    await h.wait();h.el('resolution').value='32';h.click('generate');await h.wait();h.click('apply');await h.wait();const applied=h.appliedLayers[0].layer;applied.visible=true;
-    h.click('nav-create');h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');h.click('open-relight');await new Promise(r=>setTimeout(r,60));h.el('language').value='en-US';h.change('language');await h.wait();assert.match(h.el('open-relight').textContent,/Exclude applied results.*11/);
-    const reads=h.pixelRequests.length;h.switchDocument(22);h.click('open-relight');await new Promise(r=>setTimeout(r,60));assert.equal(h.pixelRequests.length,reads);assert.equal(applied.visible,true);assert.notEqual(applied.opacity,0);assert.equal(h.el('relight-dialog').hasAttribute('open'),false);assert.doesNotMatch(h.el('open-relight').textContent,/Exclude applied results/);
-    h.click('open-relight');await new Promise(r=>setTimeout(r,70));assert.equal((await draft(h)).source.documentId,22);assert.equal(applied.visible,true);assert.notEqual(applied.opacity,0);assert.equal(h.posts.length,1);
+    await h.wait();h.el('resolution').value='32';h.click('generate');await h.wait();h.click('apply');await h.wait();const applied=h.appliedLayers[0].layer;applied.visible=true;applied.opacity=100;
+    h.click('nav-create');h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');h.click('open-relight');await new Promise(r=>setTimeout(r,60));h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.el('language').value='en-US';h.change('language');await h.wait();assert.match(h.el('open-relight').textContent,/Open lighting workbench/);
+    h.switchDocument(22);h.click('open-relight');await new Promise(r=>setTimeout(r,70));assert.equal((await draft(h)).source.documentId,22);assert.equal(applied.visible,true);assert.equal(applied.opacity,100);assert.equal(h.el('relight-reread').textContent,'Re-read current document');assert.doesNotMatch(h.el('relight-status').textContent,/[一-龥]/);assert.equal(h.posts.length,1);
   }finally{await h.close();}
 });

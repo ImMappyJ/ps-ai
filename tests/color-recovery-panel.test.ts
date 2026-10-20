@@ -97,7 +97,7 @@ test('failed fresh capture keeps the recovered copy and exposes a reread retry w
 test('workbench color recovery closes its dialog, binds the known source and preserves lighting and scope without generating',async()=>{
   const {h,native}=await harness();try{
     h.el('relight-scope').value='document';await openRelight(h);h.el('relight-intensity').value='2.6';h.change('relight-intensity');const before=await draft(h),old=h.ps.app.activeDocument;
-    h.click('relight-close');await pause();native.undo(old);h.ps.app.activeDocument=native.docs[0];h.click('open-relight');await pause();
+    h.click('relight-close');await pause();native.undo(old);h.click('open-relight');await pause();h.ps.app.activeDocument=native.docs[0];
     assert.notEqual(h.el('relight-recover-color')?.style.display,'none');h.click('relight-recover-color');await pause();
     assert.equal(h.el('relight-dialog').hasAttribute('open'),true);const after=await draft(h);
     assert.notEqual(after.source.documentId,old.id);assert.notEqual(after.source.snapshotId,before.source.snapshotId);assert.equal(after.lights[0].intensity,2.6);assert.match(h.el('relight-source').textContent,/整张图像/);assert.match(h.el('relight-source').textContent,new RegExp(`工作副本，原文档 ${old.id}`));assert.equal(h.el('relight-generate').disabled,false);assert.equal(old.colorProfileType,'none');assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);assert.equal(h.sourceAccessEvents.filter(v=>v==='picker').length,1);
@@ -166,7 +166,7 @@ test('selection-scope workbench recovery transfers feathered protection to only 
 
 test('cancelled workbench recovery diagnoses its known source even when another document is active',async()=>{
   const {h,native}=await harness();try{
-    await openRelight(h);const old=h.ps.app.activeDocument;h.click('relight-close');await pause();native.undo(old);h.ps.app.activeDocument=native.docs[0];h.click('open-relight');await pause();native.cancel(true);h.click('relight-recover-color');await pause();
+    await openRelight(h);const old=h.ps.app.activeDocument;h.click('relight-close');await pause();native.undo(old);h.click('open-relight');await pause();h.ps.app.activeDocument=native.docs[0];native.cancel(true);h.click('relight-recover-color');await pause();
     assert.equal(details(h).documentId,old.id);assert.equal(h.ps.app.activeDocument.id,native.docs[0].id);assert.equal(native.duplicates.length,1);assert.notEqual(h.el('relight-recover-color').style.display,'none');native.cancel(false);h.click('relight-recover-color');await pause();assert.notEqual((await draft(h)).source.documentId,old.id);assert.equal(h.posts.length,0);
   }finally{await h.close();}
 });
