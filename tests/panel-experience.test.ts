@@ -129,8 +129,27 @@ test('resolved capture clears matching range causes while preserving other sourc
  feedback.clearCodes(['unauthorized','source-changed','empty-range']);assert.equal(feedback.forPage('create',{mode:'edit',documentId:22}).diagnostic.title,'capture-other-source');assert.equal(feedback.forPage('create',{mode:'background',documentId:11}).diagnostic.title,'capture-other-mode');assert.equal(feedback.forPage('create',{mode:'edit',documentId:11}),undefined);
 });
 
-test('a successful new submission resolves its earlier pre-submission error but preserves another saved task failure',()=>{
+test('a successful new submission resolves its earlier failure while retaining feedback for other sources',()=>{
  const feedback=new panelState.OperationFeedback(),scope={page:'create' as const,feature:'generate',stage:'inference' as const,mode:'edit',documentId:11};
  const beforeSubmit=feedback.begin(scope);feedback.fail(beforeSubmit,{code:'unknown',stage:'inference'});const retry=feedback.begin(scope);retry.taskId='new-saved-task';feedback.succeed(retry);assert.equal(feedback.forPage('create'),undefined);
- const failedTask=feedback.begin(scope);failedTask.taskId='failed-task';feedback.fail(failedTask,{code:'invalid-output',stage:'output'});const separateTask=feedback.begin(scope);separateTask.taskId='different-task';feedback.succeed(separateTask);assert.equal(feedback.forPage('create')?.operation.taskId,'failed-task');
+ const failedTask=feedback.begin(scope);failedTask.taskId='failed-task';feedback.fail(failedTask,{code:'invalid-output',stage:'output'});
+ const otherSource=feedback.begin({...scope,documentId:22});otherSource.taskId='other-source';feedback.succeed(otherSource);assert.equal(feedback.forPage('create')?.operation.taskId,'failed-task');
+ const separateTask=feedback.begin(scope);separateTask.taskId='different-task';feedback.succeed(separateTask);assert.equal(feedback.forPage('create'),undefined);
+});
+
+test('verified capture resolves unclassified source reads but preserves unrelated capture work and newer failures',()=>{
+ const feedback=new panelState.OperationFeedback(),scope={page:'create' as const,stage:'capture' as const,mode:'relight',documentId:11};
+ const failed=feedback.begin({...scope,feature:'open-relight'});feedback.fail(failed,{code:'unknown',stage:'capture'});
+ const reference=feedback.begin({...scope,feature:'reference'});feedback.fail(reference,{code:'unknown',stage:'capture'});
+ const retry=feedback.begin({...scope,feature:'diagnostic-primary'});feedback.resolveCapture(retry);
+ assert.equal(feedback.forPage('create')?.operation,reference);feedback.succeed(feedback.begin({...scope,feature:'reference'}));assert.equal(feedback.forPage('create'),undefined);
+ const stale=feedback.begin({...scope,feature:'open-relight'}),latest=feedback.begin({...scope,feature:'open-relight'});feedback.fail(latest,{code:'unknown',stage:'capture'});feedback.resolveCapture(stale);assert.equal(feedback.forPage('create')?.operation,latest);
+ feedback.succeed(latest);assert.equal(feedback.forPage('create')?.operation,latest,'a swallowed failure cannot become its own successful retry');
+});
+
+test('successful generation with a new UUID clears the old visible error while the failed history record remains',async()=>{
+ const h=await panelHarness();try{
+  await h.wait();h.click('nav-create');h.el('resolution').value='32';h.setJobStatus('failed');h.click('generate');await h.wait();const old=h.records()[0];assert.equal(old.state,'failed');assert.equal(h.el('diagnostic-box').style.display,'block');
+  h.setJobStatus('ready');h.click('generate');await h.wait();h.click('nav-create');assert.equal(h.el('diagnostic-box').style.display,'none');assert.equal(h.records().find(r=>r.id===old.id)?.state,'failed');assert.equal(h.records().filter(r=>r.state==='ready').length,1);assert.equal(h.posts.length,2);
+ }finally{await h.close();}
 });

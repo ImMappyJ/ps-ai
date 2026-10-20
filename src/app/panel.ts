@@ -16,7 +16,7 @@ import type {GatewayCapabilities,GenerationRequest,AssetContext} from '../infras
 import {RelightSession,RelightDraftStore,relightTaskMetadata,type FrozenRelightSubmission,type RelightTaskMetadata,type RelightScope,type RelightOutputKind} from '../features/relight/relight-session';
 import {RelightWorkbench,type RelightResult} from '../features/relight/relight-workbench';
 import {compileRelightScene,validateRelightScene,type RelightScene,type RelightCapabilities} from '../features/relight/relight-scene';
-import {PanelViews,OperationFeedback,ResultNavigation,CandidatePreview,SourceCaption,captureSizeSummary,localValidationMessage,createCandidateCard,setCandidateCardState,displayPreview as preview} from './panel-view';import type {OperationContext,PanelPage,CaptureSizeDetails} from './panel-view';
+import {PanelViews,OperationFeedback,ResultNavigation,CandidatePreview,SourceCaption,captureSizeSummary,localValidationMessage,isSourceCaptureDiagnostic,createCandidateCard,setCandidateCardState,displayPreview as preview} from './panel-view';import type {OperationContext,PanelPage,CaptureSizeDetails} from './panel-view';
 import {HistoryTable,historyTaskType,historyPrompt,historyState,historySource,historyDate} from './history-table';
 import {prepareCandidate,prepareLightingLayerApplication,prepareEditAnalysisApplication,prepareSelectionAssetApplication,preflightEditAnalysisCandidate,preflightSelectionAssetCandidate,historyOutputName,type PreparedCandidate} from './candidate-preparation';
 import {planRelightMemory,downsampleSnapshotMask,resampleGray} from '../imaging/budget';
@@ -228,7 +228,7 @@ function renderDiagnostic():void {
   if(box.parentElement!==page)page.insertBefore(box,page.firstChild);
   el('diagnostic-title').textContent=d.title;el('diagnostic-summary').textContent=d.summary;el('diagnostic-action').textContent=d.action;
   el('diagnostic-details').value=JSON.stringify(d,null,2);el('diagnostic-details').style.display='none';
-  const primary=el('diagnostic-primary'),selection=d.code==='selection-required',source=['source-changed','source-unavailable','empty-range'].includes(d.code);
+  const primary=el('diagnostic-primary'),selection=d.code==='selection-required',source=['source-changed','source-unavailable','empty-range'].includes(d.code)||d.code==='unknown'&&isSourceCaptureDiagnostic(operation,d);
   const color=(d.code==='source-profile'||operation.feature==='recover-color')&&operation.documentId!==undefined?colorRecoveryAction(operation.documentId):undefined;
   primary.style.display=selection||source||color?'block':'none';primary.disabled=busy;
   if(color)primary.setAttribute('data-color-recovery',operation.id);
@@ -354,7 +354,8 @@ function colorRecoveryAction(documentId:number,session?:RelightSession):'create'
   return adapter.colorRecoveryAvailability(documentId)==='available'?'create':undefined;
 }
 async function recoverSourceColor(documentId:number,session?:RelightSession):Promise<void> {
-  if(activeOperation)activeOperation.documentId=documentId;
+  const operation=activeOperation;
+  if(operation)operation.documentId=documentId;
   await configure(async()=>{
     const action=colorRecoveryAction(documentId,session);
     if(!action)throw new DiagnosticError('source-profile','capture',t('当前来源没有可验证的会话色彩恢复记录；请在副本中指定正确配置文件'));
@@ -367,7 +368,7 @@ async function recoverSourceColor(documentId:number,session?:RelightSession):Pro
     const retry=pendingColorCapture!;
     // The diagnostic follows the actual read target after creation, while old
     // candidates and the old workbench source keep their original identities.
-    if(activeOperation)activeOperation.documentId=retry.documentId;
+    if(operation)operation.documentId=retry.documentId;
     const priorProtection=protection;
     try {
       const target=Array.from(ps.app.documents as any[]).find(doc=>doc.id===retry.documentId);
@@ -401,11 +402,12 @@ async function recoverSourceColor(documentId:number,session?:RelightSession):Pro
       throw new DiagnosticError(diagnostic(error,'capture').code,'capture',t('已恢复的色彩副本（文档 {0}）已保留，但读取未完成；请重试读取。原因：{1}',retry.documentId,errorText(error instanceof Error?error.message:String(error))));
     }
     pendingColorCapture=undefined;
-    if(activeOperation)feedback.resolveCapture(activeOperation);
+    if(operation)feedback.resolveCapture(operation);
     status(t('已创建并读取恢复色彩的副本；请检查新来源后明确生成。旧候选仍绑定原来源，可继续导出。'));
   });
 }
 async function rereadRelight(session:RelightSession,explicit=true):Promise<void>{
+  const operation=activeOperation;
   await configure(async()=>{
     const bound=session.sourceCapture.snapshot,targetId=explicit?activeDocumentId():bound.documentId;
     if(!explicit&&relightSourceState(session)!=='changed')return;
@@ -419,6 +421,7 @@ async function rereadRelight(session:RelightSession,explicit=true):Promise<void>
     });
     if(!explicit&&(JSON.stringify(fresh.snapshot.bounds)!==JSON.stringify(bound.bounds)||fresh.selectionMask.length!==session.sourceCapture.selectionMask.length||fresh.selectionMask.some((v,i)=>v!==session.sourceCapture.selectionMask[i])||fresh.protectionMask.some((v,i)=>v!==session.sourceCapture.protectionMask[i])))throw new DiagnosticError('source-changed','capture',t('来源范围已改变，请明确重新读取当前文档；布光配置已保留'));
     commit!(fresh.snapshot.historyId);relightMargin=Number(el('margin').value)/100;
+    if(operation)feedback.resolveCapture(operation,{...operation,documentId:fresh.snapshot.documentId});
   });
 }
 function candidateById(id:string):Candidate {const candidate=candidates.find(c=>c.job.id===id);if(!candidate)throw new Error(t('此 AI 结果已离开内存，请从历史重新读取后应用'));return candidate;}
@@ -429,10 +432,10 @@ export async function openRelightWorkbench(reuse?:RelightScene,description?:stri
   // callbacks reopen the dialog themselves without calling this explicit read.
   if(relightWorkbench&&relightSession&&!reuse&&description===undefined&&busy){relightWorkbench.show();return;}
   if(busy)throw new Error(t('请等待当前任务结束后重新读取原图'));
-  const targetId=activeDocumentId();
+  const targetId=activeDocumentId(),operation=activeOperation;
   if(relightWorkbench&&relightSession&&!reuse&&description===undefined){
     try{await rereadRelight(relightSession);relightWorkbench.sourceRefreshed();relightWorkbench.show();}
-    catch(error){relightWorkbench.showSourceRecovery(error instanceof DiagnosticError&&error.code==='selection-required'?diagnostic(error,'capture').action:error instanceof Error?error.message:String(error));throw error;}
+    catch(error){relightWorkbench.sourceCaptureFailed(error instanceof DiagnosticError&&error.code==='selection-required'?diagnostic(error,'capture').action:error instanceof Error?error.message:String(error));throw error;}
     return;
   }
   lock(true);
@@ -444,6 +447,7 @@ export async function openRelightWorkbench(reuse?:RelightScene,description?:stri
       if(description!==undefined)staged.session.editor.updateScene({supplement:description});
     });
     publishRelightSession(staged!.commit(fresh.snapshot.historyId));
+    if(operation)feedback.resolveCapture(operation,{...operation,documentId:fresh.snapshot.documentId});
   }finally{lock(false);}
 }
 function publishRelightSession(session:RelightSession):void {
@@ -822,6 +826,9 @@ async function apply(jobId?:string,checkOnly=false){
   }finally{if(!taskActive)el('task-progress').style.display='none';lock(false);}
 }
 function on(id:string,action:()=>Promise<void>){el(id).addEventListener('click',()=>{
+  // Ignore already queued clicks after a control is locked. A skipped action
+  // must not create a feedback owner or clear an earlier diagnostic.
+  if(el(id).disabled)return;
   const stage:Stage=['apply','new-document','opacity'].includes(id)?'apply':['capture','restore-selection','protect','reference','open-relight','relight-reuse-history','diagnostic-primary'].includes(id)?'capture':['scan-models','setup-check'].includes(id)?'environment':['recover','generate','setup-example','cancel','history-cancel'].includes(id)?'inference':['load-history','export','export-ai-reference','zoom'].includes(id)?'output':'connection';
   const page:PanelPage=['connect','scan-models','save-settings','import-settings','export-settings','setup-connect','setup-check','setup-example','save-key','clear-key','stop-relay'].includes(id)?'settings':['recover','load-history','repeat-history','history-cancel','clear-history','confirm-clear-history','retry-history-cleanup'].includes(id)?'history':['generate','capture','restore-selection','protect','reference','open-relight','relight-reuse-history'].includes(id)?'create':views.current;
   if(id==='connect')views.show('settings');
