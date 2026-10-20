@@ -503,7 +503,15 @@
         "portrait": "809x1214 bounded analysis preview of a 3929x5893 source: changes remained weak; portrait blending quality is unresolved",
         "limits": "Local previews retain outside-mask pixels and source alpha at their saved raster size; not native full-size Photoshop application, installed-control acceptance, universal blending quality or pure lighting extraction"
       },
-      "status": "development; focused offline coverage and limited real inference comparison; broader visual quality, updated native controls and color/alpha acceptance pending"
+      "installedPanel": {
+        "date": "2026-10-20",
+        "build": "0.5.0 d2966347 Portable",
+        "host": "Photoshop 27.0.0, Windows",
+        "fixture": "Owned 64x48 sRGB8 synthetic source, 1152x864 model exchange, isolated controlled response backend without inference",
+        "passed": ["Guide disabled in ComfyUI Blend and ordinary guide preference restored on exit", "Full-canvas source preview", "One source upload and one POST, no guide upload or duplicate", "Masked independent-layer application retains original layer, outside pixels and source alpha", "One native Undo restores exact composite hash, original layer count and history baseline", "Owned fixture cleanup and exact original settings restoration"],
+        "limits": "Not real-output quality, exact feather weighting, protection, large images, 16-bit, platforms or CCX installation"
+      },
+      "status": "development; focused offline coverage, limited real inference comparison and small RGB8 installed controlled-response flow; broader visual quality, host controls and color/alpha acceptance pending"
     },
     "promptFreeRemoval": {
       "mode": "remove",

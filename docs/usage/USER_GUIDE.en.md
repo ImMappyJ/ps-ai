@@ -514,6 +514,8 @@ The revised built-in instruction applies to every backend and asks the model to 
 
 Two real inference comparisons on 2026-10-20 reused the existing Qwen 2.1 models, original inputs and fixed seeds. Omitting the guide produced clear lighting changes on the illustration; changes on the photographic portrait remained weak, so portrait blending quality is not resolved by this evidence. Local previews composited through the saved subject mask preserved the outside background. Larger changes do not establish better quality: identity, style, details and edges still need visual acceptance. The portrait preview used a bounded analysis raster. These comparisons do not replace acceptance of the updated installed Photoshop controls, native-size application or color.
 
+A separate installed 0.5.0 d2966347 Portable check in Photoshop 27 used a small synthetic RGB8 document. Blending disabled the guide and restored ordinary preferences on exit. Full-canvas preview succeeded; one generation sent one source upload and one POST to an isolated controlled backend, with no guide or duplicate submission. Actual application created a masked layer while preserving the original layer, outside pixels and alpha. One Photoshop Undo exactly restored the source composite and history baseline. This verifies installed interaction on a 64x48 source, not real inference quality, exact feather weights, protection, large images, 16-bit or platforms.
+
 ## Candidates, progress and undo
 
 - **Progress:** loading and text encoding show stages; sampling shows actual steps and percentages, followed by a saved-candidate message. Encoding can take time; avoid repeated submissions.
