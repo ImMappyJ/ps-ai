@@ -80,17 +80,36 @@ test('valid current ICC on a pathless document bypasses recovery and original-fi
   const captured=await h.capture(doc.id);assert.equal(captured.snapshot.profile,'Adobe RGB (1998)');assert.equal(h.reads(),0);assert.equal(h.documents.length,2);
 });
 
-test('unproven pathless documents, old sessions and NONE with a residual ICC name cannot recover',async()=>{
+test('unproven pathless documents and old sessions cannot recover even with a residual ICC name',async()=>{
   const h=recoveryHost();await h.capture();const doc=h.ps.app.activeDocument;h.undo(doc);
-  const previous=new PhotoshopAdapter(h.ps,'session-b') as RecoveryAdapter;
-  assert.equal(previous.colorRecoveryAvailability?.(doc.id),'unavailable');await assert.rejects(previous.createRecoveredColorCopy(doc.id));
-  const arbitrary=h.makeDoc({path:undefined});assert.equal(h.adapter.colorRecoveryAvailability(arbitrary.id),'unavailable');
-  doc._profile='sRGB IEC61966-2.1';doc.colorProfileType='none';assert.equal(h.adapter.colorRecoveryAvailability(doc.id),'unavailable');
-  await assert.rejects(h.adapter.createRecoveredColorCopy(doc.id));assert.equal(h.documents.length,3);
+  doc._profile='sRGB IEC61966-2.1';
+  for(const session of ['session-a','session-b']){
+    const restarted=new PhotoshopAdapter(h.ps,session) as RecoveryAdapter;
+    assert.equal(restarted.colorRecoveryAvailability?.(doc.id),'unavailable');await assert.rejects(restarted.createRecoveredColorCopy(doc.id));
+  }
+  const arbitrary=h.makeDoc({path:undefined,_profile:'sRGB IEC61966-2.1'});assert.equal(h.adapter.colorRecoveryAvailability(arbitrary.id),'unavailable');
+  await assert.rejects(h.adapter.createRecoveredColorCopy(arbitrary.id));assert.equal(h.documents.length,3);
+});
+
+test('proven NONE origins remain recoverable after tagged recapture and an Undo residual profile name',async()=>{
+  for(const depth of [8,16] as const){
+    const h=recoveryHost(depth),oldCandidate=await h.capture(),doc=h.ps.app.activeDocument;
+    await h.capture();assert.equal(h.adapter.colorRecoveryAvailability(doc.id),'not-needed');
+    h.undo(doc);doc._profile='sRGB IEC61966-2.1';
+    const before=h.state(doc),timeline=h.timelines.get(doc.id)!,redo=timeline.states.map(s=>s.historyId);
+    assert.equal(doc.colorProfileType,'none');assert.equal(h.adapter.colorRecoveryAvailability(doc.id),'available');
+    await assert.rejects(h.capture(),/no bound original/);assert.equal(h.documents.length,2);
+    const result=await h.adapter.createRecoveredColorCopy(doc.id),fresh=h.ps.app.activeDocument;
+    assert.notEqual(result.documentId,doc.id);assert.equal(fresh.colorProfileType,'custom');
+    assert.deepEqual(h.state(doc),before);assert.deepEqual(timeline.states.map(s=>s.historyId),redo);
+    assert.equal(h.adapter.applicationMode(oldCandidate.snapshot),'unavailable');
+    const captured=await h.capture();assert.equal(captured.snapshot.documentId,fresh.id);assert.equal(captured.snapshot.nativeDepth,depth);
+    assert.equal(h.reads(),2);assert.equal(h.documents.length,3);
+  }
 });
 
 test('exact recovery rejects manual profile, geometry, native depth, recursive layers, path and unrelated history changes',async()=>{
-  const mutations=[(d:any)=>d._profile='different untagged name',(d:any)=>d.width++,(d:any)=>d.height++,(d:any)=>d.mode='gray',(d:any)=>d.bitsPerChannel=16,(d:any)=>d.layers[0].layers[0].id++,(d:any)=>d.layers.push({...d.layers[0],id:99999}),(d:any)=>d.path='D:\\other.png',(d:any)=>d.activeHistoryState={id:d.activeHistoryState.id+10000},(d:any)=>d.quickMaskMode=true];
+  const mutations=[(d:any)=>d.colorProfileType='unknown',(d:any)=>d.width++,(d:any)=>d.height++,(d:any)=>d.mode='gray',(d:any)=>d.bitsPerChannel=16,(d:any)=>d.layers[0].layers[0].id++,(d:any)=>d.layers.push({...d.layers[0],id:99999}),(d:any)=>d.path='D:\\other.png',(d:any)=>d.activeHistoryState={id:d.activeHistoryState.id+10000},(d:any)=>d.quickMaskMode=true];
   for(const mutate of mutations){
     const h=recoveryHost();await h.capture();const doc=h.ps.app.activeDocument;h.undo(doc);assert.equal(h.adapter.colorRecoveryAvailability?.(doc.id),'available');
     mutate(doc);assert.equal(h.adapter.colorRecoveryAvailability(doc.id),'unavailable');await assert.rejects(h.adapter.createRecoveredColorCopy(doc.id));assert.equal(h.documents.length,2);assert.equal(h.reads(),1);
