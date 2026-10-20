@@ -22,7 +22,7 @@ export class PhotoshopAdapter {
   constructor(public ps:any,public sessionId:string,private checkpoint:(stage:string)=>Promise<void>=async()=>{},private readSourceColor:SourceColorReader=async()=>undefined){}
   private activeDocument():any {return this.ps.app.documents.length?this.ps.app.activeDocument:undefined;}
   private profiled(doc:any):boolean {return hasSourceProfile(doc,this.ps.constants.ColorProfileType?.NONE);}
-  private sourceState(doc:any):string {return JSON.stringify([doc.id,doc.width,doc.height,doc.mode,doc.bitsPerChannel,doc.colorProfileName,doc.colorProfileType,doc.activeHistoryState.id,doc.path,doc.saved,doc.quickMaskMode]);}
+  private sourceState(doc:any,profileName=doc.colorProfileName):string {return JSON.stringify([doc.id,doc.width,doc.height,doc.mode,doc.bitsPerChannel,profileName,doc.colorProfileType,doc.activeHistoryState.id,doc.path,doc.saved,doc.quickMaskMode]);}
   private async savedColor(doc:any,file?:any):Promise<SavedSourceColor|undefined> {
     // Photoshop has already applied any opening policy/conversion to a tagged
     // document. A stale disk declaration must never reinterpret those pixels.
@@ -43,7 +43,11 @@ export class PhotoshopAdapter {
         if(depth>64||++count>10000||!Number.isSafeInteger(layer.id)||layer.id<=0||seen.has(layer.id))throw new Error('Invalid layer identity');
         seen.add(layer.id);return [layer.id,layer.layers?identities(layer.layers,depth+1):null];
       });
-      return JSON.stringify([this.sourceState(doc),identities(doc.layers)]);
+      // With an explicit native NONE type, the display name is not an ICC and
+      // can retain the assigned name after Undo. Canonicalize only this field
+      // in the session-origin comparison; capture/apply state stays exact.
+      const none=this.ps.constants.ColorProfileType?.NONE;
+      return JSON.stringify([this.sourceState(doc,none!==undefined&&doc.colorProfileType===none?'':doc.colorProfileName),identities(doc.layers)]);
     }catch{return;}
   }
   private pruneColorCopies():void {

@@ -295,3 +295,13 @@ test('candidate image and selection-button clicks select once through the same b
     }finally{Object.defineProperty(select,'value',native);}
   }finally{h.releaseHistory();await h.close();}
 });
+
+
+test('a disabled retry does not clear an unresolved error or supersede the running capture owner',async()=>{
+ const h=await panelHarness();try{
+  await h.wait();h.click('nav-create');h.setSelection({bounds:null as any,mask:new Uint8Array(4)});h.click('capture');await h.wait();const failed=h.el('diagnostic-box').getAttribute('data-operation-id');
+  h.holdCheck();h.click('connect');await new Promise(r=>setTimeout(r,30));h.click('nav-create');assert.equal(h.el('capture').disabled,true);h.click('capture');await new Promise(r=>setTimeout(r,20));
+  assert.equal(h.el('diagnostic-box').style.display,'block');assert.equal(h.el('diagnostic-box').getAttribute('data-operation-id'),failed);
+  h.releaseCheck();await h.wait();assert.equal(h.el('diagnostic-box').style.display,'block');assert.equal(h.posts.length,0);
+ }finally{h.releaseCheck();await h.close();}
+});

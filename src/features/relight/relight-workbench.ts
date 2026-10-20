@@ -102,7 +102,7 @@ export class RelightWorkbench {
   }
   invalidateSource(reason?:string):void {const previous=this.sourceInvalid;this.sourceInvalid=true;this.finishInteraction();this.cancelPreview();if(reason||!previous)this.message(reason??this.sourceMessage());if(this.visible)this.refresh();}
   setScopePending(pending:boolean):void {const previous=this.scopePending;this.scopePending=pending;if(pending){this.finishInteraction();this.message(t('布光范围已改变，请重新读取原图；原有布光配置已保留'));}else if(previous&&!this.sourceInvalid)this.message(t('编辑布光不会发起 AI 请求；主动点击生成'));if(this.visible)this.refresh();}
-  showSourceRecovery(reason:string):void {this.sourceSyncFailed=true;this.invalidateSource(reason);this.show();}
+  sourceCaptureFailed(reason:string):void {this.sourceSyncFailed=true;this.invalidateSource(reason);}
   /** Called only after a successful explicit native read, never on modal reopen. */
   sourceRefreshed():void {
     this.sourceInvalid=false;this.scopePending=false;this.outputPending=false;this.sourceSyncFailed=false;this.selectedResult=undefined;this.pendingDraft=undefined;this.tab='illustration';

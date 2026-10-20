@@ -303,7 +303,7 @@ test('valid parameter edits preserve visible source, generation and application 
   for(const kind of ['source','generation','application']){
     const h=await panelHarness();try{
       await open(h);await useFullResult(h);
-      if(kind==='source'){h.click('relight-generate');await h.wait();assert.equal(h.records()[0].state,'ready');h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.ps.app.activeDocument.activeHistoryState={id:9};h.ps.imaging.getPixels=async()=>{throw Error('source read failed');};h.click('open-relight');await new Promise(r=>setTimeout(r,40));assert.match(h.el('relight-status').textContent,/source read failed/);assert.equal(h.el('relight-generate').disabled,true);}
+      if(kind==='source'){h.click('relight-generate');await h.wait();assert.equal(h.records()[0].state,'ready');h.ps.app.activeDocument.activeHistoryState={id:9};h.ps.imaging.getPixels=async()=>{throw Error('source read failed');};h.click('relight-reread');await new Promise(r=>setTimeout(r,40));assert.match(h.el('relight-status').textContent,/source read failed/);assert.equal(h.el('relight-generate').disabled,true);}
       else if(kind==='generation'){h.el('backend-url').value='http://localhost:8199';h.click('relight-generate');await h.wait();assert.match(h.el('relight-status').textContent,/后端配置已改变/);}
       else {h.click('relight-generate');await h.wait();h.ps.app.activeDocument.activeHistoryState={id:99};h.click('relight-apply');await new Promise(r=>setTimeout(r,80));assert.match(h.el('relight-status').textContent,/改变|重新捕获/);}
       const failure=h.el('relight-status').textContent;h.el('relight-intensity').value='2';h.change('relight-intensity');assert.equal(h.el('relight-status').textContent,failure,kind+' error must remain actionable after editing');
@@ -517,13 +517,29 @@ test('explicit reread includes visible applied output and uploads current pixels
   }finally{await h.close();}
 });
 
-test('a failed explicit reopen retains a stale editor without retry loops and another explicit open retries',async()=>{
+test('failed explicit opens stay closed and retain lighting and candidates until a successful read',async()=>{
   const h=await panelHarness();try{
-    await open(h);h.el('relight-intensity').value='3.1';h.change('relight-intensity');const before=await draft(h);h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.ps.app.activeDocument.activeHistoryState={id:40};
-    const read=h.ps.imaging.getPixels;let attempts=0;h.ps.imaging.getPixels=async()=>{attempts++;throw Error('source read failed');};h.click('open-relight');await new Promise(r=>setTimeout(r,130));
-    assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.equal(attempts,1);assert.equal(h.el('relight-intensity').value,'3.1');assert.equal(h.el('relight-generate').disabled,true);assert.match(h.el('relight-status').textContent,/source read failed/);assert.equal((await draft(h)).source.snapshotId,before.source.snapshotId);
-    h.el('relight-intensity').value='3.2';h.change('relight-intensity');h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.click('diagnostic-primary');await new Promise(r=>setTimeout(r,100));assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.equal(attempts,2);assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);
-    h.ps.imaging.getPixels=read;h.click('relight-reread');await new Promise(r=>setTimeout(r,80));assert.equal(h.el('relight-generate').disabled,false);assert.equal(h.el('relight-intensity').value,'3.2');
+    await open(h);await useFullResult(h);h.el('relight-intensity').value='3.1';h.change('relight-intensity');h.click('relight-generate');await h.wait();
+    const before=await draft(h),job=h.records()[0],saved=JSON.stringify(job);h.click('relight-close');await new Promise(r=>setTimeout(r,20));
+    h.click('nav-create');h.setSelection({bounds:null as any,mask:new Uint8Array(4)});
+    for(const button of ['open-relight','diagnostic-primary']){
+      h.click(button);await new Promise(r=>setTimeout(r,100));
+      assert.equal(h.el('relight-dialog').hasAttribute('open'),false,button+' must not display a stale source');
+      assert.equal(h.el('diagnostic-box').style.display,'block');assert.equal(JSON.parse(h.el('diagnostic-details').value).code,'selection-required');
+      assert.equal(JSON.stringify(h.records()[0]),saved);assert.equal(JSON.parse(String(h.files['relight-draft.json'])).scene.lights[0].intensity,3.1);
+    }
+    h.setSelection({bounds:{left:0,top:0,right:2,bottom:2},mask:new Uint8Array(4).fill(255)});h.click('diagnostic-primary');await new Promise(r=>setTimeout(r,100));
+    assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.equal(h.el('relight-intensity').value,'3.1');assert.equal(h.el('relight-result-list').querySelectorAll('button').length,1);assert.equal(h.el('relight-apply').disabled,true);
+    assert.equal((await draft(h)).source.snapshotId,before.source.snapshotId);h.click('relight-close');await new Promise(r=>setTimeout(r,20));assert.equal(h.el('diagnostic-box').style.display,'none');assert.equal(h.posts.length,1);assert.equal(h.uploads.length,2);
+  }finally{await h.close();}
+});
+
+test('successful in-dialog reread clears the corresponding main-panel capture error',async()=>{
+  const h=await panelHarness();try{
+    await open(h);h.setSelection({bounds:null as any,mask:new Uint8Array(4)});h.click('relight-reread');await new Promise(r=>setTimeout(r,80));
+    assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.equal(JSON.parse(h.el('diagnostic-details').value).code,'selection-required');
+    h.setSelection({bounds:{left:0,top:0,right:2,bottom:2},mask:new Uint8Array(4).fill(255)});h.click('relight-reread');await new Promise(r=>setTimeout(r,80));h.click('relight-close');await new Promise(r=>setTimeout(r,20));
+    assert.equal(h.el('diagnostic-box').style.display,'none');assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);
   }finally{await h.close();}
 });
 
@@ -581,4 +597,34 @@ test('translated reopening reads the active document without touching previously
     h.click('nav-create');h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');h.click('open-relight');await new Promise(r=>setTimeout(r,60));h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.el('language').value='en-US';h.change('language');await h.wait();assert.match(h.el('open-relight').textContent,/Open lighting workbench/);
     h.switchDocument(22);h.click('open-relight');await new Promise(r=>setTimeout(r,70));assert.equal((await draft(h)).source.documentId,22);assert.equal(applied.visible,true);assert.equal(applied.opacity,100);assert.equal(h.el('relight-reread').textContent,'Re-read current document');assert.doesNotMatch(h.el('relight-status').textContent,/[一-龥]/);assert.equal(h.posts.length,1);
   }finally{await h.close();}
+});
+
+
+test('a fresh relight open clears prior capture failures from both entry buttons only after successful binding',async()=>{
+ const h=await panelHarness();try{
+  await h.wait();h.click('nav-create');h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');h.el('resolution').value='32';h.setSelection({bounds:null as any,mask:new Uint8Array(4)});
+  h.click('open-relight');await new Promise(r=>setTimeout(r,70));h.click('diagnostic-primary');await new Promise(r=>setTimeout(r,70));assert.equal(h.el('diagnostic-box').style.display,'block',JSON.stringify({errors:h.errors.map(e=>({message:e.message,code:e.code})),details:h.el('diagnostic-details').value,mode:h.el('mode').value,doc:h.ps.app.activeDocument.id}));
+  h.setSelection({bounds:{left:0,top:0,right:2,bottom:2},mask:new Uint8Array(4).fill(255)});h.click('open-relight');await new Promise(r=>setTimeout(r,80));assert.equal(h.el('relight-dialog').hasAttribute('open'),true);
+  h.click('relight-close');await new Promise(r=>setTimeout(r,20));assert.equal(h.el('diagnostic-box').style.display,'none');assert.equal(h.posts.length,0);
+ }finally{await h.close();}
+});
+
+
+
+test('diagnostic retry clears an unclassified source-read failure only after fresh relight pixels are committed',async()=>{
+ const h=await panelHarness();try{
+  await open(h);h.click('relight-close');await new Promise(r=>setTimeout(r,20));const read=h.ps.imaging.getPixels;h.ps.imaging.getPixels=async()=>{throw Error('source read failed');};
+  h.click('open-relight');await new Promise(r=>setTimeout(r,80));assert.equal(h.el('relight-dialog').hasAttribute('open'),false);assert.equal(h.el('diagnostic-box').style.display,'block');assert.notEqual(h.el('diagnostic-primary').style.display,'none');
+  h.click('clear-protection');await h.wait();assert.equal(h.el('diagnostic-box').style.display,'block','unrelated successful controls must retain the read failure');h.click('diagnostic-primary');await new Promise(r=>setTimeout(r,80));assert.equal(h.el('relight-dialog').hasAttribute('open'),false);assert.equal(h.el('diagnostic-box').style.display,'block');
+  h.ps.imaging.getPixels=read;h.click('diagnostic-primary');await new Promise(r=>setTimeout(r,80));assert.equal(h.el('relight-dialog').hasAttribute('open'),true);h.click('relight-close');await new Promise(r=>setTimeout(r,20));assert.equal(h.el('diagnostic-box').style.display,'none');assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);
+ }finally{await h.close();}
+});
+
+test('a queued second open cannot expose the stale workbench or steal a pending native capture failure',async()=>{
+ const h=await panelHarness();let release=()=>{};try{
+  await open(h);h.el('relight-intensity').value='3.4';h.change('relight-intensity');const before=await draft(h);h.click('relight-close');await new Promise(r=>setTimeout(r,20));
+  let started=()=>{};const entered=new Promise<void>(resolve=>{started=resolve;}),barrier=new Promise<void>(resolve=>{release=resolve;});h.ps.imaging.getPixels=async()=>{started();await barrier;throw Error('source read failed');};
+  h.click('open-relight');await entered;assert.equal(h.el('relight-dialog').hasAttribute('open'),false);h.click('open-relight');await new Promise(r=>setTimeout(r,20));assert.equal(h.el('relight-dialog').hasAttribute('open'),false,'a capture in flight cannot reopen stale pixels');
+  release();await h.wait();assert.equal(h.el('relight-dialog').hasAttribute('open'),false);assert.equal(h.el('diagnostic-box').style.display,'block');assert.match(h.el('diagnostic-summary').textContent,/source read failed/);assert.equal(JSON.parse(String(h.files['relight-draft.json'])).scene.source.snapshotId,before.source.snapshotId);assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);
+ }finally{release();await h.wait();await h.close();}
 });

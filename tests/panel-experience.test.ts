@@ -5,6 +5,7 @@ import {defaultSettings,validateSettings,switchConnection} from '../src/infrastr
 import {diagnostic,DiagnosticError} from '../src/diagnostics/diagnostics';
 import * as panelState from '../src/app/panel-view';
 import type {JobRecord} from '../src/generation/jobs';
+import {encodePng} from '../src/imaging/image';
 const pause=()=>new Promise(resolve=>setTimeout(resolve,35));
 const record=(n:number):JobRecord=>({id:`${String(n).padStart(8,'0')}-1111-4111-8111-111111111111`,clientId:'ffffffff-1111-4111-8111-111111111111',state:'ready',createdAt:'2026-10-19T00:00:00Z',graph:{},params:{workspace:'t2i',mode:'generate'},userPrompt:`literal ${n}`});
 
@@ -119,18 +120,75 @@ test('unresolved capture advice appears only for its original mode and document 
 test('resolved capture clears matching range causes while preserving other sources, newer failures and task errors',()=>{
  const feedback:any=new panelState.OperationFeedback();
  const fail=(feature:string,mode:string,documentId:number,code:string,stage='capture')=>{const op=feedback.begin({page:'create',feature,stage,mode,documentId});feedback.fail(op,{code,stage,title:feature});return op;};
- fail('capture','edit',11,'selection-required');fail('capture-other-source','edit',22,'selection-required');fail('capture-other-mode','background',11,'selection-required');fail('auth','edit',11,'unauthorized','connection');fail('apply','edit',11,'source-changed','apply');
+ fail('capture','edit',11,'selection-required');fail('restore-selection','edit',22,'selection-required');fail('protect','background',11,'selection-required');fail('auth','edit',11,'unauthorized','connection');fail('apply','edit',11,'source-changed','apply');
  const repair=feedback.begin({page:'create',feature:'diagnostic-primary',stage:'capture',mode:'edit',documentId:11});
  assert.equal(typeof feedback.resolveCapture,'function');feedback.resolveCapture(repair);assert.equal(feedback.forPage('create',{mode:'edit',documentId:11}).diagnostic.title,'apply');
  assert.equal(feedback.forPage('create',{mode:'edit',documentId:22}).diagnostic.title,'apply','task errors remain available while source-specific range advice is filtered');
- fail('new-capture','edit',11,'empty-range');feedback.resolveCapture(repair);assert.equal(feedback.forPage('create',{mode:'edit',documentId:11}).diagnostic.title,'new-capture');
- const other=feedback.begin({page:'create',feature:'capture-other-source',stage:'capture',mode:'edit',documentId:33});feedback.succeed(other);
+ fail('diagnostic-primary','edit',11,'empty-range');feedback.resolveCapture(repair);assert.equal(feedback.forPage('create',{mode:'edit',documentId:11}).diagnostic.title,'diagnostic-primary');
+ const other=feedback.begin({page:'create',feature:'restore-selection',stage:'capture',mode:'edit',documentId:33});feedback.succeed(other);
  assert.equal(feedback.forPage('create',{mode:'background',documentId:11}).diagnostic.title,'apply');
- feedback.clearCodes(['unauthorized','source-changed','empty-range']);assert.equal(feedback.forPage('create',{mode:'edit',documentId:22}).diagnostic.title,'capture-other-source');assert.equal(feedback.forPage('create',{mode:'background',documentId:11}).diagnostic.title,'capture-other-mode');assert.equal(feedback.forPage('create',{mode:'edit',documentId:11}),undefined);
+ feedback.clearCodes(['unauthorized','source-changed','empty-range']);assert.equal(feedback.forPage('create',{mode:'edit',documentId:22}).diagnostic.title,'restore-selection');assert.equal(feedback.forPage('create',{mode:'background',documentId:11}).diagnostic.title,'protect');assert.equal(feedback.forPage('create',{mode:'edit',documentId:11}),undefined);
 });
 
-test('a successful new submission resolves its earlier pre-submission error but preserves another saved task failure',()=>{
+test('fresh source capture resolves a corrected selection cause from protection capture',()=>{
+ const feedback=new panelState.OperationFeedback(),scope={page:'create' as const,stage:'capture' as const,mode:'edit',documentId:11};
+ const failed=feedback.begin({...scope,feature:'protect'});feedback.fail(failed,{code:'selection-required',stage:'capture'});const read=feedback.begin({...scope,feature:'capture'});feedback.resolveCapture(read);assert.equal(feedback.forPage('create'),undefined);
+});
+
+test('a successful new submission resolves its earlier failure while retaining feedback for other sources',()=>{
  const feedback=new panelState.OperationFeedback(),scope={page:'create' as const,feature:'generate',stage:'inference' as const,mode:'edit',documentId:11};
- const beforeSubmit=feedback.begin(scope);feedback.fail(beforeSubmit,{code:'unknown',stage:'inference'});const retry=feedback.begin(scope);retry.taskId='new-saved-task';feedback.succeed(retry);assert.equal(feedback.forPage('create'),undefined);
- const failedTask=feedback.begin(scope);failedTask.taskId='failed-task';feedback.fail(failedTask,{code:'invalid-output',stage:'output'});const separateTask=feedback.begin(scope);separateTask.taskId='different-task';feedback.succeed(separateTask);assert.equal(feedback.forPage('create')?.operation.taskId,'failed-task');
+ const beforeSubmit=feedback.begin(scope);feedback.fail(beforeSubmit,{code:'unknown',stage:'inference'});const retry=feedback.begin(scope);retry.taskId='new-saved-task';feedback.succeed(retry);assert.equal(feedback.forPage('create')?.operation,beforeSubmit,'assigning a UUID is not successful completion');retry.successfulTaskId=retry.taskId;feedback.succeed(retry);assert.equal(feedback.forPage('create'),undefined);
+ const failedTask=feedback.begin(scope);failedTask.taskId='failed-task';feedback.fail(failedTask,{code:'invalid-output',stage:'output'});
+ const otherSource=feedback.begin({...scope,documentId:22});otherSource.taskId='other-source';otherSource.successfulTaskId=otherSource.taskId;feedback.succeed(otherSource);assert.equal(feedback.forPage('create')?.operation.taskId,'failed-task');
+ const separateTask=feedback.begin(scope);separateTask.taskId='different-task';separateTask.successfulTaskId=separateTask.taskId;feedback.succeed(separateTask);assert.equal(feedback.forPage('create'),undefined);
+});
+
+for(const code of ['unknown','source-profile','image-budget'])test(`verified capture preserves unrelated reference ${code} failures and newer source failures`,()=>{
+ const feedback=new panelState.OperationFeedback(),scope={page:'create' as const,stage:'capture' as const,mode:'relight',documentId:11};
+ const failed=feedback.begin({...scope,feature:'open-relight'});feedback.fail(failed,{code:'unknown',stage:'capture'});
+ const reference=feedback.begin({...scope,feature:'reference'});feedback.fail(reference,{code,stage:'capture'});
+ const retry=feedback.begin({...scope,feature:'diagnostic-primary'});feedback.resolveCapture(retry);
+ assert.equal(feedback.forPage('create')?.operation,reference);feedback.succeed(feedback.begin({...scope,feature:'reference'}));assert.equal(feedback.forPage('create'),undefined);
+ const stale=feedback.begin({...scope,feature:'open-relight'}),latest=feedback.begin({...scope,feature:'open-relight'});feedback.fail(latest,{code:'unknown',stage:'capture'});feedback.resolveCapture(stale);assert.equal(feedback.forPage('create')?.operation,latest);
+ feedback.succeed(latest);assert.equal(feedback.forPage('create')?.operation,latest,'a swallowed failure cannot become its own successful retry');
+});
+
+test('a generated tagged copy owns downstream task feedback and a later successful generation resolves it',async()=>{
+ const h=await panelHarness({untaggedSource:{bytes:encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)})}});try{
+  await h.wait();h.click('nav-create');h.el('resolution').value='32';const original=h.ps.app.activeDocument,originalLayers=JSON.stringify(original.layers);h.setJobStatus('failed');h.click('generate');await h.wait();
+  const failed=h.records()[0],copy=h.ps.app.activeDocument;assert.notEqual(copy.id,original.id);assert.equal((failed.snapshot as any).documentId,copy.id);assert.equal(JSON.parse(h.el('diagnostic-details').value).documentId,copy.id);
+  h.setJobStatus('ready');h.click('generate');await h.wait();h.click('nav-create');assert.equal(h.el('diagnostic-box').style.display,'none');assert.equal(h.records().find(r=>r.id===failed.id)?.state,'failed');assert.equal((failed.snapshot as any).documentId,copy.id);assert.equal(JSON.stringify(original.layers),originalLayers);assert.equal(original.colorProfileName,'');assert.equal(h.posts.length,2);
+ }finally{await h.close();}
+});
+
+test('successful generation with a new UUID clears the old visible error while the failed history record remains',async()=>{
+ const h=await panelHarness();try{
+  await h.wait();h.click('nav-create');h.el('resolution').value='32';h.setJobStatus('failed');h.click('generate');await h.wait();const old=h.records()[0];assert.equal(old.state,'failed');assert.equal(h.el('diagnostic-box').style.display,'block');
+  h.setJobStatus('ready');h.click('generate');await h.wait();h.click('nav-create');assert.equal(h.el('diagnostic-box').style.display,'none');assert.equal(h.records().find(r=>r.id===old.id)?.state,'failed');assert.equal(h.records().filter(r=>r.state==='ready').length,1);assert.equal(h.posts.length,2);
+ }finally{await h.close();}
+});
+
+test('cancelling a retry during backend checks preserves the previous task error without submitting another UUID',async()=>{
+ const h=await panelHarness();try{
+  await h.wait();h.click('nav-create');h.el('resolution').value='32';h.setJobStatus('failed');h.click('generate');await h.wait();const failed=h.records()[0],diagnostic=JSON.parse(h.el('diagnostic-details').value);assert.equal(failed.state,'failed');
+  h.holdCheck();h.click('generate');await pause();h.click('cancel');h.releaseCheck();await h.wait();
+  assert.equal(h.posts.length,1);assert.equal(h.records().length,1);assert.equal(h.records()[0].id,failed.id);assert.equal(h.el('diagnostic-box').style.display,'block');assert.equal(JSON.parse(h.el('diagnostic-details').value).operationId,diagnostic.operationId);
+ }finally{h.releaseCheck();await h.close();}
+});
+
+for(const outcome of ['cancelled','ready'] as const)test(`a cancelled retry ending ${outcome} preserves the previous task error after a new UUID was submitted`,async()=>{
+ const h=await panelHarness({pollDelayMs:10});try{
+  await h.wait();h.click('nav-create');h.el('resolution').value='32';h.setJobStatus('failed');h.click('generate');await h.wait();const failed=h.records()[0],diagnostic=JSON.parse(h.el('diagnostic-details').value);
+  h.setJobStatus('running');h.click('generate');for(let n=0;n<100&&h.posts.length<2;n++)await new Promise(r=>setTimeout(r,5));assert.equal(h.posts.length,2);const retry=h.records().find(r=>r.id!==failed.id)!;assert.ok(retry);
+  h.setCancelResult(retry.id,true);h.click('cancel');h.setJobStatus(outcome,retry.id);await h.wait();h.click('nav-create');
+  assert.equal(h.records().find(r=>r.id===failed.id)?.state,'failed');assert.equal(h.records().find(r=>r.id===retry.id)?.state,outcome);assert.equal(h.el('diagnostic-box').style.display,'block');assert.equal(JSON.parse(h.el('diagnostic-details').value).operationId,diagnostic.operationId);assert.equal(h.posts.length,2);
+ }finally{await h.close();}
+});
+
+test('an explicitly recovered existing task clears its earlier recovery error only after the candidate is saved',async()=>{
+ const h=await panelHarness();try{
+  await h.wait();h.click('nav-create');h.el('resolution').value='32';h.setJobStatus('failed');h.click('generate');await h.wait();const id=h.records()[0].id;
+  h.click('nav-history');h.selectHistory(id);h.click('recover');await h.wait();assert.equal(h.el('diagnostic-box').style.display,'block');assert.equal(JSON.parse(h.el('diagnostic-details').value).feature,'recover');
+  h.setJobStatus('ready',id);h.click('recover');await h.wait();h.click('nav-history');assert.equal(h.el('diagnostic-box').style.display,'none');assert.equal(h.records()[0].state,'ready');assert.equal(h.records()[0].id,id);assert.equal(h.posts.length,1);
+ }finally{await h.close();}
 });
