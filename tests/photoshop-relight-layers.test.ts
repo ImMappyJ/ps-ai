@@ -52,6 +52,18 @@ test('owned group replacement is source-bound, and mutating the native mask revo
   assert.equal(h.adapter.sourceAvailability({...h.snapshot,mask:undefined} as any), 'changed');assert.equal(h.adapter.sourceAvailability({...h.snapshot,mask:undefined} as any,true),'current');
   h.snapshot.mask[0]=255;await assert.rejects(h.adapter.applyRelightLayers(h.snapshot,h.fields,'mutated'),/改变/);assert.equal(h.doc.layers.length,2);
 });
+test('opacity control rejects a merged layer retaining the output ID after its application history changes',async()=>{
+  const h=host(8,8,6,true),id=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'Lighting'),merged={id,name:'Lighting',kind:'normal',visible:true,opacity:100};
+  h.doc.layers=[merged];h.doc.activeHistoryState={id:30};
+  await assert.rejects(h.adapter.opacity(h.doc.id,id,0),/改变|重新/);assert.equal(merged.opacity,100);assert.equal(h.doc.activeHistoryState.id,30);assert.deepEqual(h.doc.layers,[merged]);
+});
+test('repeated authorized opacity changes track their own native history and retain candidate replacement',async()=>{
+  const h=host(8,8,6,true),id=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'Lighting'),group=h.doc.layers.find((l:any)=>l.id===id);let value=group.opacity;
+  Object.defineProperty(group,'opacity',{enumerable:true,get:()=>value,set:next=>{value=next;h.doc.activeHistoryState={id:h.doc.activeHistoryState.id+1};}});
+  await h.adapter.opacity(h.doc.id,id,37);assert.equal(group.opacity,37);assert.equal(h.doc.activeHistoryState.id,5);assert.equal(h.adapter.applicationMode(h.snapshot),'replace');
+  await h.adapter.opacity(h.doc.id,id,62);assert.equal(group.opacity,62);assert.equal(h.doc.activeHistoryState.id,6);assert.equal(h.adapter.applicationMode(h.snapshot),'replace');
+  const replacement=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'Replacement');assert.notEqual(replacement,id);assert.equal(h.doc.layers.some((l:any)=>l.id===id),false);assert.equal(h.doc.layers.some((l:any)=>l.id===replacement),true);assert.equal(h.adapter.applicationMode(h.snapshot),'replace');
+});
 test('9000x5000 lighting apply traverses every native pixel in bounded source, influence and mask strips',async()=>{
   const h=host(8,9000,5000,true);h.fields.channels=h.fields.channels.filter(c=>c.kind==='light');let completed=0;
   const id=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'45M',{onProgress:(done,total)=>{completed=done;if(done===total)assert.equal(total,519);}}),group=h.doc.layers.find((l:any)=>l.id===id);
@@ -65,48 +77,59 @@ test('history suspension failure restores the previously active document before 
   await assert.rejects(h.adapter.applyRelightLayers(h.snapshot,h.fields,'busy'),/host busy/);assert.equal(h.ps.app.activeDocument.id,99);assert.deepEqual(h.doc.layers,[h.original]);
 });
 
-const recover=(h:ReturnType<typeof host>,validate?:(capture:any)=>void)=>h.adapter.capture(0,undefined,h.doc.id,8,{selection:'document',purpose:'relight-analysis',preserveNativeDepth:true,excludeApplications:true},validate);
+const current=(h:ReturnType<typeof host>,validate?:(capture:any)=>void)=>h.adapter.capture(0,undefined,h.doc.id,8,{selection:'document',purpose:'relight-analysis',preserveNativeDepth:true},validate);
+const appearance=(h:ReturnType<typeof host>)=>JSON.stringify({history:h.doc.activeHistoryState,layers:h.doc.layers});
+const writes=(h:ReturnType<typeof host>)=>h.calls.filter(c=>c==='suspend'||Array.isArray(c)&&['resume','write','mask','create','group','delete','batch'].includes(c[0]));
 
-test('recovery finds owned groups nested under visible parents and ignores hidden parents, deleted results and names',async()=>{
-  const h=host(8,8,6,true),id=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'Lighting'),group=h.doc.layers.find((l:any)=>l.id===id),parent={id:500,visible:true,layers:[group]},unrelated={id:501,visible:true,name:'PS-AI Lighting'};
-  h.doc.layers=[parent,unrelated,h.original];assert.equal(h.adapter.hasVisibleApplication(h.doc.id),true);
-  parent.visible=false;assert.equal(h.adapter.hasVisibleApplication(h.doc.id),false);const hidden=await recover(h);assert.equal(group.visible,true);assert.equal(parent.visible,false);assert.equal(hidden.snapshot.historyId,4);
-  parent.visible=true;h.doc.activeHistoryState={id:20};const read=h.ps.imaging.getPixels;h.ps.imaging.getPixels=async(o:any)=>{assert.equal(group.visible,true);assert.equal(group.opacity,0);assert.equal(unrelated.visible,true);return read(o);};
-  const captured=await recover(h);assert.equal(captured.snapshot.historyId,21);assert.equal(h.doc.activeHistoryState.id,21);assert.equal(group.visible,true);assert.equal(group.opacity,0);assert.equal(parent.visible,true);assert.equal(unrelated.visible,true);assert.deepEqual(captured.snapshot.sourceLayerIds,[500,501,1]);
-  group.visible=true;parent.layers=[];assert.equal(h.adapter.hasVisibleApplication(h.doc.id),false);assert.equal(unrelated.visible,true);
-});
-
-test('recovery failures in pixel capture, validation and history commit restore opacity and the old baseline',async()=>{
-  for(const failure of ['pixels','validation','commit']){
-    const h=host(8,8,6,true),id=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'Lighting'),group=h.doc.layers.find((l:any)=>l.id===id);h.doc.activeHistoryState={id:30};
-    if(failure==='pixels')h.ps.imaging.getPixels=async()=>{assert.equal(group.visible,true);assert.equal(group.opacity,0);throw Error('capture failed');};
-    if(failure==='commit'){const modal=h.ps.core.executeAsModal;h.ps.core.executeAsModal=(fn:any)=>modal((context:any)=>{const resume=context.hostControl.resumeHistory;context.hostControl.resumeHistory=async(id:number,commit:boolean)=>{if(commit)throw Error('commit failed');return resume(id,commit);};return fn(context);});}
-    await assert.rejects(recover(h,failure==='validation'?()=>{throw Error('binding failed');}:undefined),/failed/);
-    assert.equal(group.visible,true,failure+' preserves visibility');assert.equal(group.opacity,100,failure+' restores opacity');assert.equal(h.doc.activeHistoryState.id,30);assert.deepEqual(h.calls.filter(c=>c[0]==='resume').slice(-1),[['resume',false]]);assert.ok(h.resources.every(r=>r.disposed));
+test('obsolete exclusion requests reject before changing or reading a merged layer retaining an output ID',async()=>{
+  for(const excludeApplications of [true,false]){
+    const h=host(8,8,6,true),id=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'Lighting');
+    const merged={id,name:'Lighting',kind:'normal',visible:true,opacity:100,fillOpacity:100};h.doc.layers=[merged];h.doc.activeHistoryState={id:30};
+    const before=appearance(h),calls=h.calls.length;let reads=0;
+    h.ps.imaging.getPixels=async()=>{reads++;assert.equal(merged.opacity,100,'obsolete options must never hide merged user content');throw Error('merged composite must not be read for an obsolete option');};
+    await assert.rejects(h.adapter.capture(0,undefined,h.doc.id,8,{selection:'document',purpose:'relight-analysis',preserveNativeDepth:true,excludeApplications} as any),/捕获策略/);
+    assert.equal(reads,0);assert.equal(appearance(h),before);assert.equal(h.calls.length,calls,'invalid options must not enter modal history or pixel APIs');
   }
 });
 
-test('multiple recorded results are excluded together and deleted or undone IDs cannot hide replacement layers',async()=>{
-  const h=host(8,8,6,true),first=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'one'),group=h.doc.layers.find((l:any)=>l.id===first);group.visible=false;
-  const captured=await recover(h);h.fields.source={...h.fields.source,...captured.snapshot,layerIds:captured.snapshot.sourceLayerIds!,snapshotId:'second',documentMode:captured.snapshot.mode,documentDepth:8,docWidth:captured.snapshot.width,docHeight:captured.snapshot.height,maskRef:`relight-mask-v1:sha256:${Array.from(sha256(captured.snapshot.mask),v=>v.toString(16).padStart(2,'0')).join('')}`};
-  h.fields.width=captured.snapshot.captureGeometry!.width;h.fields.height=captured.snapshot.captureGeometry!.height;const count=h.fields.width*h.fields.height;h.fields.guide=new Float32Array(count).fill(.5);h.fields.channels=h.fields.channels.map(channel=>({...channel,amount:new Float32Array(count).fill(.1),...(channel.color?{color:new Float32Array(count*3).fill(.6)}:{})}));
-  // The capture is history 4; the test reader also verifies strip history is frozen.
-  const read=h.ps.imaging.getPixels;h.ps.imaging.getPixels=(o:any)=>read({...o,...(o.historyStateID!==undefined?{historyStateID:3}:{})});
-  const second=await h.adapter.applyRelightLayers(captured.snapshot,h.fields,'two');group.visible=true;const other=h.doc.layers.find((l:any)=>l.id===second);h.doc.activeHistoryState={id:40};
-  await recover(h);assert.equal(group.visible,true);assert.equal(other.visible,true);assert.equal(group.opacity,0);assert.equal(other.opacity,0);assert.equal(h.doc.activeHistoryState.id,41);
-  h.doc.layers=[h.original,{id:999,name:'one',visible:true}];assert.equal(h.adapter.hasVisibleApplication(h.doc.id),false);await recover(h);assert.equal(h.doc.layers[1].visible,true);assert.equal(h.doc.activeHistoryState.id,41,'no empty undo step after deletion or undo');
+test('current composite capture includes visible owned lighting groups without altering their opacity or history',async()=>{
+  const h=host(8,8,6,true),id=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'Lighting'),group=h.doc.layers.find((l:any)=>l.id===id),parent={id:500,visible:true,opacity:55,layers:[group]},unrelated={id:501,visible:true,name:'PS-AI Lighting'};
+  group.opacity=37;h.doc.layers=[parent,unrelated,h.original];h.doc.activeHistoryState={id:30};const before=appearance(h),beforeWrites=writes(h).length;
+  const captured=await current(h);
+  assert.equal(captured.snapshot.historyId,30);assert.ok(captured.snapshot.sourceLayerIds!.includes(id));assert.ok(captured.snapshot.sourceLayerIds!.includes(500));assert.ok(captured.snapshot.sourceLayerIds!.includes(501));assert.ok(captured.snapshot.sourceLayerIds!.includes(1));
+  assert.equal(appearance(h),before);assert.equal(writes(h).length,beforeWrites);assert.ok(h.resources.every(r=>r.disposed));
 });
 
-test('recovery remains undoable when Photoshop history ignores visibility and restores the user opacity',async()=>{
-  const h=host(8,8,6,true),id=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'Lighting'),group=h.doc.layers.find((l:any)=>l.id===id);group.opacity=37;h.doc.activeHistoryState={id:30};let undo=()=>{};
-  h.ps.core.executeAsModal=async(fn:any)=>fn({hostControl:{suspendHistory:async()=>{const historyId=h.doc.activeHistoryState.id,opacity=group.opacity;undo=()=>{group.opacity=opacity;h.doc.activeHistoryState={id:historyId};};return 1;},resumeHistory:async(_id:number,commit:boolean)=>{if(commit)h.doc.activeHistoryState={id:h.doc.activeHistoryState.id+1};else undo();}}});
-  const captured=await recover(h);assert.equal(group.visible,true,'exclusion must preserve visibility when visibility is outside native undo');assert.equal(group.opacity,0);assert.equal(h.adapter.hasVisibleApplication(h.doc.id),false);assert.equal(captured.snapshot.sourceLayerIds!.includes(id),false);assert.equal(captured.snapshot.historyId,31);
-  undo();assert.equal(group.visible,true);assert.equal(group.opacity,37);assert.equal(h.doc.activeHistoryState.id,30);assert.equal(h.adapter.hasVisibleApplication(h.doc.id),true);
-  h.ps.imaging.getPixels=async()=>{throw Error('capture failed');};await assert.rejects(recover(h),/capture failed/);assert.equal(group.visible,true);assert.equal(group.opacity,37);assert.equal(h.doc.activeHistoryState.id,30);
+test('current composite capture reads merged pixels retaining ordinary or lighting output IDs without reviving old apply permission',async()=>{
+  for(const depth of [8,16] as const)for(const kind of ['ordinary','lighting']){
+    const h=host(depth,8,6,true),rgba=depth===16?new Uint16Array(8*6*4).fill(65535):new Uint8Array(8*6*4).fill(255);
+    const id=kind==='lighting'?await h.adapter.applyRelightLayers(h.snapshot,h.fields,'Lighting'):await h.adapter.apply(h.snapshot,{width:8,height:6,rgba},'Background');
+    const merged={id,name:kind==='lighting'?'Lighting':'Background',kind:'normal',visible:true,opacity:100,fillOpacity:100};h.doc.layers=[merged];h.doc.activeHistoryState={id:30};
+    const read=h.ps.imaging.getPixels;h.ps.imaging.getPixels=async(o:any)=>{assert.equal(o.historyStateID,undefined,'recapture must read the current composite');assert.equal(o.layerID,undefined);assert.equal(merged.opacity,100);const result=await read(o),getData=result.imageData.getData;result.imageData.getData=async()=>{const values=await getData();values[0]=depth===16?45679:178;return values;};return result;};
+    const before=appearance(h),beforeWrites=writes(h).length,captured=await current(h);
+    assert.equal(captured.image.rgba[0],depth===16?45679:178);assert.equal(captured.image.rgba[3],depth===16?65535:255);assert.equal(captured.image.rgba instanceof Uint16Array,depth===16);
+    assert.deepEqual(captured.snapshot.sourceLayerIds,[id]);assert.equal(captured.snapshot.historyId,30);assert.notEqual(captured.snapshot.sourceHash,h.snapshot.sourceHash);
+    h.adapter.assertSourceCurrent(captured.snapshot);assert.equal(h.adapter.sourceAvailability(h.snapshot,true),'changed');assert.equal(h.adapter.applicationMode(h.snapshot),'unavailable');
+    assert.throws(()=>h.adapter.assertSourceCurrent(h.snapshot),/改变/);await assert.rejects(h.adapter.apply(h.snapshot,{width:8,height:6,rgba},'Stale candidate'),/改变/);
+    assert.equal(appearance(h),before);assert.equal(writes(h).length,beforeWrites);assert.ok(h.resources.every(r=>r.disposed));
+  }
 });
 
-test('zero-opacity ancestors and outputs are excluded from provenance without changing their visibility or creating an empty undo',async()=>{
-  const h=host(8,8,6,true),id=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'Lighting'),group=h.doc.layers.find((l:any)=>l.id===id),parent={id:500,visible:true,opacity:0,layers:[group]};group.opacity=37;h.doc.layers=[parent,h.original];
-  assert.equal(h.adapter.hasVisibleApplication(h.doc.id),false);const before=h.doc.activeHistoryState.id,captured=await recover(h);assert.deepEqual(captured.snapshot.sourceLayerIds,[1]);assert.equal(captured.snapshot.historyId,before);assert.equal(group.opacity,37);assert.equal(group.visible,true);assert.equal(parent.opacity,0);
-  parent.opacity=55;assert.equal(h.adapter.hasVisibleApplication(h.doc.id),true);await recover(h);assert.equal(group.opacity,0);assert.equal(group.visible,true);assert.equal(parent.opacity,55);assert.equal(parent.visible,true);assert.equal(h.doc.activeHistoryState.id,before+1);
+test('current capture leaves user-hidden and zero-opacity outputs unchanged and omits them from visible provenance',async()=>{
+  for(const hidden of ['parent-opacity','parent-visible','output-opacity','output-visible']){
+    const h=host(8,8,6,true),id=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'Lighting'),group=h.doc.layers.find((l:any)=>l.id===id),parent={id:500,visible:true,opacity:55,layers:[group]};
+    group.opacity=37;if(hidden==='parent-opacity')parent.opacity=0;if(hidden==='parent-visible')parent.visible=false;if(hidden==='output-opacity')group.opacity=0;if(hidden==='output-visible')group.visible=false;
+    h.doc.layers=[parent,h.original];h.doc.activeHistoryState={id:30};const before=appearance(h),beforeWrites=writes(h).length,captured=await current(h);
+    assert.deepEqual(captured.snapshot.sourceLayerIds,hidden.startsWith('parent')?[1]:[500,1]);assert.equal(captured.snapshot.historyId,30);assert.equal(appearance(h),before);assert.equal(writes(h).length,beforeWrites);
+  }
+});
+
+test('failed current pixel reads and capture validation never mutate source layers or create history',async()=>{
+  for(const failure of ['pixels','validation']){
+    const h=host(8,8,6,true),id=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'Lighting'),group=h.doc.layers.find((l:any)=>l.id===id);group.opacity=37;h.doc.activeHistoryState={id:30};
+    const before=appearance(h),beforeWrites=writes(h).length;
+    if(failure==='pixels')h.ps.imaging.getPixels=async()=>{assert.equal(group.opacity,37);throw Error('capture failed');};
+    await assert.rejects(current(h,failure==='validation'?()=>{throw Error('binding failed');}:undefined),/failed/);
+    assert.equal(appearance(h),before);assert.equal(writes(h).length,beforeWrites);assert.ok(h.resources.every(r=>r.disposed));
+  }
 });
