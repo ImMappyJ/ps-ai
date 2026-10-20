@@ -370,9 +370,9 @@
       },
       "sourceLifecycle": {
         "observation": "Only while workbench visible; coalesced documented Photoshop events trigger lightweight metadata checks, no pixel capture per event or closed-workbench background reads",
-        "automaticRefresh": "Visible/reopen changed source may refresh once only when document geometry/profile/scope/output capture policy match and there are no results, active/pending tasks or other interactions; failed refresh remains stale without retry loop",
-        "explicitActions": "Reread always targets the bound source and retains lights; other documents require Bind current document; geometry/profile/scope/output changes require explicit reread/rebind",
-        "safety": "Reopen retains source/lights/candidates even if the source is stale or closed. Explicit Exclude applied results and reread sets only recorded visible owned outputs to opacity zero in one undoable history state; failure rolls it back. Prior candidates retain their exact submitted snapshots and gain no new apply permission",
+        "automaticRefresh": "Visible changed source may refresh once only when document geometry/profile/scope/output capture policy match and there are no results, active/pending tasks or other interactions; failed refresh remains stale without retry loop. Explicit idle panel opening reads the current active composite independently of retained results",
+        "explicitActions": "Idle panel opening and Reread capture the active document visible composite, including generated backgrounds and merged edits; retain lights and chosen scope; no separate binding or result exclusion",
+        "safety": "Reading changes no layer opacity/visibility/content. Publish a new binding only after successful capture; failures retain editor/candidates with explicit stale reason. Internal dialog reopening and running-task reopening retain frozen context. Prior candidates retain exact submitted snapshots and gain no new apply permission",
         "closing": "Dispose source listeners, timers, preview/cache/image references and obsolete renders; keep submitted-job recovery/cancellation semantics"
       },
       "previewScheduling": {
