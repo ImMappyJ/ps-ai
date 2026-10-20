@@ -372,7 +372,7 @@
         "observation": "Only while workbench visible; coalesced documented Photoshop events trigger lightweight metadata checks, no pixel capture per event or closed-workbench background reads",
         "automaticRefresh": "Visible changed source may refresh once only when document geometry/profile/scope/output capture policy match and there are no results, active/pending tasks or other interactions; failed refresh remains stale without retry loop. Explicit idle panel opening reads the current active composite independently of retained results",
         "explicitActions": "Idle panel opening and Reread capture the active document visible composite, including generated backgrounds and merged edits; retain lights and chosen scope; no separate binding or result exclusion",
-        "safety": "Reading changes no layer opacity/visibility/content. Publish a new binding only after successful capture; failures retain editor/candidates with explicit stale reason. Internal dialog reopening and running-task reopening retain frozen context. Prior candidates retain exact submitted snapshots and gain no new apply permission",
+        "safety": "Reading changes no layer opacity/visibility/content. Publish a new binding only after successful capture; failed explicit panel entry stays closed while retaining editor/candidates. Reread inside an already open editor may show stale content. Clear resolved source-read errors only after binding commits. Internal dialog reopening and running-task reopening retain frozen context. Prior candidates retain exact submitted snapshots and gain no new apply permission",
         "closing": "Dispose source listeners, timers, preview/cache/image references and obsolete renders; keep submitted-job recovery/cancellation semantics"
       },
       "previewScheduling": {
@@ -537,6 +537,11 @@
     },
     "colorRecovery": {
       "evidence": "Synthetic native API; RGB8/16 verified PNG sRGB working copies and valid Adobe RGB controls",
+      "residualNoneName": {
+        "revision": "65cf629",
+        "offline": "Same adapter/session-proven preassignment origin remains explicitly recoverable when NONE retains a residual sRGB display name; history/layers/geometry/native type stay strict. Capture still rejects NONE, and restarted adapters or arbitrary pathless documents cannot recover",
+        "native": "2026-10-20 PS27 RGB8/16 PNG-sRGB copies and Adobe RGB controls passed repeated Undo to the native boundary, explicit new-copy recovery, original/redo retention, apply/Undo/recapture and cleanup. Observed native NONE names were None; this does not reproduce the reported WebP/doc65 residual-name state"
+      },
       "passed": [
         "Repeated undo reaches proven origin",
         "New tagged copy preserves native pixels",

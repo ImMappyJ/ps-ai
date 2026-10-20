@@ -23,6 +23,8 @@ An earlier implementation passed actual point, spot-target and directional dragg
 
 ## Scene and coordinates
 
+An explicit main-panel entry opens only after a successful fresh capture. Failure leaves the dialog closed while retaining its session, lights and exportable candidates. A reread initiated within an already open editor may reopen stale content with generation blocked. Source-read errors are resolved only after the new binding commits; disabled actions or unrelated successes cannot clear them. Successful retries supersede older feedback for the same feature/source without removing failed task records from History.
+
 The entry control `relight-scope` defaults to `selection`; `document` is an explicit entire-image choice. `CaptureOptions.selection='document'` supplies a full-canvas editable mask without reading or writing Photoshop's selection. It is distinct from `context='document', selection='edit'` used by blending and from subject-background reconstruction. Whole-image relight must not require an environment outside a subject selection. Native 16-bit source samples and partial grayscale protection stay intact.
 
 Capture checks required selection bounds and the processing pixel budget before any original-file picker, then revalidates the bound document and selection inside the capture modal after asynchronous file access. Missing selection has diagnostic code `selection-required` and bilingual guidance to create a selection or explicitly choose Entire image. Selection/source changes during authorization stop before working-copy creation, pixel reads or upload. Current document ICC remains authoritative; an explicit NONE profile type is never accepted just because its name says sRGB.
