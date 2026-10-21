@@ -2,11 +2,11 @@
 <h1 align="center">Gemini / Nano Banana setup</h1>
 <p align="center"><a href="GEMINI.md">简体中文</a> · <strong>English</strong></p>
 
-The development branch includes a Google Gemini adapter. **Live API output and Photoshop application have not been tested with a real key.** Published v0.4.0 packages do not contain this feature. Nano Banana names the Gemini image-model family; this adapter calls Google's API directly.
+Version **0.5.0** includes a Google Gemini adapter. **Live API output and Photoshop application have not been tested with a real key.** Use matching 0.5.0 packages or build the corresponding source as described in the [README](../README.en.md#install-a-release-package); historical v0.4.0 packages lack this feature. Nano Banana names the Gemini image-model family; this adapter calls Google's API directly.
 
 ## Connect from the panel
 
-For the development build, follow [platform setup](../setup/PLATFORMS.en.md). On Windows, install Node.js 24+, select **Nano Banana** in **Backend and models**, enter its API key and choose **Save key**. Allow Photoshop to open the bundled local launcher. Scan models, choose one, save and connect. The managed address is `http://127.0.0.1:8192`.
+For 0.5.0, follow [platform setup](../setup/PLATFORMS.en.md). On Windows, install Node.js 24+, select **Nano Banana** in **Settings → Backend and models**, enter its API key and choose **Save key**. Allow Photoshop to open the bundled local launcher. Scan models, choose one, save and connect. The managed address is `http://127.0.0.1:8192`.
 
 Keys are encrypted in UXP secureStorage and used only in local relay memory. Exports, history and logs exclude them. Connection checks do not call generation or verify account access. Images, references and prompts go to the platform only when generating, and remain in private local data. The relay can be stopped from the panel; pending jobs retain their original identity.
 
@@ -48,7 +48,7 @@ Untagged PNGs are rejected by default. Only after confirming the provider's pixe
 This Gemini API returns an image directly. The adapter has no remote task ID for retrieving a lost result. The service persists a local UUID before making one background request; the plugin polls local state. A local UUID is not a Google task ID.
 
 - **Stop remaining candidates** lets the current request continue; it does not guarantee billing stops. Returned results are saved.
-- A timeout or process exit before output persistence can leave `unknown`. Automatic resubmission is prohibited. Check platform usage records; server reconciliation and platform-ID attachment remain unimplemented. Development History supports explicit two-step local stop tracking for `unknown`, retaining the original ID and all data. It does not cancel work or stop billing; a new task may duplicate work. See the [user guide](../usage/USER_GUIDE.en.md).
+- A timeout or process exit before output persistence can leave `unknown`. Automatic resubmission is prohibited. Check platform usage records; server reconciliation and platform-ID attachment remain unimplemented. Current 0.5.0 History supports explicit two-step local stop tracking for `unknown`, retaining the original ID and all data. It does not cancel work or stop billing; a new task may duplicate work. See the [user guide](../usage/USER_GUIDE.en.md).
 - Once raw output is saved, transient output-write failures can recover using the same UUID. Normal Ctrl+C waits for current work; forced termination has no such guarantee.
 - For 401/403, check credentials, model access, region and account. For 429, check quota/rate limits. Do not create repeated uncertain tasks.
 - Refusals, missing images, non-PNG output and invalid dimensions/color produce errors. Do not bypass validation to force application.

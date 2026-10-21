@@ -2,11 +2,11 @@
 <h1 align="center">接入阿里云百炼</h1>
 <p align="center"><strong>简体中文</strong> · <a href="BAILIAN.en.md">English</a></p>
 
-当前开发分支已加入百炼适配服务，**尚未用真实 API Key 完成平台与 Photoshop 验收**。现有 v0.4.0 Release 不包含本轮功能；本页用于开发测试及后续发行验收。已有 ComfyUI 可以继续使用，不需要卸载或改配置。
+**0.5.0**包含百炼适配服务，**尚未用真实 API Key 完成平台与 Photoshop 验收**。请按[README](../../README.md#安装发行包)使用匹配的 0.5.0 包或对应源码构建；v0.4.0 历史包不含此功能。已有 ComfyUI 可以继续使用，不需要卸载或改配置。
 
 ## 从面板连接
 
-开发版的完整步骤见 [平台配置](../setup/PLATFORMS.md)。Windows 安装 Node.js 24+，展开“模型与连接”，选择 **BaiLian**，输入该平台的 API Key，点“保存 Key”，允许 Photoshop 打开随包提供的本地启动器。扫描并选择模型，保存配置后连接。自动管理的地址是 `http://127.0.0.1:8191`。
+0.5.0 的完整步骤见 [平台配置](../setup/PLATFORMS.md)。Windows 安装 Node.js 24+，打开“设置 → 模型与连接”，选择 **BaiLian**，输入该平台的 API Key，点“保存 Key”，允许 Photoshop 打开随包提供的本地启动器。扫描并选择模型，保存配置后连接。自动管理的地址是 `http://127.0.0.1:8191`。
 
 Key 加密保存在 UXP secureStorage 中，本机中转只在内存使用；不会进入 JSON 导出、历史或日志。连接检查不生成图片，也不验证账号权限。点击生成后才向平台上传图片、参考和提示词，同时在本机私人目录保留。可以从面板停止本地服务，未完成任务仍按原 ID 保留。
 
@@ -69,7 +69,7 @@ $env:DASHSCOPE_BASE_URL = 'https://WORKSPACE_ID.cn-beijing.maas.aliyuncs.com/api
 | 429 | 检查平台配额和频率限制；已有任务先按 ID 查询 |
 | 输出未标记 sRGB | 先确认平台 PNG 的实际颜色约定。只有确认其本就是 sRGB 时，才显式设置 `PSAI_BAILIAN_ASSUME_SRGB=1` 后重启；此选项不会转换未知 ICC |
 | 画布尺寸或透明度不符 | 检查原始输出、所选模式和模型；不要强行拉伸或伪造透明通道 |
-| `unknown` 且没有平台 ID | 人工核对平台记录，自动对账与平台 ID 认领仍未实现。开发版历史提供双步骤停止本地跟踪，保留原 ID 和未知状态；不取消任务或停止计费，新任务可能重复执行。见[用户指南](../usage/USER_GUIDE.md)，不要删除元数据 |
+| `unknown` 且没有平台 ID | 人工核对平台记录，自动对账与平台 ID 认领仍未实现。0.5.0 历史提供双步骤停止本地跟踪，保留原 ID 和未知状态；不取消任务或停止计费，新任务可能重复执行。见[用户指南](../usage/USER_GUIDE.md)，不要删除元数据 |
 | 数据目录已加锁 | 先关闭原服务；异常终止时，确认 `gateway.lock` 中的 PID 已退出后才移除遗留锁 |
 
 服务只监听本机，不是带账户认证的公共服务。需要迁移时，正常停止后备份整个数据目录；它包含提示词和图片，不要上传到仓库或 Issue。服务端重写、持久化顺序及接口字段见 [后端开发文档](../development/BACKEND.md) 与 [AGENTS.md](../../AGENTS.md)。

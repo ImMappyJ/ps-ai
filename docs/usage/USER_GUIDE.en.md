@@ -2,17 +2,47 @@
 <h1 align="center">Using PS-AI</h1>
 <p align="center"><a href="USER_GUIDE.md">简体中文</a> · <strong>English</strong></p>
 
-This walkthrough tests all nine modes on separate copies of **3F3F3F.webp**. Screenshots show the actual Portable panel in Windows Photoshop 27.0. Results were exported from Photoshop composites. Click an image for its original PNG; panel captures retain their native 541-pixel width, without enlargement or reconstructed UI.
+This guide covers **0.5.0 (experimental prerelease)**: eleven modes across Local edit, Portrait and Generate, with Create / Results / History / Settings navigation. Install matching packages or build the corresponding source using the [README](../README.en.md#install-a-release-package). For backend configuration, see [platform setup](../setup/PLATFORMS.en.md) and [ComfyUI setup](../setup/COMFYUI.en.md).
 
-**For version 0.4.0 (experimental).** Version 0.3.0 lacks guided setup, range previews and optional 16-bit output. See [installation](../README.en.md#install-a-release-package) and [ComfyUI setup](../setup/COMFYUI.en.md).
+All demonstration images now show actual installed Portable **0.5.0 c3adef56** in Photoshop 27, using an independent copy of **3F3F3F.webp**. Older effect images have been removed; canonical brand artwork is retained.
 
-The screenshots and nine-mode acceptance use ComfyUI. See [Bailian](../providers/BAILIAN.en.md), [Gemini / Nano Banana](../providers/GEMINI.en.md) and [OpenAI Images](../providers/OPENAI.en.md) for platform setup and limits; their live results and host behavior are not validated by these examples.
+Mode captures show configuration entries before prompts, reference import or selection preview. They do not demonstrate completed generation or range acceptance. See [Bailian](../providers/BAILIAN.en.md), [Gemini / Nano Banana](../providers/GEMINI.en.md) and [OpenAI Images](../providers/OPENAI.en.md) for adapter limits; live platform output still needs API-key acceptance.
 
-The development build renames **COSPLAY** to **Portrait** and adds Relighting and Image Blending, for eleven modes. Remove objects needs no prompt; background and scene replacement start from a subject selection. The nine illustrated examples remain v0.4.0 evidence and do not validate the new controls or effects. For backend choices and keys, see [platform setup](../setup/PLATFORMS.en.md).
+<a id="current-ui"></a>
 
-## Development build navigation
+## Current interface walkthrough (0.5.0)
 
-The development build groups the former long page into the areas below. Navigation only changes what is visible: the mode, prompt, reference, parameters, task and candidates remain intact. Generation, application and recovery still require an explicit action.
+Two capture sessions use the same **0.5.0 c3adef56** runtime. The unmerged sRGB8 demonstration copy preserves foreground pixels/alpha over a separate neutral-gray background. Settings, workbench, Results and layers in this walkthrough use a controlled local lighting response at `127.0.0.1:8194`; the missing-selection image uses the unedited original WebP without generating. Mode/advanced captures below submit no inference, while the [model configuration image](../setup/COMFYUI.en.md#connection) separately scans the actual local ComfyUI catalog at `localhost:8188`. **Controlled operations, configuration captures and model scanning do not establish real generation quality or all-mode acceptance.** Images retain actual capture pixels; click for original resolution. Some captures show Chinese UI; English Settings is also provided.
+
+1. **Configure:** open Settings → Backend and models. The demonstration endpoint is isolated; use your own compatible ComfyUI or the platform setup instructions for actual generation. Scanning a catalog does not establish live model quality.
+
+   ![0.5.0 English Settings view; local controlled demonstration](../../assets/guide/050-settings-en.png)
+
+2. **Prepare:** return to Create, choose the mode, and inspect the source, selection and protection. The pictured source is a separate copy, not an overwrite of the original file.
+
+   ![0.5.0 Create view on the sample copy; UI operation sample](../../assets/guide/050-create-zh.png)
+
+3. **Relight explicitly:** choose the lighting scope and open the workbench. Original, local illustration and AI-result views are distinct; editing a light expresses intent. The workbench illustration is a local preview; generated responses in this walkthrough are controlled local data, not model-quality examples.
+
+   ![0.5.0 lighting workbench; controlled local response context](../../assets/guide/050-relight-zh.png)
+
+4. **Inspect and deliver:** inspect Results and source availability before applying or exporting. The layer view illustrates the Photoshop lighting-group structure for this controlled sample, not physically isolated illumination or guaranteed detail fidelity.
+
+   | Results view | Photoshop layers view |
+   | --- | --- |
+   | ![0.5.0 Results view; controlled response, not model inference](../../assets/guide/050-results-zh.png) | ![0.5.0 lighting layers in Photoshop; controlled UI sample](../../assets/guide/050-layers-zh.png) |
+
+5. **History and errors:** use the saved UUID to inspect/recover an existing task. A missing selection needs a new selection or an explicit Entire image lighting scope. The error view illustrates the message; it does not establish every recovery path.
+
+   | History view | Missing-selection guidance |
+   | --- | --- |
+   | ![0.5.0 History view and local task details](../../assets/guide/050-history-zh.png) | ![0.5.0 missing-selection guidance; UI operation sample](../../assets/guide/050-selection-error-zh.png) |
+
+The eleven mode sections below describe current operation; mode images show entries and controls only.
+
+## 0.5.0 navigation
+
+The current panel groups its controls into the areas below. Navigation only changes what is visible: the mode, prompt, reference, parameters, task and candidates remain intact. Generation, application and recovery still require an explicit action.
 
 | Area | Contents |
 | --- | --- |
@@ -25,11 +55,11 @@ The bottom area presents the active task status; switching pages does not stop w
 
 Open the separate lighting workbench from Create → Portrait → Relighting. Its toolbar, light list and property groups share the panel's visual style. Original, Lighting illustration and AI result remain separate views. Hide markers only affects visibility; Enable this light determines whether a light participates in the lighting setup.
 
-Display previews are separate from candidate and export pixels. Existing task parameters, scene formats and history remain readable; the new lighting-output default is described below. The v0.4.0 screenshots still show the old panel; installed-panel docking, system scaling and the full host workflow require separate acceptance for the new layout.
+Display previews are separate from candidate and export pixels. Existing task parameters, scene formats and history remain readable; the new lighting-output default is described below. The captures show the current layout; other docking configurations, system scaling and the full host workflow still need separate acceptance.
 
-## Changes in this development build
+## Current behavior and validation boundaries
 
-The product version stays **0.5.0**. Use the separate Git build identifier in Settings to distinguish revisions; the v0.4.0 screenshots and historical v0.5.2 evidence below retain their original versions.
+The product version is **0.5.0**. The separate Git build identifier in Settings distinguishes revisions. Dated native checks and current configuration captures identify their own scopes and do not establish current full-product acceptance.
 
 Opening the panel restores local settings and history metadata without automatically contacting a backend, scanning models or launching a relay. Choose Connect or Generate when needed. An offline backend does not block local navigation, and history images decode on demand. Installed Photoshop cold-start timing still requires separate measurement.
 
@@ -39,15 +69,15 @@ Narrow History starts with the list. Selecting a record opens details; Back to h
 
 History browsing and current Results are independent. A loaded candidate’s action uses its saved task UUID and source snapshot; browsing an invalid record cannot disable another valid candidate. Changed, closed or earlier-session sources offer a clickable Check source action with the reason and available recovery path, without writing to the document. Failed lighting extraction retains reference inspection/export and cannot become applicable by switching modes.
 
-New lighting sessions default to Lighting layers; Full redraw remains an explicit choice. Old tasks retain their original output type. Lighting layers use one model target as a low-resolution lighting reference, then derive local influence fields over a native base copied from the original document. These fields can still alter the appearance of faces, lettering and materials. Structural mismatch or unsupported color/transparency conditions refuse application while retaining the reference output; there is no automatic redraw fallback. Initial layers support sRGB RGB8/16 with opaque editable pixels. Wide-gamut, grayscale and translucent edit regions require explicitly choosing the existing Full redraw path. Real-photo lighting quality requires human acceptance.
+New lighting sessions default to Lighting layers; Full-image redraw remains an explicit choice. Old tasks retain their original output type. Lighting layers use one model target as a low-resolution lighting reference, then derive local influence fields over a native base copied from the original document. These fields can still alter the appearance of faces, lettering and materials. Structural mismatch or unsupported color/transparency conditions refuse application while retaining the reference output; there is no automatic redraw fallback. Initial layers support sRGB RGB8/16 with opaque editable pixels. Wide-gamut, grayscale and translucent edit regions require explicitly choosing the existing Full-image redraw path. Real-photo lighting quality requires human acceptance.
 
-Opening the workbench while idle reads the visible composite of the currently active Photoshop document and retains edited lights. Generated backgrounds, merged layers and manual edits enter the source as currently shown on the canvas. Reread original also reads the active document, without excluding results or a separate binding action. Reading changes no layer opacity, visibility or content. Existing candidates retain their submitted snapshots and inspection/export paths; rereading grants no new apply permission. A failed read retains lights and old candidates with an explicit stale-source reason. Reopening during a running task restores its frozen context without changing that task.
+Opening the workbench while idle reads the visible composite of the currently active Photoshop document and retains edited lights. Generated backgrounds, merged layers and manual edits enter the source as currently shown on the canvas. Re-read current document also reads the active document, without excluding results or a separate binding action. Reading changes no layer opacity, visibility or content. Existing candidates retain their submitted snapshots and inspection/export paths; rereading grants no new apply permission. If a fresh read fails during explicit entry from the main panel, the dialog stays closed while lights and old candidates remain retained with the failure reason. A failed reread inside an already open workbench may show stale content. Reopening during a running task restores its frozen context without changing that task.
 
-Source documents are limited to 45,000,000 pixels and a 30,000-pixel side. Large selections in ordinary editing, background/scene, blend and full redraw automatically use a budgeted working raster when native-resolution capture would exceed its budget. Selection feathering, protection and application coordinates remain at native size. The panel shows document, working, model-input and application dimensions. Analysis resolution, retained candidates and other session buffers affect the available budget; upsampling does not produce native 45MP model detail.
+Source documents are limited to 45,000,000 pixels and a 30,000-pixel side. Large selections in ordinary editing, background/scene, blend and full-image redraw automatically use a budgeted working raster when native-resolution capture would exceed its budget. Selection feathering, protection and application coordinates remain at native size. The panel shows document, working, model-input and application dimensions. Analysis resolution, retained candidates and other session buffers affect the available budget; upsampling does not produce native 45MP model detail.
 
 Photoshop 27 native API checks on 2026-10-19 passed capture, strip application, cancellation during preflight, selection restoration and single undo on 24MP RGB8, 45MP RGB16 ordinary edits and a 45MP RGB8 background. Sampled source and protected pixels remained unchanged. A 23.15MP real-photo duplicate also passed ordinary capture, native-size application, whole-source pixel preservation, single undo and rollback after partial writing. These API checks do not establish installed-panel, actual AI-output or lighting-quality acceptance; see the [development contract](../development/BACKEND.en.md#relighting-workbench).
 
-Version 0.5.2 fixes `Invalid Source Bounds` when reading a partial selection in strips: only the intersection with the selection bounds is requested from Photoshop, while the mask for outside context remains zero. This was unrelated to JPG format. On the same date, an irregular subject selection in a 20.02MP sRGB8 JPG passed native ordinary full-context, background and relight capture, with zero per-pixel mask differences and unchanged source state. A separate feathered sample preserved gray values 1, 64, 128 and 255 exactly. Installed-panel interaction still requires separate acceptance.
+The 2026-10-19 strip-read fix addresses `Invalid Source Bounds` when reading a partial selection in strips: only the intersection with the selection bounds is requested from Photoshop, while the mask for outside context remains zero. This was unrelated to JPG format. On the same date, an irregular subject selection in a 20.02MP sRGB8 JPG passed native ordinary full-context, background and relight capture, with zero per-pixel mask differences and unchanged source state. A separate feathered sample preserved gray values 1, 64, 128 and 255 exactly. Installed-panel interaction still requires separate acceptance.
 
 Lighting uses an analysis copy capped at 1,048,576 pixels and a 1536-pixel side; the native base retains document depth, while model input remains sRGB8. Large selections and lighting layers are written in strips at the original edit coordinates, subject to an estimated 512,000,000-byte image-working-set gate. This is not a measurement of total Photoshop memory or a guarantee that every document within the pixel limit fits. Large-selection PNG exports and New document use the displayed model or working-raster dimensions; background candidates use the saved working size. Successfully derived lighting composites use the analysis dimensions, while a rejected extraction retains the reference at actual model-output dimensions. For full-resolution delivery, apply to the source and save as PSD or export from Photoshop.
 
@@ -57,20 +87,20 @@ UXP requires the minimum writable clipboard declaration `clipboard: readAndWrite
 
 ## Connect and make a copy
 
-1. Start ComfyUI and confirm its address opens in a browser.
-2. Open PS-AI from Photoshop's Plugins menu. The Portable entry is **PS-AI (Portable)**.
-3. Expand Backend and models (open Settings first in the development build). Enter an origin such as `http://localhost:8188`. Custom hosts and ports are supported; omit credentials, paths and query parameters.
-4. Scan models, select the matching Qwen 2.1 diffusion model, vision / text encoder and VAE, then Save settings and Connect. Other architectures cannot be used by renaming files.
-5. The first-time wizard can test the address, check the environment and run a generation example. The last step generates and applies in its own test document.
-6. Open the sample and save a PSD copy. Start each example from a fresh copy.
+1. Install/load the matching plugin and open PS-AI from Photoshop Plugins; the Portable entry is **PS-AI (Portable)**.
+2. Open **Settings → Backend and models** and choose ComfyUI, Nano Banana, GPT Image, BaiLian or Manual gateway. Cloud adapters require their API key, Node.js 24+ for the local relay, and the setup described in [platform setup](../setup/PLATFORMS.en.md); live cloud output remains unvalidated.
+3. For ComfyUI, start the backend and verify its browser page, enter an origin such as `http://localhost:8188`, then scan/select the compatible Qwen 2.1 model, encoder and VAE. Save settings and connect. Omit credentials, paths and query parameters; renaming another architecture cannot make it compatible.
+4. The setup wizard can test the address and environment. Its final Generate example action explicitly runs inference and applies a result to a separate test document.
+5. Return to **Create** and choose a mode before preparing a saved source copy. Ordinary edits/removal/clothing select the area to change; character reference additionally needs an imported image. Background/scene select the subject to keep; blending selects the foreground subject. Removal has no prompt, and blending’s supplementary description is optional.
+6. Relighting uses the workbench with Current selection or Entire image. Image-context assets need a placement selection; explicitly text-only assets and text-to-image need no source selection. Preview the actual range, generate deliberately, inspect Results, apply/export, and recover an interrupted job through History using its original ID.
 
 Language and output depth save on change; use Save settings for the address and models. Export / import JSON to move settings, without model weights or image history. CCX and Portable keep separate data.
 
-Use a source with the correct ICC profile. Tagged RGB / Grayscale 8/16-bit is supported; untagged sources are blocked. Prepare RGB copies of CMYK, Lab, Indexed, Bitmap, Multichannel and 32-bit HDR files. The source WebP is 8-bit; test copies were converted to **RGB / 16-bit, sRGB IEC61966-2.1**. Conversion does not restore missing detail.
+Use a source with the correct ICC profile. RGB / Grayscale 8/16-bit needs a resolved color space; unresolved untagged sources are blocked. The original-file/working-copy exception is described below. Prepare RGB copies of CMYK, Lab, Indexed, Bitmap, Multichannel and 32-bit HDR files. In the historical tests, the source WebP was 8-bit; test copies were converted to **RGB / 16-bit, sRGB IEC61966-2.1**. Conversion does not restore missing detail.
 
 <a id="source-color"></a>
 
-**Saved source color in the development build:** an existing document ICC, including Adobe RGB, keeps its current interpretation and needs no original-file picker. An untagged RGB image with a bound original file needs authorization to read that exact file. Choose the original being edited, such as `3F3F3F.webp`, when prompted. The plugin checks its path, dimensions and depth, then reads color declarations: static WebP without ICC uses the format's sRGB default; PNG needs an explicit sRGB chunk. Successful resolution opens an unmerged, tagged sRGB working copy. The preview states the rule used, and generation and Apply as new layer target that copy. The original is untouched and unsaved layers are retained. Untagged edits also receive the original-file color interpretation; check their appearance if they were edited under a different working space. Saved protection coordinates carry over; continue selecting and generating in the working copy.
+**Saved source color in the current build:** an existing document ICC, including Adobe RGB, keeps its current interpretation and needs no original-file picker. An untagged RGB image with a bound original file needs authorization to read that exact file. Choose the original being edited, such as `3F3F3F.webp`, when prompted. The plugin checks its path, dimensions and depth, then reads color declarations: static WebP without ICC uses the format's sRGB default; PNG needs an explicit sRGB chunk. Successful resolution opens an unmerged, tagged sRGB working copy. The preview states the rule used, and generation and Apply as new layer target that copy. The original is untouched and unsaved layers are retained. Untagged edits also receive the original-file color interpretation; check their appearance if they were edited under a different working space. Saved protection coordinates carry over; continue selecting and generating in the working copy.
 
 Authorized file entries are reused for the current plugin session. **Advanced parameters → Remember original-file access** is off by default. Enable it to save up to 32 exact-file access tokens in private plugin storage; enabling it also remembers files already authorized in this session when supported. These grants and the preference are excluded from portable settings, task history and diagnostic exports. They contain no cached pixels or color conclusions: every use reads bounded current bytes and inspects their declarations again. A replaced file cannot reuse an earlier sRGB conclusion. Revoked, moved or unreadable access can open one replacement picker; select the original again. Missing host token APIs or unavailable private storage do not prevent the current authorized read. Check the access status for recovery instructions.
 
@@ -98,29 +128,29 @@ Installed 0.5.0 291c1d40 separately passed a small RGB8 asset flow. A rectangula
 
 **This iteration’s five real ComfyUI samples failed visual checks.** The source and guide were sent for hand arcs, portrait smoke, perspective beams and feathered face protection. Outputs retained source people/environments or painted guide boundaries. One separate prompt comparison still retained source content. Transparent pixels alone do not establish a usable independent asset: inspect against light and dark backgrounds for source and guide residue. Platform request structures have offline coverage, but real platform output remains untested without API keys. Failures retain the original task and raw output; recovery queries the original UUID without automatically generating again.
 
-## Shared test settings
+## Generation settings
 
-**One candidate, resolution 992, 25 steps, locked seed 42, 15% context margin, color matching off and 16-bit SDR output.** Models: the compatibility list's Qwen 2.1 Q4_K_M, Qwen3-VL INT8 and Qwen 2.1 VAE. Edit candidates follow the captured aspect ratio. [Recipes JSON](../../assets/guide/recipes.json) records exact Chinese prompts, switches and dimensions. English prompts below are translations for readability; they were not independently tested.
+Start with one candidate and 8-bit (compatible) to check the flow. Choose resolution, steps and seed for the task. The captures show configuration entries, not an effect comparison for a particular parameter set. Edit candidates follow the captured crop’s aspect ratio and need not be square.
 
-Without the optional save node, keep **8-bit (compatible)**. For 16-bit SDR, install `PS_AISavePNG16` and restart ComfyUI as described in the [backend guide](../setup/COMFYUI.en.md). Web previews are 8-bit and cannot demonstrate 16-bit precision.
+For 16-bit SDR output, install the optional `PS_AISavePNG16` and restart the backend as described in the [ComfyUI guide](../setup/COMFYUI.en.md). Model input remains sRGB8; web screenshots cannot demonstrate 16-bit precision.
 
 ## Shared selection-edit steps
 
-In the development panel, undoing to an earlier Photoshop state may also remove the selection. Make a new selection and use **Preview selection**, or explicitly choose **Restore last selection and reread** in the original mode. The latter replaces the Photoshop selection with this plugin session's most recent successfully captured range, preserving its normalized 8-bit grayscale feathering and coordinates. For background/scene modes it restores the subject to keep. It is available only for the same source document, dimensions, native mode/depth and panel mode; reloads and earlier sessions require a new selection. It restores only the range, then reads current pixels and current color information, applies current protection once, and shows a new preview. Inspect it before choosing **Generate candidates**; restoration never submits a job or authorizes an old candidate against changed document history. If rereading fails, the restored selection remains available and stale source pixels are discarded.
+In the current panel, undoing to an earlier Photoshop state may also remove the selection. Make a new selection and use **Preview selection**, or explicitly choose **Restore last selection and reread** in the original mode. The latter replaces the Photoshop selection with this plugin session's most recent successfully captured range, preserving its normalized 8-bit grayscale feathering and coordinates. For background/scene modes it restores the subject to keep. It is available only for the same source document, dimensions, native mode/depth and panel mode; reloads and earlier sessions require a new selection. It restores only the range, then reads current pixels and current color information, applies current protection once, and shows a new preview. Inspect it before choosing **Generate**; restoration never submits a job or authorizes an old candidate against changed document history. If rereading fails, the restored selection remains available and stale source pixels are discarded.
 
 **Settings → Build** shows the version and short source revision; `-dirty` identifies a build containing uncommitted changes, and an unbuilt source run says `dev (unbuilt)`. The identifier also appears in copyable error details, helping distinguish builds with the same version. Selection restoration and these controls have offline regression coverage; installed Photoshop behavior and undo still require native acceptance.
 
 Select an area and use Preview selection: **amber is editable, blue is manually protected and gray supplies context**. Submission captures again. To protect a face or hand, select it, Protect selection, then select the edit area. Set protection again after changing documents or restoring parameters.
 
-Generate candidates, wait, inspect thumbnails and View at 100%, then Apply as new layer. The result has an editable mask and preserves the source layer. Orange illustrations below are maps made from the actual selection masks; UI captures are shown separately. Comparisons show the original on the left and result on the right.
+Generate, wait, inspect thumbnails and View at 100%, then Apply as new layer. The result has an editable mask and preserves the source layer. The new mode captures show entry points; confirm the actual range with Preview selection in your own document.
 
 <a id="background-fix"></a>
 
-**Background replacement in the development build:** select the subject to keep in both Local edit → Replace background and Portrait → Replace scene; do not invert the selection. The plugin captures the whole canvas and uses the subject selection and source alpha to determine the background range, including transparent canvas areas and translucent edges. Preview the range and check the opaque subject core and manual protection. Both modes automatically disable source-transparency preservation, alignment and color matching. ComfyUI also disables the visual selection guide, which the model can mistake for picture content. Only model input is matted over white; saved source pixels and original layers remain intact. Ordinary preferences return when leaving these modes. Platform adapters retain their provider / native mask path.
+**Background replacement in the current build:** select the subject to keep in both Local edit → Replace background and Portrait → Replace scene; do not invert the selection. The plugin captures the whole canvas and uses the subject selection and source alpha to determine the background range, including transparent canvas areas and translucent edges. Preview the range and check the opaque subject core and manual protection. Both modes automatically disable source-transparency preservation, alignment and color matching. ComfyUI also disables the visual selection guide, which the model can mistake for picture content. Only model input is matted over white; saved source pixels and original layers remain intact. Ordinary preferences return when leaving these modes. Platform adapters retain their provider / native mask path.
 
-Subject selection and RGBA application are later development changes with offline regression coverage only. The native evidence below used the earlier background-selection flow and does not validate the new flow. Loading old candidates retains their saved masks and color-matching settings. When reusing parameters to generate a new background, select the subject again; color matching is automatically disabled for the new task.
+Subject selection and RGBA application are later changes with offline regression coverage only. The native evidence below used the earlier background-selection flow and does not validate the new flow. Loading old candidates retains their saved masks and color-matching settings. When reusing parameters to generate a new background, select the subject again; color matching is automatically disabled for the new task.
 
-Candidates with substantial transparency in the background show a warning and cannot be applied. Export them for inspection and generate another candidate manually; there is no automatic retry. On 2026-10-18, the original Chinese request “少女站在舞台上” produced visible stage lighting, scenery and a floor on this sample. Application to an RGB8 / Adobe RGB copy in Photoshop 27 left pixels outside the selection, additional protection and the source layer unchanged; one undo restored the composite exactly. Other prompts may need more detail about the environment. Screenshots below remain v0.4.0 evidence; new host controls and 16-bit background inference were not accepted in this session. Existing release packages do not contain this correction.
+Candidates with substantial transparency in the background show a warning and cannot be applied. Export them for inspection and generate another candidate manually; there is no automatic retry. On 2026-10-18, the original Chinese request “少女站在舞台上” produced visible stage lighting, scenery and a floor on this sample. Application to an RGB8 / Adobe RGB copy in Photoshop 27 left pixels outside the selection, additional protection and the source layer unchanged; one undo restored the composite exactly. Other prompts may need more detail about the environment. The capture below shows the current configuration entry; new host controls and 16-bit background inference still need separate acceptance. Historical v0.4.0 packages do not contain this correction.
 
 ## Mode index
 
@@ -130,378 +160,155 @@ Candidates with substantial transparency in the background show a warning and ca
 | [02 · Remove](#remove) | [05 · Character reference](#reference) | [08 · Atmosphere](#atmosphere) |
 | [03 · Background](#background) | [06 · Scene](#scene) | [09 · Text to image](#generate) |
 
-Development additions: [10 · Relighting](#relight) · [11 · Image Blending](#blend).
+0.5.0 modes: [10 · Relighting](#relight) · [11 · Image Blending](#blend).
 
-Each example starts with the result. Expand **Selection and panel settings** for the setup screenshots. Click any image to inspect the original file.
+Each section shows the current mode entry and subsequent steps. These captures submit no generation; click an image for its original file.
 
 <a id="edit"></a>
 
-## 01 · Objects and materials
+## 01 · Objects and materials (0.5.0)
 
-<p align="center">
-  <a href="../../assets/guide/01-edit-compare.png"><img src="../../assets/guide/01-edit-compare.png" width="760" alt="Before on the left, white over-the-knee socks on the right"></a>
-  <br><sub>Before (left) · White over-the-knee socks (right)</sub>
-</p>
+Open **Local edit → Objects and materials**.
 
-1. Duplicate the original. Select both legs from above the knees down to the shoe openings, leaving room for the sock tops.
-2. Choose Local edit → Edit objects / materials, with the selection destination. Enter the prompt below.
-3. Enable Selection guide, Preserve source transparency and subject alignment. Disable color matching. Preview the selection and generate.
-4. Check both sock tops, shoes and pose, then apply. If alignment distorts proportions, turn it off and generate again.
+1. Select the object or material on a source copy. Protect faces, hands or text separately when needed.
+2. Describe the change, for example “Make the selected metal ornament matte silver while retaining its shape and texture.” This is a writing example, not a prompt validated by new inference in this round.
+3. Preview selection, inspect the editable range and explicitly generate. Check details in Results before applying as a new layer or exporting.
 
-Prompt translation:
-
-> Add white over-the-knee socks to both legs, with the tops above the knees. Keep the leg pose, shoes, existing clothes and transparent background.
-
-The test added white over-the-knee socks while preserving the alpha outline and visible pixels outside the edit mask. The 800×1216 candidate maps back to source coordinates; no manual enlargement is needed.
-
-<details>
-<summary>Selection and panel settings</summary>
-
-<table>
-  <tr>
-    <th width="50%" align="center">Editable area</th>
-    <th width="50%" align="center">Panel settings</th>
-  </tr>
-  <tr>
-    <td align="center" valign="top"><a href="../../assets/guide/01-edit-selection.png"><img src="../../assets/guide/01-edit-selection.png" width="360" alt="Actual selection mask shown in amber"></a></td>
-    <td align="center" valign="top"><a href="../../assets/guide/01-edit-panel.png"><img src="../../assets/guide/01-edit-panel.png" width="360" alt="Actual Portable panel: Objects and materials"></a></td>
-  </tr>
-</table>
-
-</details>
+![0.5.0 Objects and materials configuration entry before generation, Chinese UI](../../assets/guide/050-mode-edit-zh.png)
 
 <a id="remove"></a>
 
-## 02 · Remove
+## 02 · Remove objects (0.5.0)
 
-<p align="center">
-  <a href="../../assets/guide/02-remove-compare.png"><img src="../../assets/guide/02-remove-compare.png" width="560" alt="Before on the left, plush charm removed on the right"></a>
-  <br><sub>Before (left) · Plush charm removed (right)</sub>
-</p>
+Open **Local edit → Remove objects**.
 
-1. Duplicate the original. Lasso the black plush charm on the chest, including its head, body, limbs and a little surrounding white fabric.
-2. Choose Local edit → Remove objects, with the selection destination. The development build hides the prompt input and removes selected objects using surrounding material and structure.
-3. Enable the selection guide. Disable transparency preservation, alignment and color matching. Preview and generate.
-4. Check for black fragments, continuous fabric folds and the retained chain, then apply.
+1. Select the object to remove and retain some surrounding context for reconstruction. Avoid selecting the whole person or background.
+2. This mode uses a built-in removal instruction and has no prompt field. Add protection if needed and preview the selection.
+3. Generate, inspect reconstruction and edges, then apply or export. An unsatisfactory output never triggers automatic resubmission.
 
-Prompt translation:
-
-> Remove the black plush charm on the chest, including its head and limbs. Continue the white pleated fabric through that area. Keep the metal chain, pose and other clothing.
-
-The prompt and screenshots above document the older test. The development build uses a built-in removal instruction and ignores prompt drafts left by other modes. In the older test, the charm was replaced by white fabric and the chain remained. Complex occlusion may need a second, smaller edit.
-
-<details>
-<summary>Selection and panel settings</summary>
-
-<table>
-  <tr>
-    <th width="50%" align="center">Editable area</th>
-    <th width="50%" align="center">Panel settings</th>
-  </tr>
-  <tr>
-    <td align="center" valign="top"><a href="../../assets/guide/02-remove-selection.png"><img src="../../assets/guide/02-remove-selection.png" width="280" alt="Actual selection mask shown in amber"></a></td>
-    <td align="center" valign="top"><a href="../../assets/guide/02-remove-panel.png"><img src="../../assets/guide/02-remove-panel.png" width="360" alt="Actual Portable panel: Remove"></a></td>
-  </tr>
-</table>
-
-</details>
+![0.5.0 Remove objects configuration entry before generation, Chinese UI](../../assets/guide/050-mode-remove-zh.png)
 
 <a id="background"></a>
 
-## 03 · Background
+## 03 · Replace background (0.5.0)
 
-<p align="center">
-  <a href="../../assets/guide/03-background-compare.png"><img src="../../assets/guide/03-background-compare.png" width="760" alt="Before on the left, lavender studio background on the right"></a>
-  <br><sub>Before (left) · Lavender studio background (right)</sub>
-</p>
+Open **Local edit → Replace background (select subject)**.
 
-1. Duplicate the transparent sample. Use Photoshop Select Subject or select the character manually. Do not invert in the development build; the v0.4.0 example used an inverted background selection.
-2. Choose Local edit → Replace background, with the selection destination. Enter the prompt.
-3. The development build disables the guide, transparency preservation, alignment and color matching automatically. Preview: the background should be editable and the opaque character excluded. The old v0.4.0 screenshot enables the guide; see the [background correction](#background-fix) for current behavior.
-4. Generate and apply. Check canvas coverage, foot contact, hair edges and shadows. Background mode preserves the selected subject; ordinary local editing still changes the selected area.
+1. Select the subject to keep without inverting. The plugin captures the full canvas and uses the subject selection and source alpha to determine the background range.
+2. Describe the new set, floor and lighting, for example “A lavender studio, soft side light and a simple floor.”
+3. Preview subject preservation, translucent edges and protection before generating. Substantially transparent backgrounds cannot apply but remain exportable; see the [background limits](#background-fix).
 
-Prompt translation:
-
-> Replace only the transparent background with a simple pale lavender photography studio. Use softly lit walls and floor, with a slight contact shadow under the feet. Preserve the character, hair, clothes, pose and framing.
-
-The full background became a lavender studio with a foot shadow. Opaque character pixels retain the source. Partially transparent hair blends with the new background; refine the result mask where needed.
-
-<details>
-<summary>Selection and panel settings</summary>
-
-<table>
-  <tr>
-    <th width="50%" align="center">Editable area</th>
-    <th width="50%" align="center">Panel settings</th>
-  </tr>
-  <tr>
-    <td align="center" valign="top"><a href="../../assets/guide/03-background-selection.png"><img src="../../assets/guide/03-background-selection.png" width="360" alt="Actual selection mask shown in amber"></a></td>
-    <td align="center" valign="top"><a href="../../assets/guide/03-background-panel.png"><img src="../../assets/guide/03-background-panel.png" width="360" alt="Actual Portable panel: Background"></a></td>
-  </tr>
-</table>
-
-<p align="center">
-  <a href="../../assets/guide/03-background-workspace.png"><img src="../../assets/guide/03-background-workspace.png" width="760" alt="Actual Photoshop window"></a>
-  <br><sub>Original Photoshop capture; click to inspect.</sub>
-</p>
-
-</details>
+![0.5.0 Replace background configuration entry before generation, Chinese UI](../../assets/guide/050-mode-background-zh.png)
 
 <a id="costume"></a>
 
-## 04 · Clothing and props
+## 04 · Clothing and props (0.5.0)
 
-<p align="center">
-  <a href="../../assets/guide/04-costume-compare.png"><img src="../../assets/guide/04-costume-compare.png" width="620" alt="Before on the left, deep violet coat tail on the right"></a>
-  <br><sub>Before (left) · Deep violet coat tail (right)</sub>
-</p>
+Open **Portrait → Clothing and props**.
 
-1. Duplicate the original. Lasso the lower pink coat tail on the right, covering the entire area intended for the material change.
-2. Choose Portrait → Repair clothing / props, with the selection destination. Enter the prompt.
-3. Enable the guide and transparency preservation. Disable alignment and color matching. Preview and generate.
-4. Check diamond cutouts, trim, folds and the alpha outline, then apply. The unselected upper area stays pink; select the whole garment to recolor it all.
+1. Select the clothing or prop to change, avoid unchanged faces and hands, and add protection where needed.
+2. Describe the garment part, color, material and details to retain, for example “Make the selected coat tail deep violet while retaining folds and metal ornaments.”
+3. Preview the range, generate and inspect. Exact clothing or complex-prop reconstruction is not guaranteed; export for manual refinement when needed.
 
-Prompt translation:
-
-> Change only the selected right-hand pink coat tail to deep violet velvet. Keep its folds, diamond cutouts, gold trim and outline. Preserve the pose, other clothing and transparent background.
-
-The selected coat tail became deep violet while retaining trim and cutouts. This verifies clothing editing. Props use the same workflow, but complex weapons and mechanical reconstruction were not separately tested here.
-
-<details>
-<summary>Selection and panel settings</summary>
-
-<table>
-  <tr>
-    <th width="50%" align="center">Editable area</th>
-    <th width="50%" align="center">Panel settings</th>
-  </tr>
-  <tr>
-    <td align="center" valign="top"><a href="../../assets/guide/04-costume-selection.png"><img src="../../assets/guide/04-costume-selection.png" width="310" alt="Actual selection mask shown in amber"></a></td>
-    <td align="center" valign="top"><a href="../../assets/guide/04-costume-panel.png"><img src="../../assets/guide/04-costume-panel.png" width="360" alt="Actual Portable panel: Clothing and props"></a></td>
-  </tr>
-</table>
-
-</details>
+![0.5.0 Clothing and props configuration entry before generation, Chinese UI](../../assets/guide/050-mode-costume-zh.png)
 
 <a id="reference"></a>
 
-## 05 · Character reference
+## 05 · Character reference (0.5.0)
 
-<p align="center">
-  <a href="../../assets/guide/05-reference-compare.png"><img src="../../assets/guide/05-reference-compare.png" width="760" alt="Before on the left, white socks from the reference on the right"></a>
-  <br><sub>Before (left) · White socks from the reference (right)</sub>
-</p>
+Open **Portrait → Character reference**.
 
-1. Duplicate the original and select both legs. Use the white-socks edit of the same sample: [download the tested reference](../../assets/guide/reference-white-socks-icc.png).
-2. Choose Portrait → Character reference. Open the reference section, Choose image, import the PNG and set Reference use to clothing. Enter the prompt.
-3. Leave the selection guide off, the default for this mode. Enable transparency preservation; disable alignment and color matching. Preview and generate.
-4. Compare sock tops, color and source pose, then apply. Clear reference afterward; standalone assets and text-to-image also require it cleared.
+1. Prepare a source copy and select the editable area. Expand the reference section and choose one image you have permission to use.
+2. Describe the clothing, accessories or appearance to take from the reference. Reference input does not guarantee identity, texture or detail transfer.
+3. Check the imported preview, range and protection before generating. The capture below shows the entry before reference import; complete native reference-import acceptance remains pending.
 
-Prompt translation:
+References are converted to sRGB8 for the model. Confirm unknown color declarations and embed the correct ICC on a copy. Explicit sRGB PNG and static WebP default sRGB can be recognized; an extension alone never proves an arbitrary image’s color space.
 
-> Use the reference's white over-the-knee socks on both selected legs, with the sock tops above the knees. Keep the source character's leg pose, shoes, clothes and transparent background.
-
-The reference transferred the white-socks feature while preserving pose and shoes. This is clothing-reference assistance, not identity locking, exact replication or multi-view consistency.
-
-**If import reports an untagged image:** PS 27 treated one PNG16 with only an sRGB chunk and no embedded ICC as untagged, so validation blocked it. Confirm its true color space, use Edit → Assign Profile on a copy, save with the correct ICC embedded and import again. Do not arbitrarily assign sRGB to unknown sources or rename extensions to bypass validation. Adding a matching sRGB ICC resolved this test without changing compressed pixel data.
-
-The development branch now recognizes an explicit PNG sRGB chunk and static WebP's default sRGB. A temporary working copy gets the profile before Photoshop converts reference pixels; temporary documents close afterward. Native import acceptance is pending, so this does not change the historical result above. Embedded ICC references continue using Photoshop's loaded profile.
-
-<details>
-<summary>Selection and panel settings</summary>
-
-<table>
-  <tr>
-    <th width="50%" align="center">Reference image</th>
-    <th width="50%" align="center">Panel settings</th>
-  </tr>
-  <tr>
-    <td align="center" valign="top"><a href="../../assets/guide/reference-white-socks-icc.png"><img src="../../assets/guide/reference-white-socks-icc.png" width="360" alt="The tested white-socks reference"></a></td>
-    <td align="center" valign="top"><a href="../../assets/guide/05-reference-panel.png"><img src="../../assets/guide/05-reference-panel.png" width="360" alt="Actual Portable panel: Character reference"></a></td>
-  </tr>
-</table>
-
-</details>
+![0.5.0 Character reference configuration entry before generation, Chinese UI](../../assets/guide/050-mode-reference-zh.png)
 
 <a id="scene"></a>
 
-## 06 · Scene
+## 06 · Replace scene (0.5.0)
 
-<p align="center">
-  <a href="../../assets/guide/06-scene-compare.png"><img src="../../assets/guide/06-scene-compare.png" width="760" alt="Before on the left, wisteria garden scene on the right"></a>
-  <br><sub>Before (left) · Wisteria garden scene (right)</sub>
-</p>
+Open **Portrait → Replace scene**.
 
-1. Duplicate the original and clear unwanted references and protection. Use Photoshop Select Subject or select the person manually; do not invert. The old screenshots show the previous background-selection flow.
-2. Choose Portrait → Replace scene, with the selection destination. Enter the prompt.
-3. The development build disables the guide, transparency preservation, alignment and color matching automatically. Preview and generate. The old screenshot's guide setting no longer applies; see the [background correction](#background-fix).
-4. Apply and inspect the pergola, path perspective, feet and hair edges. The source character's lighting is retained. After applying the new background, select the subject again to try development [Image Blending](#blend), or finish with adjustment layers.
+1. Select the subject to keep without inverting; the entire canvas supplies the environment.
+2. Describe the scene, time, floor and light direction. Subject preservation and protection follow the background mode.
+3. Preview before generating. ComfyUI omits the black-and-white visual guide; application uses the saved actual mask. Do not import a range guide as a scene reference.
 
-Prompt translation:
-
-> Replace only the transparent background with a wisteria garden path on a sunny afternoon: a distant purple flower pergola, soft green plants and a pale stone path with natural perspective. Place both feet firmly on the path with contact shadows. Preserve the character, clothes, pose and framing.
-
-The garden and path fill the background, rather than a small patch around the legs. Opaque character pixels remain unchanged.
-
-<details>
-<summary>Selection and panel settings</summary>
-
-<p align="center">
-  <a href="../../assets/guide/06-scene-panel.png"><img src="../../assets/guide/06-scene-panel.png" width="400" alt="Actual Portable panel: Scene"></a>
-  <br><sub>Click the capture to read the full-resolution panel.</sub>
-</p>
-
-<p align="center">
-  <a href="../../assets/guide/06-scene-workspace.png"><img src="../../assets/guide/06-scene-workspace.png" width="760" alt="Actual Photoshop window"></a>
-  <br><sub>Original Photoshop capture; click to inspect.</sub>
-</p>
-
-</details>
+![0.5.0 Replace scene configuration entry before generation, Chinese UI](../../assets/guide/050-mode-scene-zh.png)
 
 <a id="effect"></a>
 
-The following v0.4.0 example uses text-only generation. In 0.5.0 explicitly choose Text-only independent asset to reproduce it.
+## 07 · Effect asset (0.5.0)
 
-## 07 · Effect
+Open **Portrait → Effect asset**.
 
-<table>
-  <tr>
-    <th width="50%" align="center">Standalone asset</th>
-    <th width="50%" align="center">Composited in Photoshop</th>
-  </tr>
-  <tr>
-    <td align="center" valign="top"><a href="../../assets/guide/effect-preview.png"><img src="../../assets/guide/effect-preview.png" width="320" alt="Generated effect asset"></a></td>
-    <td align="center" valign="top"><a href="../../assets/guide/07-effect-result.png"><img src="../../assets/guide/07-effect-result.png" width="320" alt="Photoshop composite on the sample"></a></td>
-  </tr>
-</table>
+1. Image-and-selection input is the default. Select the intended asset location on a source copy, add protection and preview the source/effective grayscale range.
+2. Describe the shape, direction and colors, for example “A curved blue light trail beside the hand.” Explicitly choose Text-only independent asset for text-only input.
+3. Inspect alpha, source residue and range boundaries in the raw output. Only suitable transparent assets can apply; fully opaque output remains inspectable/exportable. Real Qwen image-context asset samples failed visual acceptance; see the [asset limits](#context-assets).
 
-1. Choose Portrait → Effect asset, set New document and clear the reference. A standalone asset needs no character selection.
-2. Enter the prompt and generate. Check the open curve, absence of characters and real transparency. Open as new document; this test created a 992×992 sRGB / 16-bit asset.
-3. Use Layer → Duplicate Layer to copy the generated layer into a fresh sample copy. Ctrl+T: scale proportionally to 900×900 px, top-left X=50, Y=555 px.
-4. Use Normal blending at about 85% opacity. Use a layer mask for front / back occlusion; add glow or other blending only as needed.
-
-Prompt translation:
-
-> A single violet ribbon of magical smoke, an open S curve flowing from lower left to upper right, tapering and fading at both ends. No closed loop or ring. Isolated transparent background, natural translucent edges, no people or text.
-
-The first prompt asked for smoke around the legs with an empty center and produced a closed ring, which was rejected. The explicit open-curve prompt produced the accepted asset, then actually composited in Photoshop. It resembles a translucent violet ribbon, with small curve gaps and faint alpha residue; it still needs finishing.
-
-<details>
-<summary>View the Photoshop workspace</summary>
-
-<p align="center">
-  <a href="../../assets/guide/07-effect-asset-workspace.png"><img src="../../assets/guide/07-effect-asset-workspace.png" width="760" alt="Actual Photoshop window"></a>
-  <br><sub>Original Photoshop capture; click to inspect.</sub>
-</p>
-
-</details>
+![0.5.0 Effect asset configuration entry before generation, Chinese UI](../../assets/guide/050-mode-effect-zh.png)
 
 <a id="atmosphere"></a>
 
-The following v0.4.0 example uses text-only generation. In 0.5.0 explicitly choose Text-only independent asset to reproduce it.
+## 08 · Atmosphere asset (0.5.0)
 
-## 08 · Atmosphere
+Open **Portrait → Atmosphere asset**.
 
-<table>
-  <tr>
-    <th width="50%" align="center">Standalone asset</th>
-    <th width="50%" align="center">Composited in Photoshop</th>
-  </tr>
-  <tr>
-    <td align="center" valign="top"><a href="../../assets/guide/atmosphere-preview.png"><img src="../../assets/guide/atmosphere-preview.png" width="320" alt="Generated atmosphere asset"></a></td>
-    <td align="center" valign="top"><a href="../../assets/guide/08-atmosphere-result.png"><img src="../../assets/guide/08-atmosphere-result.png" width="320" alt="Photoshop composite on the sample"></a></td>
-  </tr>
-</table>
+1. Choose Image and selection or Text-only independent asset for the task. Choosing New document as a destination does not change the input type.
+2. For image input, select the placement range, inspect the effective grayscale range/protection and describe smoke, particles or haze.
+3. Inspect transparency and retained people, environments or guide boundaries. Keep raw output for inspection; transparent pixels alone do not establish a useful asset.
 
-1. Choose Portrait → Atmosphere asset, set New document and clear the reference.
-2. Enter the prompt and generate. Check for an empty upper area, bottom mist, no character and no text. Open the 992×992 sRGB / 16-bit asset as a new document.
-3. Duplicate its generated layer into a fresh sample copy. Transform proportionally to 900×900 px, top-left X=50, Y=555 px.
-4. Use Normal blending at about 35% opacity. Check mist density and the face; reduce opacity or mask unwanted coverage.
-
-Prompt translation:
-
-> Soft pale lavender mist with a few floating light specks, concentrated at the bottom and fading upward, leaving the top empty. Transparent background, no people, no text, no solid backdrop.
-
-The mist stays low and leaves the face clear. It has real alpha, but apparently empty areas retain very low-opacity pixels. Check on a dark background and clean the mask when needed; asking for transparency does not guarantee clean alpha.
-
-<details>
-<summary>Selection and panel settings</summary>
-
-<p align="center">
-  <a href="../../assets/guide/08-atmosphere-panel.png"><img src="../../assets/guide/08-atmosphere-panel.png" width="400" alt="Actual Portable panel: Atmosphere"></a>
-  <br><sub>Click the capture to read the full-resolution panel.</sub>
-</p>
-
-</details>
+![0.5.0 Atmosphere asset configuration entry before generation, Chinese UI](../../assets/guide/050-mode-atmosphere-zh.png)
 
 <a id="generate"></a>
 
-## 09 · Text to image
+## 09 · Text to image (0.5.0)
 
-<p align="center">
-  <a href="../../assets/guide/generate-preview.png"><img src="../../assets/guide/generate-preview.png" width="560" alt="Text-to-image result"></a>
-  <br><sub>A new illustration generated from text; the source image is not used as input.</sub>
-</p>
+Open **Generate → Text to image**.
 
-1. Choose Generate → Text to image, set New document and clear the reference.
-2. Describe the appearance of 3F3F3F.webp using the prompt below. The source image is not sent as model input; no selection is needed.
-3. Use one candidate, resolution 992, 25 steps and locked seed 42. Check full-body framing, both feet, outfit and background.
-4. Open as new document to continue in a separate 992×992 sRGB / 16-bit document.
+1. Describe subject, environment, composition and style. A source editing selection is not required.
+2. Optionally choose one reference and its role, then set candidate count, resolution and output depth. Use 8-bit (compatible) without the optional PNG16 save node.
+3. Explicitly generate candidates, inspect Results, then export PNG or view in a new document. Generation does not automatically write into the current source.
 
-Prompt translation:
-
-> Full-body anime illustration of an adult woman with long pink curls, a white pleated blouse, a pink and navy long coat, a black skirt with gold trim, red gloves and black lace-up heels. One hand raised beside the face, the other extended naturally. Soft detailed anime rendering, one centered character, both feet fully visible, clean pale lavender background, no text.
-
-The result includes pink hair, a white blouse, a pink / navy coat and complete feet. It is a new illustration, without guaranteed identity, pose or accessory matching. Use a selection edit to change clothing on the original.
-
-<details>
-<summary>Selection and panel settings</summary>
-
-<p align="center">
-  <a href="../../assets/guide/09-generate-panel.png"><img src="../../assets/guide/09-generate-panel.png" width="400" alt="Actual Portable panel: Text to image"></a>
-  <br><sub>Click the capture to read the full-resolution panel.</sub>
-</p>
-
-<p align="center">
-  <a href="../../assets/guide/09-generate-workspace.png"><img src="../../assets/guide/09-generate-workspace.png" width="760" alt="Actual Photoshop window"></a>
-  <br><sub>Original Photoshop capture; click to inspect.</sub>
-</p>
-
-</details>
+![0.5.0 Text to image configuration entry before generation, Chinese UI](../../assets/guide/050-mode-generate-zh.png)
 
 <a id="relight"></a>
 
-## 10 · Relighting (development build)
+## 10 · Relighting (0.5.0)
 
 Intensity, temperature, range, depth, softness, cone angle, direction, elevation, ambient and shadow parameters have horizontal sliders with precise numeric inputs. One continuous drag is one workbench undo; Esc cancels the current gesture. Keyboard and numeric edits stay synchronized, and light type/color mode controls parameter visibility. Dragging updates only the local illustration, without capture, submission or per-event draft writes.
 
-This iteration’s PS27 RGB8/16 synthetic API checks passed actual field extraction, native Shadow/Light groups, grayscale masks and protection, source preservation, one undo and failure rollback. Native-versus-preview maxima were 1/255 and 3/65535. The original failed task was read offline by its existing UUID; failures distinguish structural mismatch from unsupported boundaries and retain raw-reference export. These checks do not establish real-photo detail fidelity, every lighting channel or the complete installed-panel workflow. Final lighting visual acceptance belongs to the user.
+Previously recorded PS27 RGB8/16 synthetic API checks passed actual field extraction, native Shadow/Light groups, grayscale masks and protection, source preservation, one undo and failure rollback. Native-versus-preview maxima were 1/255 and 3/65535. The original failed task was read offline by its existing UUID; failures distinguish structural mismatch from unsupported boundaries and retain raw-reference export. These checks do not establish real-photo detail fidelity, every lighting channel or the complete installed-panel workflow. Final lighting visual acceptance belongs to the user.
 
-Installed 0.5.0 b3548bd4 passed a limited PS27 flow with a public PNG8 and controlled local-response backend: one generation made one POST/two uploads; lighting-group application and one Photoshop Undo succeeded; reading the same UUID from History and applying again added no POST. Exclusion/reread retained lights and old candidates, and a failed reference remained inspection-only with Apply blocked. An intensity drag from 1 to 3.2 returned to 1 with one workbench Undo and no POST during editing; the output picker contained only Lighting layers and Full redraw. This backend performed no upstream inference. These are actual installed interaction checks, not model quality, all controls or final-revision installation acceptance.
+Installed 0.5.0 b3548bd4 passed a limited PS27 flow with a public PNG8 and controlled local-response backend: one generation made one POST/two uploads; lighting-group application and one Photoshop Undo succeeded; reading the same UUID from History and applying again added no POST. The then-current exclusion/reread control retained lights and old candidates; that control is retired. The current **Re-read current document** action includes the visible result and needs no separate binding action. In the historical check, a failed reference remained inspection-only with Apply blocked. An intensity drag from 1 to 3.2 returned to 1 with one workbench Undo and no POST during editing; the output picker contained only Lighting layers and Full-image redraw. This backend performed no upstream inference. These are actual installed interaction checks, not model quality, all controls or final-revision installation acceptance.
 
-Relighting uses a separate large lighting workbench. Original, local illustration and AI result are distinct views. **The illustration expresses lighting intent; inspect the prepared result before applying it.** Lighting layers derive fields from the model reference; Full redraw uses the model image itself. Models receive semantic lighting instructions, without a guarantee of precise multi-light control, physical shadows or material simulation.
+Relighting uses a separate large lighting workbench. Original, local illustration and AI result are distinct views. **The illustration expresses lighting intent; inspect the prepared result before applying it.** Lighting layers derive fields from the model reference; Full-image redraw uses the model image itself. Models receive semantic lighting instructions, without a guarantee of precise multi-light control, physical shadows or material simulation.
 
 1. Work in a saved copy and set protection for details that must remain unchanged. Choose **Portrait → Relighting → Lighting scope**: **Current selection** is the default and requires an edit selection; **Entire image** explicitly edits the full canvas minus protection without changing Photoshop's selection. Include the receiving ground in the selected scope if its shadows should change. Capture reads the visible composite; surrounding context alone never expands the editable mask.
 2. Open the workbench and check the actual source name/document ID, scope, profile and original image. A tagged sRGB working copy is labeled with its original document ID. Missing selections are reported before original-file authorization. The main panel's Generate entry also opens this editor; editing lights makes no AI request.
 3. Add, select or drag lights. Select a light in the list, then use the sidebar to rename, duplicate, disable, delete or lock it; use Find to locate off-image lights. The limit is eight. Hiding markers does not disable lights. Zoom, pan and fit affect only the view. Workbench undo/redo treats one drag as one action and preserves text-editing shortcuts inside inputs.
 4. Choose point, spot or directional, independently of key/fill/rim/custom role. Intensity and Z are relative intentions. Choose either temperature or custom color. Expand advanced light controls for softness and the applicable depth, spot target/cone or directional bearing. Global lighting contains ambient, existing-light handling, shadows and content-preservation intent.
-5. Inspect approximate range and color in **Lighting illustration**, then add an optional description. New sessions default to **Lighting layers**; choose **Full redraw** explicitly if needed, then reread the source when prompted. Resolve obvious conflicts or acknowledge them explicitly before submission. Only the workbench's Generate button freezes the scene and submits one model request. The primary image is the clean bounded source, without markers, handles or local light patches.
+5. Inspect approximate range and color in **Lighting illustration**, then add an optional description. New sessions default to **Lighting layers**; choose **Full-image redraw** explicitly if needed, then reread the source when prompted. Resolve obvious conflicts or acknowledge them explicitly before submission. Only the workbench's **Generate AI result** button freezes the scene and submits one model request. The primary image is the clean bounded source, without markers, handles or local light patches.
 6. Editing can continue during generation. A result from an earlier configuration is marked stale. Cancellation follows the backend's capabilities; a platform request already in progress may still finish and be billed. Changed sources require rereading, not silent rebinding.
-7. Inspect the prepared result for identity, text/logos, fabric texture, edges, highlights and shadows. Lighting layers apply as a group containing a native source base and the supported Shadow, Cast Shadow, Color Atmosphere, Light and Rim Light channels; unobserved channels are omitted. Channels have editable masks, and the group carries the actual selection-minus-protection mask. Full redraw and old complete-result tasks use a NORMAL image layer with an editable mask. Original layers stay intact; adjust group/layer opacity or undo once. Reapplying a candidate from the same capture replaces only the plugin's own output.
+7. Inspect the prepared result for identity, text/logos, fabric texture, edges, highlights and shadows. Lighting layers apply as a group containing a native source base and the supported Shadow, Cast Shadow, Color Atmosphere, Light and Rim Light channels; unobserved channels are omitted. Channels have editable masks, and the group carries the actual selection-minus-protection mask. Full-image redraw and old complete-result tasks use a NORMAL image layer with an editable mask. Original layers stay intact; adjust group/layer opacity or undo once. Reapplying a candidate from the same capture replaces only the plugin's own output.
 
-The workbench briefly closes for recapture or document writes, then returns; PS27 does not support the required writes inside its open dialog. Network waits hold no document modification lock. Configurations are saved locally. Opening from the main panel while idle reads the current canvas; Reread original updates it again. If this panel entry cannot capture the source, the workbench stays closed and shows the specific error. Create a missing selection, or explicitly choose Entire image, before opening again. Lights and candidates remain retained. A failed reread from an already open workbench can still show the old content, marked stale and unavailable for a current-source submission. Internal dialog reopening after generation or application retains that task's frozen context without an extra capture. A successful fresh read clears old read errors for that source. Closing the workbench stops source observation and preview work, not an already submitted task.
+The workbench briefly closes for recapture or document writes, then returns; PS27 does not support the required writes inside its open dialog. Network waits hold no document modification lock. Configurations are saved locally. Opening from the main panel while idle reads the current canvas; Re-read current document updates it again. If this panel entry cannot capture the source, the workbench stays closed and shows the specific error. Create a missing selection, or explicitly choose Entire image, before opening again. Lights and candidates remain retained. A failed reread from an already open workbench can still show the old content, marked stale and unavailable for a current-source submission. Internal dialog reopening after generation or application retains that task's frozen context without an extra capture. A successful fresh read clears old read errors for that source. Closing the workbench stops source observation and preview work, not an already submitted task.
 
-Structured relighting disables subject alignment and context color matching so they do not cancel intentional lighting changes; ordinary preferences return when leaving. Lighting layers require opaque editable pixels and tagged sRGB RGB8/16; native application rechecks opacity and rolls back unsupported pixels. Explicit Full redraw keeps the existing safe transparency strategy: unsafe multilayer translucent sources need a merged copy or manual composition after export. Native 16-bit source data is retained separately, but model input remains sRGB8. Platforms output sRGB8; ComfyUI optionally saves SDR16, which is not native 16-bit model precision or a lossless round trip.
+Structured relighting disables subject alignment and context color matching so they do not cancel intentional lighting changes; ordinary preferences return when leaving. Lighting layers require opaque editable pixels and tagged sRGB RGB8/16; native application rechecks opacity and rolls back unsupported pixels. Explicit Full-image redraw keeps the existing safe transparency strategy: unsafe multilayer translucent sources need a merged copy or manual composition after export. Native 16-bit source data is retained separately, but model input remains sRGB8. Platforms output sRGB8; ComfyUI optionally saves SDR16, which is not native 16-bit model precision or a lossless round trip.
 
 To change scope, close the workbench, choose the new Lighting scope in the main panel and reopen. The workbench reads the active document and chosen scope while retaining edited lights, without a second binding action. Generation remains blocked until capture succeeds; failure keeps the old source/edits with an explicit stale reason. Draft/history reuse uses the current explicitly chosen source and scope without resubmitting historical jobs. The earlier limited installed flow above does not establish this current-canvas change; its regression, native and installed evidence is recorded separately.
 
-The workbench offers exactly Full redraw and Lighting layers. The former compensation experiment and its diagnostics have been removed. Lighting fields remain estimates rather than independent physical channels. Failed extraction retains the reference for inspection/export and never switches silently to Full redraw or creates an empty group.
+The workbench offers exactly Full-image redraw and Lighting layers. The former compensation experiment and its diagnostics have been removed. Lighting fields remain estimates rather than independent physical channels. Failed extraction retains the reference for inspection/export and never switches silently to Full-image redraw or creates an empty group.
 
-The existing nine-mode screenshots do not validate this workbench. Earlier source modules passed light interaction, resizing and 4K eight-light preview checks in a PS27 script; those timings describe the prior preview implementation. On 2026-10-19 local time, separate synthetic PS27 API checks verified source preservation, hiding the group and one undo for 1024×300 sRGB8/16, plus 9000×5000 RGB8 analysis capture, strip writing and one undo. A follow-up with a feathered mask kept protected pixels unchanged; native versus local-preview maximum differences were 2/255 and 3/65535. These checks did not test real-photo lighting quality, new inference, 45MP RGB16 or the installed panel. Portrait, product-text, fabric, source-sync interactions and the full host workflow still need acceptance. See the [development contract](../development/BACKEND.en.md#relighting-workbench) for implementation and measurement conditions.
+Current configuration captures do not replace complete workbench acceptance. Earlier source modules passed light interaction, resizing and 4K eight-light preview checks in a PS27 script; those timings describe the prior preview implementation. On 2026-10-19 local time, separate synthetic PS27 API checks verified source preservation, hiding the group and one undo for 1024×300 sRGB8/16, plus 9000×5000 RGB8 analysis capture, strip writing and one undo. A follow-up with a feathered mask kept protected pixels unchanged; native versus local-preview maximum differences were 2/255 and 3/65535. These checks did not test real-photo lighting quality, new inference, 45MP RGB16 or the installed panel. Portrait, product-text, fabric, source-sync interactions and the full host workflow still need acceptance. See the [development contract](../development/BACKEND.en.md#relighting-workbench) for implementation and measurement conditions.
 
 <a id="blend"></a>
 
-## 11 · Image Blending (development)
+## 11 · Image Blending (0.5.0)
+
+![0.5.0 Image Blending configuration entry before generation, Chinese UI](../../assets/guide/050-mode-blend-zh.png)
 
 Image Blending adapts a subject already placed in a scene to its surroundings. It reads the whole visible composition and uses lighting, color temperature, contrast, texture and depth of field outside the subject as context. Only the selected subject and its edges are edited, minus manual protection.
 
@@ -521,14 +328,14 @@ A separate installed 0.5.0 d2966347 Portable check in Photoshop 27 used a small 
 ## Candidates, progress and undo
 
 - **Progress:** loading and text encoding show stages; sampling shows actual steps and percentages, followed by a saved-candidate message. Encoding can take time; avoid repeated submissions.
-- **Candidates:** 1–4 run sequentially, incrementing a locked seed. Switch thumbnails or use the list. A screenshot's Candidate 4 can include earlier panel results; each test here submitted one image.
+- **Candidates:** 1–4 run sequentially, incrementing a locked seed. Switch thumbnails or use the list. Candidate numbers locate saved results; they do not indicate generation acceptance during this configuration capture round.
 - **Apply:** the first application creates a masked layer. Another candidate from the same capture replaces it. Changes to source dimensions, content or session block stale application.
 - **Undo:** Ctrl+Z undoes one application. Opacity has separate undo records; the panel slider does not track native undo.
-- **Export:** Save PNG exports the processed candidate at context dimensions. Ordinary edits may use a crop; development blending and background modes use the full canvas as context. Open as new document uses an independent sRGB document. Preview is 8-bit; export keeps the chosen depth.
+- **Export:** Save PNG exports the processed candidate at context dimensions. Ordinary edits may use a crop; blending and background modes use the full canvas as context. Open as new document uses an independent sRGB document. Preview is 8-bit; export keeps the chosen depth.
 - **History:** click a record on the left to view its details and local preview on the right. Load candidate opens it in Results; Reuse parameters restores its text and settings. Prepare references, protection and selection again. After a restart, old results can be exported or opened separately, but cannot directly apply to a reopened source.
 - **Cancel / reconnect:** during generation or recovery, cancel targets the active task and stops later candidates, keeping completed results. When idle, cancel and Recover task target the selected History record. Recovery queries its original ID without resubmitting; switch Settings to the saved backend type and address when instructed.
 
-The development build keeps an unresolved-task count and **Handle pending tasks** shortcut visible across navigation and connection messages. Startup and a blocked generation select the actual unresolved record, even when a newer candidate is ready. History shows the complete copyable UUID, state, saved backend, date, source document ID and source name when saved. Use **Next unresolved task** to inspect multiple records. Selection is locked during a task action. Fifteen consecutive unknown replies or failed status queries end the local wait with `unknown` and retain the ID; a valid queued/running reply resets that count. This does not establish a remote failure or cancellation. Retry **Recover task** using the original ID.
+The current build keeps an unresolved-task count and **Handle pending tasks** shortcut visible across navigation and connection messages. Startup and a blocked generation select the actual unresolved record, even when a newer candidate is ready. History shows the complete copyable UUID, state, saved backend, date, source document ID and source name when saved. Use **Next unresolved task** to inspect multiple records. Selection is locked during a task action. Fifteen consecutive unknown replies or failed status queries end the local wait with `unknown` and retain the ID; a valid queued/running reply resets that count. This does not establish a remote failure or cancellation. Retry **Recover task** using the original ID.
 
 History has a **list on the left and details with a preview on the right**. Each record shows its date, task type, literal prompt summary and state; details include the full prompt, UUID, source and saved backend. Removal identifies its built-in instruction, and old records with missing parameters or prompts say so. The two panes scroll separately and stack in a narrow panel. Preview reads and validates local files without changing Results or contacting a backend; missing candidates or damaged files show an explanation.
 
@@ -544,15 +351,17 @@ The lighting workbench offers **Handle pending tasks** to close the dialog and o
 
 ## Parameters and color
 
+![0.5.0 advanced parameter controls, Chinese UI configuration example](../../assets/guide/050-advanced-zh.png)
+
 | Control | Use |
 | --- | --- |
 | Resolution | 768, 992 or 1024; edits retain aspect ratio and align to workflow dimensions. |
 | Steps | Default 25, range 1–100; higher is not necessarily better. |
-| Context margin | Default 15%; surrounding context is not made editable. Development blending, background and scene modes always read the full canvas. |
-| Selection guide | Visual guidance. The final Photoshop mask enforces protection. Off by default for reference assistance; disabled for ComfyUI background / scene modes in development. |
-| Preserve transparency | Useful for clothing / materials; disabled for background / scene modes in development. Turn off for removal or silhouette expansion too. |
-| Subject alignment | Uses alpha bounds to adjust size and position; can change proportions. Automatically disabled for background / scene / blending modes in development. |
-| Color matching | Limited overall correction. Off in these tests. Automatically disabled for background / scene / blending modes in development; ordinary preferences return on exit. Old background candidates retain their saved setting. |
+| Context margin | Default 15%; surrounding context is not made editable. In 0.5.0, blending, background and scene modes always read the full canvas. |
+| Selection guide | Visual guidance. The final Photoshop mask enforces protection. Off by default for reference assistance; disabled for ComfyUI background / scene / blending modes. |
+| Preserve transparency | Useful for clothing / materials; disabled for background / scene modes in 0.5.0. Turn off for removal or silhouette expansion too. |
+| Subject alignment | Uses alpha bounds to adjust size and position; can change proportions. Automatically disabled for background / scene / blending modes in 0.5.0. |
+| Color matching | Limited overall correction; inspect actual output to decide whether to enable it. Automatically disabled for background / scene / blending modes in 0.5.0; ordinary preferences return on exit. Old background candidates retain their saved setting. |
 
 16-bit output can be exported as PNG16, opened as RGB16 or applied to a 16-bit document. Applying to an 8-bit source quantizes to 8-bit without changing its depth. Model inputs, references and masks remain 8-bit. Higher-depth output reduces later quantization; it does not imply full 16-bit model precision, HDR or native wide-gamut generation. Finish color and lighting in Photoshop as needed.
 
@@ -562,9 +371,9 @@ The lighting workbench offers **Handle pending tasks** to close the dialog and o
 | --- | --- |
 | No selection / fully protected edit | Select again, inspect the range preview and clear unwanted protection. Relighting also offers an explicit Entire image scope; after a scope change, re-read the source. |
 | Reference fails color checks | Confirm and embed the correct ICC on a copy; see Character reference. |
-| Background becomes black or transparent | Generate again using either background mode in the development build; see the [background correction](#background-fix). Select the subject to keep and describe scenery, lighting and the floor if needed. Loading an old candidate does not regenerate it. Do not import a black-and-white mask as a scene reference. |
+| Background becomes black or transparent | Generate again using either background mode in the current build; see the [background correction](#background-fix). Select the subject to keep and describe scenery, lighting and the floor if needed. Loading an old candidate does not regenerate it. Do not import a black-and-white mask as a scene reference. |
 | White background | Preserve the outline for materials, disable for backgrounds. Inspect source fringe and alpha; standalone assets may need cleanup. |
-| Result too small or unfilled | Check selection, context and aspect ratio; try alignment off. In development background modes, select the subject and preview the full-canvas range. Do not bypass size checks by changing workflow dimensions. |
+| Result too small or unfilled | Check selection, context and aspect ratio; try alignment off. In current background modes, select the subject and preview the full-canvas range. Do not bypass size checks by changing workflow dimensions. |
 | Source changed; application blocked | Capture and generate again, or export the old result for manual composition. |
 | Unsafe semi-transparent multilayer source | Save a copy and merge visible layers before generating, or export and composite manually. |
 | Backend, model or depth error | Check service, mappings and optional node. Open technical details, correct and retry. |
@@ -572,7 +381,7 @@ The lighting workbench offers **Handle pending tasks** to close the dialog and o
 
 Host diagnostics check selection, protection, masks, undo and rollback in their own documents. Save report exports the result. Runtime logs record plugin stages, not Photoshop crash dumps.
 
-The 2026-10-17 session used Windows Photoshop 27.0, GPU enabled and this sample: all nine modes generated actual outputs; six edits applied to copies; effects, atmosphere and text-to-image opened as 16-bit documents, with the first two additionally composited onto the sample. Source layers in all eight edit / composition copies remain channel-for-channel identical. Visible pixels and alpha outside all six edit masks are unchanged, as is full-canvas alpha in the three preserve-transparency examples. Invisible RGB beneath fully transparent pixels is excluded from appearance comparisons; source layers themselves were checked channel by channel.
+A historical check on 2026-10-17 used Windows Photoshop 27.0, GPU enabled and this sample: all nine modes generated actual outputs; six edits applied to copies; effects, atmosphere and text-to-image opened as 16-bit documents, with the first two additionally composited onto the sample. Source layers in all eight edit / composition copies remain channel-for-channel identical. Visible pixels and alpha outside all six edit masks are unchanged, as is full-canvas alpha in the three preserve-transparency examples. Invisible RGB beneath fully transparent pixels is excluded from appearance comparisons; source layers themselves were checked channel by channel.
 
 Acceptance is limited to these examples. Clothing tested a coat tail; reference tested socks transfer. Complex prop reconstruction, identity consistency, other models, calibrated-display accuracy and long-term stability remain unverified. Photoshop did not exit during this session; that is not a permanent stability guarantee. Reference, effect and atmosphere modes remain experimental. Routine skin retouching is outside scope.
 

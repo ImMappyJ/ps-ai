@@ -2,11 +2,11 @@
 <h1 align="center">Connect Alibaba Cloud Model Studio (Bailian)</h1>
 <p align="center"><a href="BAILIAN.md">简体中文</a> · <strong>English</strong></p>
 
-The development branch includes a Bailian gateway. **Live platform and Photoshop acceptance have not been completed with an API key.** Existing v0.4.0 release assets do not contain this work. This guide covers development testing and future release acceptance; existing ComfyUI installations can continue unchanged.
+Version **0.5.0** includes a Bailian gateway. **Live platform and Photoshop acceptance have not been completed with an API key.** Use matching 0.5.0 packages or build the corresponding source as described in the [README](../README.en.md#install-a-release-package); historical v0.4.0 packages lack this feature. Existing ComfyUI installations can continue unchanged.
 
 ## Connect from the panel
 
-For the development build, follow [platform setup](../setup/PLATFORMS.en.md). On Windows, install Node.js 24+, select **BaiLian** in **Backend and models**, enter its API key and choose **Save key**. Allow Photoshop to open the bundled local launcher. Scan models, choose one, save and connect. The managed address is `http://127.0.0.1:8191`.
+For 0.5.0, follow [platform setup](../setup/PLATFORMS.en.md). On Windows, install Node.js 24+, select **BaiLian** in **Settings → Backend and models**, enter its API key and choose **Save key**. Allow Photoshop to open the bundled local launcher. Scan models, choose one, save and connect. The managed address is `http://127.0.0.1:8191`.
 
 Keys are encrypted in UXP secureStorage and used only in local relay memory. Exports, history and logs exclude them. Connection checks do not call generation or verify account access. Images, references and prompts go to the platform only when generating, and remain in private local data. The relay can be stopped from the panel; pending jobs retain their original identity.
 
@@ -60,7 +60,7 @@ The default directory is the current account's `~/.ps-ai/bailian`. Override it t
 | 429 | Check platform quota/rate limits; query existing task IDs first |
 | Untagged sRGB output | Establish the PNG's real color encoding first. Only then opt into `PSAI_BAILIAN_ASSUME_SRGB=1` and restart; it does not convert unknown ICC profiles |
 | Wrong canvas or missing transparency | Inspect raw output, mode and model. Do not force a stretched image or fabricate alpha |
-| `unknown` without a platform ID | Reconcile manually with platform records; automatic reconciliation and platform-ID attachment remain unimplemented. Development History offers explicit two-step local stop tracking, retaining the original ID and unknown state; it does not cancel work or stop billing, and a new task may duplicate work. See the [user guide](../usage/USER_GUIDE.en.md). Do not delete metadata |
+| `unknown` without a platform ID | Reconcile manually with platform records; automatic reconciliation and platform-ID attachment remain unimplemented. Current 0.5.0 History offers explicit two-step local stop tracking, retaining the original ID and unknown state; it does not cancel work or stop billing, and a new task may duplicate work. See the [user guide](../usage/USER_GUIDE.en.md). Do not delete metadata |
 | Locked data directory | Stop the old instance. After abnormal termination, confirm the PID in `gateway.lock` has exited before removing a stale lock |
 
 The server listens locally and is not an authenticated public service. For migration, stop it normally and back up the whole directory. It contains private images/prompts and must not be uploaded to Git or Issues. Server rewriting, persistence ordering and fields are documented in `BACKEND.en.md` and `AGENTS.md` in a source clone.

@@ -2,11 +2,11 @@
 <h1 align="center">OpenAI Images setup</h1>
 <p align="center"><a href="OPENAI.md">简体中文</a> · <strong>English</strong></p>
 
-The development branch includes an OpenAI Images adapter. **Live output and Photoshop application have not been validated with a real API key.** Published v0.4.0 packages do not contain it. Existing ComfyUI, Bailian and Gemini paths remain available.
+Version **0.5.0** includes an OpenAI Images adapter. **Real API-key output and Photoshop application have not been validated.** Adapter and offline test coverage do not establish account access or output quality. Use a matching 0.5.0 package or source build as described in the [README](../README.en.md#install-a-release-package); historical v0.4.0 packages do not contain this adapter.
 
 ## Connect from the panel
 
-For the development build, follow [platform setup](../setup/PLATFORMS.en.md). On Windows, install Node.js 24+, select **GPT Image** in **Backend and models**, enter its API key and choose **Save key**. Allow Photoshop to open the bundled local launcher. Scan models, choose one, save and connect. The managed address is `http://127.0.0.1:8193`.
+Follow [platform setup](../setup/PLATFORMS.en.md). On Windows, install Node.js 24+, open **Settings → Backend and models**, select **GPT Image**, enter its API key and choose **Save key**. Allow Photoshop to open the bundled local launcher. Scan models, choose one, save and connect. The managed address is `http://127.0.0.1:8193`.
 
 Keys are encrypted in UXP secureStorage and used only in local relay memory. Exports, history and logs exclude them. Connection checks do not call generation or verify account access. Images, references and prompts go to the platform only when generating, and remain in private local data. The relay can be stopped from the panel; pending jobs retain their original identity.
 
@@ -33,9 +33,9 @@ After a build, the last command can be `node .\dist\gateway\ps-ai-gateway.mjs --
 
 Models and parameters follow the [official Images guide](https://developers.openai.com/api/docs/guides/image-generation). The list declares adapter scope, not account access or accepted live quality.
 
-Text-to-image and assets use [generations](https://developers.openai.com/api/reference/resources/images/methods/generate); edits use [edits](https://developers.openai.com/api/reference/resources/images/methods/edit). Requests use JSON image references and receive one Base64 PNG, with fixed `quality: medium` and `n: 1`. Effects/atmosphere explicitly request transparency; fully opaque assets fail validation. Other modes request opaque output; the plugin handles **Preserve source transparency** during final composition.
+Text-to-image and text-only assets use [generations](https://developers.openai.com/api/reference/resources/images/methods/generate); edits and assets using the current image and selection use [edits](https://developers.openai.com/api/reference/resources/images/methods/edit). Requests use JSON image references and receive one Base64 PNG, with fixed `quality: medium` and `n: 1`. Effects/atmosphere explicitly request transparency; fully opaque assets fail validation. Other modes request opaque output; the plugin handles **Preserve source transparency** during final composition.
 
-The source is the first image and the reference follows it. The guide becomes a separate API mask: white grayscale becomes editable transparent alpha, black becomes protected opaque alpha, and feathered values are retained. Padding stays protected. The guide does not take a reference image slot. Model guidance can drift; Photoshop selections and protection enforce the final edit boundary.
+The source is the first image and an optional reference follows it. The guide becomes a separate API mask: white grayscale becomes editable transparent alpha, black becomes protected opaque alpha, with feathering retained and padding protected. It does not occupy a reference-image slot. Image-context assets use the source for placement, scale, perspective, color and lighting, with the mask marking where to place the independent transparent asset; imported references are not used. See [asset input and acceptance limits](../usage/USER_GUIDE.en.md#context-assets). The adapter path is implemented but live output is unverified. Photoshop selections and protection enforce the final application boundary.
 
 Protocol requests are limited to 2048² pixels. For 2.5, requested ratios range from 1:3 to 3:1 and the planned canvas contains at least 655,360 pixels. Version 1.5 accepts narrower requested crops with fewer effective model pixels. Source and mask share padding; output crops the same coordinates, then resizes to requested dimensions. Different aspect ratios are not blindly stretched. Geometry handling does not guarantee that the model keeps the subject in place.
 
@@ -57,7 +57,7 @@ Images returns the image directly; this adapter has no remote task ID for retrie
 | Narrow crop or prepared PNG over 10 MiB | Adjust the selection/context or resolution; over-budget inputs are not submitted |
 | Locked data directory | Stop the old instance; remove a stale lock only after confirming its recorded PID has exited |
 
-Each original or prepared input PNG is capped at 10 MiB; OpenAI response JSON at 32 MiB. Server reconciliation and platform-ID attachment remain unimplemented. Development History permits explicit two-step local stop tracking only for `unknown`, retaining the original ID and all data; this does not cancel work or stop billing, and a new generation may duplicate work. See the [user guide](../usage/USER_GUIDE.en.md). Do not delete uncertain job records. Saved raw output can recover transient disk-write failures by UUID. Back up the whole private data directory when migrating; keep it out of Issues.
+Each original or prepared input PNG is capped at 10 MiB; OpenAI response JSON at 32 MiB. Server reconciliation and platform-ID attachment remain unimplemented. History permits explicit two-step local stop tracking only for `unknown`, retaining the original ID and all data; this does not cancel work or stop billing, and a new generation may duplicate work. See the [user guide](../usage/USER_GUIDE.en.md). Do not delete uncertain job records. Saved raw output can recover transient disk-write failures by UUID. Back up the whole private data directory when migrating; keep it out of Issues.
 
 ## Live acceptance
 

@@ -4,17 +4,17 @@
 <h1 align="center">ComfyUI setup and model compatibility</h1>
 <p align="center"><a href="COMFYUI.md">简体中文</a> · <strong>English</strong> · <a href="../README.en.md">README</a></p>
 
-The plugin includes neither the backend nor weights. Reuse an existing ComfyUI if it meets the contract below. 8-bit uses `qwen21-local-v2-rgba`; 16-bit uses `qwen21-local-v3-rgba16`. Older screenshots show 0.3.0; setup for 0.4.0 is described below.
+The plugin includes neither the backend nor weights. Reuse an existing ComfyUI if it meets the contract below. 8-bit uses `qwen21-local-v2-rgba`; 16-bit uses `qwen21-local-v3-rgba16`. This guide describes 0.5.0. The current Settings captures below show an isolated controlled demonstration, not real model inference or a complete acceptance result.
 
-This page covers the local ComfyUI path. Development gateways for [Bailian](../providers/BAILIAN.en.md), [Gemini / Nano Banana](../providers/GEMINI.en.md) and [OpenAI Images](../providers/OPENAI.en.md) use platform models instead. The repository’s `docs/development/BACKEND.en.md` defines server rewrites; ComfyUI graphs and platform APIs are separate contracts.
+This page covers the local ComfyUI path. The cloud adapters for [Bailian](../providers/BAILIAN.en.md), [Gemini / Nano Banana](../providers/GEMINI.en.md) and [OpenAI Images](../providers/OPENAI.en.md) use platform models instead. The repository’s `docs/development/BACKEND.en.md` defines server rewrites; ComfyUI graphs and platform APIs are separate contracts.
 
 **Jump to:** [Model files](#model-files) · [Connect the panel](#connection) · [16-bit output](#output-depth) · [Troubleshooting](#troubleshooting)
 
 <a id="output-depth"></a>
 
-In the current development panel, choose **ComfyUI** before entering its address. The direct path never launches a platform relay. Switching back restores the saved ComfyUI address, models and depth. See [platform selection](PLATFORMS.en.md) for the other backends.
+In the 0.5.0 panel, choose **ComfyUI** before entering its address. The direct path never launches a platform relay. Switching back restores the saved ComfyUI address, models and depth. See [platform selection](PLATFORMS.en.md) for the other backends.
 
-## 16-bit output (0.4.0)
+## Optional 16-bit SDR output
 
 8-bit remains the default. To retain higher precision from generation:
 
@@ -69,12 +69,9 @@ ComfyUI/
 | `text_encoders` | [qwen3vl_8b_int8_convrot.safetensors](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/df94239739eef7205973a145ffa6f441f7b64e84/text_encoders/qwen3vl_8b_int8_convrot.safetensors) | 9.35 GB |
 | `vae` | [qwen_image_2.1_vae_bf16.safetensors](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/df94239739eef7205973a145ffa6f441f7b64e84/vae/qwen_image_2.1_vae_bf16.safetensors) | 0.68 GB |
 
-After starting ComfyUI, open **Model Library** in its sidebar and search for the main part of a filename. This screenshot uses the Chinese backend UI, where Model Library is labeled “模型库”. The preset VAE appears under `vae`, confirming that the backend can see it. The library may hide extensions; select the full filename returned by the plugin's scan.
+Start local ComfyUI, open Settings → Backend and models in the plugin and scan models. Choose the complete diffusion-model, vision/text-encoder and VAE filenames. This actual installed 0.5.0 capture separately scans the existing catalog at `localhost:8188`, without submitting inference. A listed file does not establish architecture, node or output-quality compatibility.
 
-<p align="center">
-  <a href="../../assets/comfyui-model-library.jpg"><img src="../../assets/comfyui-model-library.jpg" width="360" alt="Preset VAE under the vae category in ComfyUI Model Library"></a>
-  <br><sub>Model Library → vae · Click for the original capture.</sub>
-</p>
+![0.5.0 scanned model, encoder and VAE mappings, Chinese UI](../../assets/guide/050-models-zh.png)
 
 This is a tested combination, not a recommendation for every use. The diffusion model is a third-party quantization. Read its model card and the upstream [Qwen license](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE): current terms permit non-commercial research / evaluation; commercial use requires separate permission. Weights are not distributed with the plugin.
 
@@ -84,7 +81,7 @@ Exact sizes, pinned sources and SHA256 values are in [compatibility.json](../../
 
 ## 3. Address and settings format
 
-Enter a complete **HTTP(S) origin** in Backend and models:
+Enter a complete **HTTP(S) origin** in Settings → Backend and models:
 
 ```text
 http://localhost:8188
@@ -97,15 +94,15 @@ A local backend normally listens on `127.0.0.1`. A remote backend needs a reacha
 
 ### Configure the panel
 
-1. Expand **Backend and models**. Enter the service origin that opens in your browser under **ComfyUI address**. If you changed the backend port, change it here too.
+1. Open **Settings → Backend and models**. Enter the service origin that opens in your browser under **ComfyUI address**. If you changed the backend port, change it here too.
 2. With the backend running, click **Scan models**. Select the **Diffusion model**, **Vision / text encoder** and **VAE** using the table above. Scanning uses the address currently entered.
 3. Click **Save settings**, then **Connect** at the top. Wait for **Connected**, then try a test generation. If connection fails, read the message and the troubleshooting table below.
 4. To move settings to another machine, **Export JSON** here and **Import JSON** there, then check its address and model names. Changing language saves only the language, without submitting an unsaved address.
 
 <details>
-<summary>Connection screenshots · Chinese and English (0.3.0)</summary>
+<summary>Settings screenshots · 0.5.0 controlled UI sample</summary>
 
-These captures show the 0.3.0 Portable panel in Photoshop 27.0 after a successful model scan and connection check. CCX has the same settings. The header shows **Connected** when the check succeeds.
+These actual Photoshop 27 captures show installed Portable **0.5.0 c3adef56**, in Chinese and English. The endpoint `127.0.0.1:8194` is an isolated local controlled-response service (lighting multiplier field), not the actual ComfyUI inference endpoint. They illustrate Settings navigation and controls, **not real model inference, cloud access or visual-quality acceptance**. For real ComfyUI, enter your backend origin and compatible model files as described above.
 
 <table>
   <tr>
@@ -113,16 +110,16 @@ These captures show the 0.3.0 Portable panel in Photoshop 27.0 after a successfu
     <th width="50%" align="center">English UI</th>
   </tr>
   <tr>
-    <td align="center" valign="top"><a href="../../assets/setup-zh.png"><img src="../../assets/setup-zh.png" width="340" alt="Connected Portable panel in Chinese"></a></td>
-    <td align="center" valign="top"><a href="../../assets/setup-en.png"><img src="../../assets/setup-en.png" width="340" alt="Connected Portable panel in English"></a></td>
+    <td align="center" valign="top"><a href="../../assets/guide/050-settings-zh.png"><img src="../../assets/guide/050-settings-zh.png" width="340" alt="0.5.0 Chinese Settings, controlled demonstration"></a></td>
+    <td align="center" valign="top"><a href="../../assets/guide/050-settings-en.png"><img src="../../assets/guide/050-settings-en.png" width="340" alt="0.5.0 English Settings, controlled demonstration"></a></td>
   </tr>
 </table>
 
-<p align="center"><sub>Click either capture for its original resolution. The 0.4.0 setup steps are described below.</sub></p>
+<p align="center"><sub>Click either capture for its original resolution. These are UI-operation samples; follow the connection steps for your actual backend.</sub></p>
 
 </details>
 
-In 0.4.0, **Connect** saves settings only after checks pass. Failed connections keep the previous settings. **Save settings** and **Import JSON** can save an unchecked draft. Equivalent settings:
+**Connect** saves settings only after checks pass. Failed connections keep the previous settings. **Save settings** and **Import JSON** can save an unchecked draft. Equivalent settings:
 
 ```json
 {
@@ -142,7 +139,7 @@ In 0.4.0, **Connect** saves settings only after checks pass. Failed connections 
 To support custom hosts, the UXP manifest declares network `domains: "all"`. Runtime requests go to the configured ComfyUI; there is no telemetry. A remote server receives and may retain uploaded images, references and prompts. Do not expose an unauthenticated backend to untrusted networks.
 
 
-### Setup in 0.4.0
+### Setup wizard
 
 First launch shows three steps. A valid saved configuration opens the workspace directly; **Setup** can reopen the checks.
 
@@ -158,11 +155,11 @@ Failures include their category, effect and next action. Expand **Technical deta
 
 Main and reference images support RGB / Grayscale 8/16-bit with a resolved color space. An existing document ICC is preserved, including color conversions made when opening or editing in Photoshop.
 
-**Development branch only (absent from published v0.4.0):** if the document has no ICC, select its original file to read saved color declarations. Static WebP without embedded ICC uses the format's sRGB default; an explicit PNG sRGB chunk is also recognized. The file must match the current document path, dimensions and native depth, and the current document state is checked again after reading. Successful resolution creates an unmerged sRGB working copy for capture and apply, leaving the original untouched and retaining unsaved layers. All untagged edits in the copy receive the original-file color interpretation; this cannot guarantee their previous appearance. A disposable untagged WebP8 copy passed capture, identity apply (zero pixel difference), single undo and cleanup in Photoshop 27. Native PNG, reference import and new panel interactions remain pending.
+**0.5.0 source-color handling:** if the document has no ICC, select its original file to read saved color declarations. Static WebP without embedded ICC uses the format's sRGB default; an explicit PNG sRGB chunk is also recognized. The file must match the current document path, dimensions and native depth, and the current document state is checked again after reading. Successful resolution creates an unmerged sRGB working copy for capture and apply, leaving the original untouched and retaining unsaved layers. All untagged edits in the copy receive the original-file color interpretation; this cannot guarantee their previous appearance. A disposable untagged WebP8 copy passed capture, identity apply (zero pixel difference), single undo and cleanup in Photoshop 27. Public PNG8 selection/document capture also passed native API checks, and limited installed b3548bd4/291c1d40 picker/capture flows are recorded separately. Reference import, persistent access and broader controls remain pending; these records do not establish all installed behavior or real model quality.
 
 Other formats fall back to Photoshop's loaded document ICC. Unknown color, gamma alone, custom declarations without a loaded ICC, and untagged documents without a verifiable original file still require the correct profile on a copy. Source-file reading is limited to 64 MB; RGB mode alone does not imply sRGB. Prepare RGB copies of CMYK, Lab and HDR documents.
 
-A further development fix commits profile assignment as a separate history baseline, with mock coverage for apply → undo → recapture; native acceptance is pending. A pathless, untagged copy left by an older build still requires a verified profile assignment. Another image's color metadata cannot authorize it. See [source color and undo](../usage/USER_GUIDE.en.md#source-color).
+Working-copy profile assignment commits a separate history baseline. PS27 RGB8/16 synthetic API checks passed repeated undo, creation of a recovered tagged copy, fresh capture and application/undo. Installed 0.5.0 b3548bd4 also passed a limited public PNG8 document-scope recovery after three native Undo operations reached NONE, preserving the old document, lights and candidates. Recovery is explicit and available only for exact origins and history states proven in this plugin session; it creates a new tagged copy and grants no old-candidate application rights. Explicit NONE still rejects normal capture even if the display name says sRGB. Arbitrary pathless or earlier-session copies need verified manual assignment. Other sources/scopes and current broader installed behavior remain pending. See [source color and undo](../usage/USER_GUIDE.en.md#source-color).
 
 | Boundary | Contract |
 | --- | --- |
@@ -200,9 +197,9 @@ Input / output rules:
 - Edit input is pre-scaled sRGB 8-bit RGBA PNG. `image_1` is the source. An enabled selection guide uses `image_2`; character reference uses the next slot. `JoinImageWithAlpha` restores alpha from `LoadImage`'s inverted MASK.
 - Editing uses `resolution=0`; output dimensions must equal the first input. The plugin rejects mismatches. Text-to-image uses the selected resolution.
 - The selection guide is a visual prompt, not a latent inpaint mask. Photoshop's final mask enforces selection and protection boundaries.
-- Development background / scene modes select the subject to keep, capture the whole canvas and use source alpha when handling background and translucent edges. They omit the visual guide, which Qwen can encode as picture content. A character reference still follows the source. Only model input is matted over white; the saved capture stays intact. Source-transparency preservation, alignment and context color matching are automatically disabled, with ordinary preferences restored on exit. Manual protection still applies; old background candidates retain their saved color-matching setting. Transparent candidates warn and block apply while keeping export available. Subject selection and the new RGBA flow still need native and inference acceptance; the earlier stage test does not validate them. See [background replacement and acceptance scope](../usage/USER_GUIDE.en.md#background-fix). Published v0.4.0 does not contain this change.
-- Development [Image Blending](../usage/USER_GUIDE.en.md#blend) uses the edit workflow with full-canvas environment context and native-size application to the subject minus protection. New ComfyUI tasks omit the grayscale range reference; any character reference follows the source directly. The built-in instruction asks for environment-based relighting and color adjustment without changing models or node configuration. Two real comparisons with the existing models showed clear lighting changes on the illustration but weak changes on the photographic portrait. A small RGB8 installed Portable flow with a controlled backend passed one source upload/submission, masked application and one Undo. Identity, style, edges and broader host interactions still need acceptance. Removal uses a built-in instruction without a prompt.
-- The development [relighting workbench](../usage/USER_GUIDE.en.md#relight) uses the same edit workflow and models, with no extra downloads. Light parameters become semantic text; the clean source remains first, followed by the existing guide/reference order. Local illustrations and markers are never uploaded. Structured relighting disables alignment and color matching, retains native-depth source data, and uses sRGB8 model input. Output choices are Full redraw and experimental Lighting layers; rejected extraction retains the reference without automatically switching to redraw. Real photographs and platform capabilities require separate acceptance.
+- Background / scene modes select the subject to keep, capture the whole canvas and use source alpha when handling background and translucent edges. They omit the visual guide, which Qwen can encode as picture content. A character reference still follows the source. Only model input is matted over white; the saved capture stays intact. Source-transparency preservation, alignment and context color matching are automatically disabled, with ordinary preferences restored on exit. Manual protection still applies; old background candidates retain their saved color-matching setting. Transparent candidates warn and block apply while keeping export available. Subject selection and the new RGBA flow still need native and inference acceptance; the earlier stage test does not validate them. See [background replacement and acceptance scope](../usage/USER_GUIDE.en.md#background-fix). Published v0.4.0 does not contain this change.
+- 0.5.0 [Image Blending](../usage/USER_GUIDE.en.md#blend) uses the edit workflow with full-canvas environment context and native-size application to the subject minus protection. New ComfyUI tasks omit the grayscale range reference; any character reference follows the source directly. The built-in instruction asks for environment-based relighting and color adjustment without changing models or node configuration. Two real comparisons with the existing models showed clear lighting changes on the illustration but weak changes on the photographic portrait. A small RGB8 installed Portable flow with a controlled backend passed one source upload/submission, masked application and one Undo. Identity, style, edges and broader host interactions still need acceptance. Removal uses a built-in instruction without a prompt.
+- The [relighting workbench](../usage/USER_GUIDE.en.md#relight) uses the same edit workflow and models, with no extra downloads. Light parameters become semantic text; the clean source remains first, followed by the existing guide/reference order. Local illustrations and markers are never uploaded. Structured relighting disables alignment and color matching, retains native-depth source data, and uses sRGB8 model input. Output choices are Full-image redraw and experimental Lighting layers; rejected extraction retains the reference without automatically switching to redraw. Real photographs and platform capabilities require separate acceptance.
 - Results come from node `8`'s `images`. The plugin then applies optional transparency, alignment and color processing; raw browser workflow output can differ.
 
 SD, SDXL, Flux, other Qwen architectures and arbitrary workflow import are unsupported. They need separate templates, node checks, size / mask contracts and Photoshop round-trip validation. Changing a dropdown filename is insufficient.
@@ -263,4 +260,4 @@ This creates `extra_model_paths.yaml`, `start-comfyui.ps1` and importable `ps-ai
 | No percentage before sampling | The node has not reported sampling steps yet. The panel shows a phase, then the task's real step progress. |
 | Wrong candidate dimensions | Check source scaling and first-reference dimensions. Do not bypass checks by changing output size. |
 | White fringe / color shift | Check whether preserving the source silhouette is appropriate, then ICC, raw model output, alignment and color matching. Composite manually if needed. |
-| Reference PNG is reported as untagged | v0.4.0 requires the correct ICC embedded on a copy. The development branch can read an explicit sRGB chunk and process a working copy; unknown color still needs manual confirmation. See the [reference example](../usage/USER_GUIDE.en.md#reference). |
+| Reference PNG is reported as untagged | v0.4.0 requires the correct ICC embedded on a copy. Version 0.5.0 can read an explicit sRGB chunk and process a working copy; unknown color still needs manual confirmation. See the [reference example](../usage/USER_GUIDE.en.md#reference). |

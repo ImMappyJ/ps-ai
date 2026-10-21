@@ -37,7 +37,7 @@
       },
       "limitations": "Original matrix covers sRGB8 exchange. Model inputs clip wide gamut and quantize precision; optional16 output acceptance recorded separately. No calibrated-display acceptance or long-term stability claim."
     },
-    "untaggedSource": "Development: RGB static WebP with a bound original file without ICC (format-default sRGB) or PNG with an explicit sRGB chunk can use a tagged working copy after source-entry validation. Preserve a loaded document ICC after edits/conversion. Unknown/custom untagged sources or documents without a bound file remain blocked. Unsaved layers survive on the copy, interpreted using original-file semantics. Published v0.4.0 retains the earlier blanket rejection.",
+    "untaggedSource": "Version 0.5.0: RGB static WebP with a bound original file without ICC (format-default sRGB) or PNG with an explicit sRGB chunk can use a tagged working copy after source-entry validation. Preserve a loaded document ICC after edits/conversion. Unknown/custom untagged sources or documents without a bound file remain blocked. Unsaved layers survive on the copy, interpreted using original-file semantics. Published v0.4.0 retains the earlier blanket rejection.",
     "savedColorResolution": {
       "status": "Offline parser/mock tests and PS27 WebP8 capture/apply/undo passed; public PNG8 selection/document capture passed native API checks, installed b3548bd4 passed bounded recovery, and hash-verified installed 291c1d40 passed missing-selection rejection/real picker/selection capture. Reference import, persistent access and broader controls remain separate checks.",
       "sourceFileByteLimit": 64000000,
@@ -141,7 +141,7 @@
   "backgroundReplacement": {
     "status": "development; not in published v0.4.0",
     "modes": ["background", "scene"],
-    "selection": "Development: select the subject to keep; capture full canvas, including transparent corners; ordinary edits and old saved candidates retain their own selection semantics",
+    "selection": "Version 0.5.0: select the subject to keep; capture full canvas, including transparent corners; ordinary edits and old saved candidates retain their own selection semantics",
     "subjectComposite": "subject-background-v1; source/subject coverage intersection min(selection, alpha), native-size opaque patch for translucent pixels, editable protection-aware mask; binary subject/protection history",
     "subjectSelectionAcceptance": "Offline regression coverage only. Native subject-selection/RGBA edge application and new inference pending; earlier stage acceptance below used a background selection.",
     "modelInput": "sRGB8 over white for background modes only; original capture and source document alpha preserved",
@@ -365,7 +365,7 @@
         "ordinaryWorkingSide": 4096,
         "ordinaryWorkingPolicy": "Requested analysis area follows the panel resolution, reduced when retained buffers require it; source PNG retains validated native depth, model input remains sRGB8; model/PNG decode caps unchanged",
         "ordinaryNativeAcceptance": "2026-10-19 PS27.0.0 synthetic native API checks passed ordinary 24M RGB8, 45M RGB16 and 45M RGB8 background capture/apply/protection/single undo/preflight cancellation/selection restoration; sampled source and undo differences zero. Analysis target 512. A 23.15MP sRGB8 photograph duplicate at target 1024 passed whole-source hashing, single undo and post-write cancellation rollback with full-composite hash equality. Installed-panel flow, new inference and full export remain pending; no measured memory peak",
-        "selectionStripAcceptance": "0.5.2: intersect requests and writes with frozen selection bounds; outside context stays zero, bbox-internal empty strips and gray feathers remain valid. 2026-10-19 PS27.0.0 native API checks passed ordinary full-context, background and relight capture on an irregular selection in a 20.02MP sRGB8 JPG with zero per-pixel mask differences and unchanged source state. Separate gray 1/64/128/255 feather capture was exact. Installed-panel interaction remains pending",
+        "selectionStripAcceptance": "0.5.0, 2026-10-19 strip-read fix: intersect requests and writes with frozen selection bounds; outside context stays zero, bbox-internal empty strips and gray feathers remain valid. 2026-10-19 PS27.0.0 native API checks passed ordinary full-context, background and relight capture on an irregular selection in a 20.02MP sRGB8 JPG with zero per-pixel mask differences and unchanged source state. Separate gray 1/64/128/255 feather capture was exact. Installed-panel interaction remains pending",
         "validation": "PNG CRC/inflation/color and model output budgets remain enforced; source/session/history/profile/mask identity revalidated independently at apply"
       },
       "sourceLifecycle": {
@@ -666,6 +666,21 @@
       "upstreamInference": false,
       "limits": "Observed installed selection capture and small RGB8 asset/disk-History paths, not complete UI, large/RGB16, restart durability or model visual quality"
     },
-    "packaging": "Per-delivery verification: run full package gate on clean local main and verify CCX/Portable/environment versions, runtime bytes, licenses and SHA256; artifact-level reports identify the accepted build. No push."
+    "releaseDocumentationHost": {
+      "date": "2026-10-21",
+      "build": "0.5.0 c3adef56 Portable",
+      "source": "User-designated 3F3F3F.webp; 1000x1555 sRGB8 unmerged demo copy with a separate neutral-gray background",
+      "backend": "Isolated loopback controlled lighting-multiplier response; no upstream inference",
+      "submission": { "posts": 1, "uploads": 2, "duplicates": 0 },
+      "supplementalScreenshots": {
+        "count": 12,
+        "scope": "Actual installed 0.5.0 mode-entry, advanced-settings and model-scan panels on the same designated WebP demo copy; existing local ComfyUI model inventory only",
+        "inferenceSubmissions": 0,
+        "limits": "Configuration screenshots before prompt/reference/range preparation; no new generated-result or model-quality acceptance"
+      },
+      "passed": ["Actual Create, Results, History, Chinese/English Settings and workbench captures", "Light position editing", "Lighting-group apply with four effect layers, a frozen native source layer and editable masks", "Original document, visible foreground pixels and alpha unchanged", "Same-UUID disk History candidate read without another upload or POST", "Prepared PNG export", "One native Undo restores exact full composite and history baseline", "Missing-selection entry remains closed", "Exact original plugin-data restoration"],
+      "limits": "Current UI and this controlled RGB8 path only; no new real-model quality, real-photo detail fidelity, cloud keys, RGB16/large-image installation, persistent-access or CCX installation acceptance"
+    },
+    "packaging": "Per-delivery verification: run the full package gate and verify CCX/Portable/environment versions, runtime bytes, licenses and SHA256; artifact-level reports identify the accepted build. Freeze and public publication follow the user's explicit document-acceptance gate."
   }
 }

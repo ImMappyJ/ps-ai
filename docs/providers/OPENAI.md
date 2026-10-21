@@ -2,11 +2,11 @@
 <h1 align="center">接入 OpenAI Images</h1>
 <p align="center"><strong>简体中文</strong> · <a href="OPENAI.en.md">English</a></p>
 
-开发分支已加入 OpenAI Images 适配器。**尚未使用真实 API Key 验证平台出图或 Photoshop 回填**，已发布的 v0.4.0 包不包含这项功能。现有 ComfyUI、百炼和 Gemini 路径可以继续使用。
+**0.5.0**包含 OpenAI Images 适配器。**尚未使用真实 API Key 验证平台出图或 Photoshop 回填**；代码与离线测试不证明账号权限或输出质量。请按[README](../../README.md#安装发行包)使用匹配的 0.5.0 包或源码构建；v0.4.0 历史包不含此适配器。
 
 ## 从面板连接
 
-开发版的完整步骤见 [平台配置](../setup/PLATFORMS.md)。Windows 安装 Node.js 24+，展开“模型与连接”，选择 **GPT Image**，输入该平台的 API Key，点“保存 Key”，允许 Photoshop 打开随包提供的本地启动器。扫描并选择模型，保存配置后连接。自动管理的地址是 `http://127.0.0.1:8193`。
+完整步骤见[平台配置](../setup/PLATFORMS.md)。Windows 安装 Node.js 24+，打开“设置 → 模型与连接”，选择 **GPT Image**，输入 API Key，点“保存 Key”，允许 Photoshop 打开随包本地启动器。扫描并选择模型，保存配置后连接。自动管理地址为 `http://127.0.0.1:8193`。
 
 Key 加密保存在 UXP secureStorage 中，本机中转只在内存使用；不会进入 JSON 导出、历史或日志。连接检查不生成图片，也不验证账号权限。点击生成后才向平台上传图片、参考和提示词，同时在本机私人目录保留。可以从面板停止本地服务，未完成任务仍按原 ID 保留。
 
@@ -33,9 +33,9 @@ npm run gateway -- --port 8190
 
 模型及参数依据 [官方 Images 指南](https://developers.openai.com/api/docs/guides/image-generation)。列表表示代码声明的适配范围，不等于账号权限或真实效果已经验收。
 
-文字生图与素材调用 [生成接口](https://developers.openai.com/api/reference/resources/images/methods/generate)，编辑调用 [编辑接口](https://developers.openai.com/api/reference/resources/images/methods/edit)。使用官方 JSON 图片引用、单张 PNG Base64 结果，固定 `quality: medium`、`n: 1`。特效／氛围素材显式请求透明背景，收到不含透明像素的结果会拒绝发布。其他模式请求不透明输出；“保留原透明轮廓”由插件最终合成处理。
+文字生图与纯文字素材调用 [生成接口](https://developers.openai.com/api/reference/resources/images/methods/generate)；编辑和参考当前图片与选区的素材调用 [编辑接口](https://developers.openai.com/api/reference/resources/images/methods/edit)。使用官方 JSON 图片引用、单张 PNG Base64 结果，固定 `quality: medium`、`n: 1`。特效／氛围素材显式请求透明背景，收到不含透明像素的结果会拒绝发布。其他模式请求不透明输出；“保留原透明轮廓”由插件最终合成处理。
 
-来源是第一张图片，角色参考紧随其后。范围辅助转换为独立 API 蒙版：灰度白色对应可编辑的透明 alpha，黑色对应保护的非透明 alpha，羽化灰度保留；补边区域保持保护。它不会占用角色参考的图片编号。模型可能偏离范围提示，最终编辑边界仍由 Photoshop 选区和保护区约束。
+来源是第一张图片，可选角色参考紧随其后。范围辅助转换为独立 API 蒙版：灰度白色变为可编辑透明 alpha，黑色变为保护的非透明 alpha，保留羽化；补边保持保护，不占角色参考图片编号。图片素材使用来源参考位置、尺度、透视、色调和光线，以蒙版指定独立透明素材的放置范围，不使用额外导入参考。见[素材输入与验收限制](../usage/USER_GUIDE.md#context-assets)。这条适配路径已实现，但真实输出未验收；最终回填边界仍由 Photoshop 选区与保护区约束。
 
 目前协议请求上限为 2048² 像素。2.5 的请求比例限 1:3 至 3:1，画布至少 655,360 像素；1.5 可处理更窄长的请求，但有效模型像素会减少。来源与蒙版按同一规则补边，输出按同一坐标逆裁，再缩放到请求尺寸。不会直接把不同长宽比的图强行拉伸回选区。该几何处理不能保证模型不移动主体。
 
@@ -49,7 +49,7 @@ Images 请求直接返回图片。本适配器没有可用于重取结果的远�
 
 | 情况 | 处理 |
 | --- | --- |
-| 缺少 `OPENAI_API_KEY` | 在启动服务的同一个终端配置后重启 |
+| 缺少 `OPENAI_API_KEY` | 在面板保存 Key；手动服务需在同一个终端配置后重启 |
 | 401／403 | 核对项目 Key、权限和模型访问条件；错误响应不会回显凭据或原始平台消息 |
 | 429 | 检查额度与频率限制；先处理已有任务 |
 | HTTP 408、超时、断线或未读完响应 | 保留 `unknown`，不自动重发收费请求；核对平台记录 |
@@ -57,7 +57,7 @@ Images 请求直接返回图片。本适配器没有可用于重取结果的远�
 | 窄长选区、准备后的输入超过 10 MiB | 调整选区／上下文或分辨率；不会在超出接口预算时继续提交 |
 | 数据目录已加锁 | 先正常关闭旧实例；异常退出时确认记录的 PID 已结束后再清理遗留锁 |
 
-原始及准备后的输入 PNG 每张最多 10 MiB，OpenAI 响应 JSON 最多 32 MiB。服务端对账与平台 ID 认领仍未实现；开发版历史仅对 `unknown` 提供双步骤停止本地跟踪，保留原 ID 和全部数据，不取消任务或停止计费，新生成可能重复执行，见[用户指南](../usage/USER_GUIDE.md)。不要删除未知任务的元数据。原始结果已保存时，临时磁盘写入错误可按原 UUID 恢复。迁移要备份整个私人数据目录，不要上传到 Issue。
+原始及准备后的输入 PNG 每张最多 10 MiB，OpenAI 响应 JSON 最多 32 MiB。服务端对账与平台 ID 认领仍未实现；历史仅对 `unknown` 提供双步骤停止本地跟踪，保留原 ID 和全部数据，不取消任务或停止计费，新生成可能重复执行，见[用户指南](../usage/USER_GUIDE.md)。不要删除未知任务的元数据。原始结果已保存时，临时磁盘写入错误可按原 UUID 恢复。迁移要备份整个私人数据目录，不要上传到 Issue。
 
 ## 实际验收
 
