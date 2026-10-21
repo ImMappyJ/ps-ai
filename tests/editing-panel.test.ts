@@ -44,7 +44,8 @@ test('Image Blending has a separate optional draft, translated label and restore
   }finally{await h.close();}
 });
 
-test('Image Blending with no supplemental prompt submits a semantic edit to each platform',async()=>{
+// Three provider canvas/PNG round trips take 18s on serial hosted Windows.
+test('Image Blending with no supplemental prompt submits a semantic edit to each platform',{timeout:60_000},async()=>{
   for(const [provider,gatewayModel] of [['bailian','qwen-image-2.1-pro'],['gemini','gemini-2.5-flash-image'],['openai','gpt-image-1.5']] as const){
     const h=await panelHarness({settings:{...defaultSettings(),backend:'gateway',gatewayModel,baseUrl:'http://localhost:8190'},gateway:{provider},selection:{bounds:{left:0,top:0,right:1,bottom:2},mask:new Uint8Array([255,0,255,0])}});try{
       await h.wait();h.click('tab-cosplay');h.el('mode').value='blend';h.change('mode');h.el('resolution').value='512';h.el('prompt').value='';h.click('generate');await h.wait();

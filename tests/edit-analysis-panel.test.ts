@@ -42,7 +42,9 @@ test('large ordinary edit passes bounded source through generation, history and 
   }finally{await h.close();}
 });
 
-test('45MP background with protection keeps default1024 capture, cached range and result preparation within budget',{timeout:60000},async()=>{
+// Full 45MP capture/history round trips take 74s on serial hosted Windows.
+// Keep all three native planes, full-size fixtures and memory-budget assertions.
+test('45MP background with protection keeps default1024 capture, cached range and result preparation within budget',{timeout:120_000},async()=>{
   const h=await panelHarness();try{
     const native=largeDocument(h,true,9000,5000);
     Object.defineProperty(native.doc,'selection',{get:()=>({bounds:{left:0,top:0,right:9000,bottom:5000}}),configurable:true});

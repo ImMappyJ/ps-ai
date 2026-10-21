@@ -11,7 +11,9 @@ function fullNativeSelection(h:Awaited<ReturnType<typeof panelHarness>>,source:{
   h.ps.imaging.getPixels=async(o:any)=>{h.pixelRequests.push(o);return {sourceBounds:o.sourceBounds,imageData:{width:source.width,height:source.height,components:4,componentSize:16,getData:async()=>source.rgba,dispose(){}}};};
 }
 
-test('unbounded native16 contextual assets reject an unaffordable candidate peak before uploading or posting',async()=>{
+// The full 9MP native16 capture takes 22s on serial hosted Windows runs.
+// Retain its native pixels and all preflight/no-upload assertions.
+test('unbounded native16 contextual assets reject an unaffordable candidate peak before uploading or posting',{timeout:60_000},async()=>{
   const source={width:3000,height:3000,rgba:new Uint16Array(3000*3000*4).fill(65535)},h=await panelHarness({source,output});try{
     await h.wait();fullNativeSelection(h,source);h.click('tab-cosplay');h.el('resolution').value='1024';h.click('generate');await h.wait();
     assert.ok(h.pixelRequests.length>0);assert.ok(h.pixelRequests.every(o=>o.componentSize===16&&!o.targetSize),'the native capture itself fits without edit-analysis fallback');

@@ -75,7 +75,8 @@ test('OpenAI 英文素材模式可提交，不误报方形1K上下文或支持�
   try{await h.wait();h.click('connect');await h.wait();assert.match(h.el('gateway-info').textContent,/OpenAI Images/);assert.doesNotMatch(h.el('gateway-info').textContent,/square context/);assert.equal(h.el('seed').disabled,true);h.click('tab-cosplay');h.el('asset-input').value='text';h.change('asset-input');h.click('generate');await h.wait();assert.equal(h.gatewayPosts.length,1);assert.equal(h.gatewayPosts[0].request.kind,'asset');assert.equal(h.gatewayPosts[0].request.seed,0);assert.equal(h.captured.length,0);assert.equal(h.uploads.length,0);assert.equal(h.gatewayPosts[0].request.assetContext,undefined);}finally{await h.close();}
 });
 
-test('面板平台请求使用无编号语义意图，保留原始提示和范围辅助输入',async()=>{
+// The native provider canvas/PNG path takes 20s on serial hosted Windows.
+test('面板平台请求使用无编号语义意图，保留原始提示和范围辅助输入',{timeout:60_000},async()=>{
   const h=await panelHarness({settings:{...settings,gatewayModel:'gpt-image-2.5-sunburst'},gateway:{provider:'openai'}});
   try{await h.wait();h.click('generate');await h.wait();assert.equal(h.gatewayPosts.length,1);const request=h.gatewayPosts[0].request;assert.ok(request.guide);assert.doesNotMatch(request.prompt,/<image[123]>/);assert.ok(request.prompt.includes('blue lightning'));assert.equal(h.records()[0].userPrompt,'blue lightning');assert.equal(h.el('prompt').value,'blue lightning');}finally{await h.close();}
 });
