@@ -4,45 +4,15 @@
 <h1 align="center">ComfyUI setup and model compatibility</h1>
 <p align="center"><a href="COMFYUI.md">简体中文</a> · <strong>English</strong> · <a href="../README.en.md">README</a></p>
 
-The plugin includes neither the backend nor weights. Reuse an existing ComfyUI if it meets the contract below. 8-bit uses `qwen21-local-v2-rgba`; 16-bit uses `qwen21-local-v3-rgba16`. This guide describes 0.5.0. The current Settings captures below show an isolated controlled demonstration, not real model inference or a complete acceptance result.
-
-This page covers the local ComfyUI path. The cloud adapters for [Bailian](../providers/BAILIAN.en.md), [Gemini / Nano Banana](../providers/GEMINI.en.md) and [OpenAI Images](../providers/OPENAI.en.md) use platform models instead. The repository’s `docs/development/BACKEND.en.md` defines server rewrites; ComfyUI graphs and platform APIs are separate contracts.
-
-**Jump to:** [Model files](#model-files) · [Connect the panel](#connection) · [16-bit output](#output-depth) · [Troubleshooting](#troubleshooting)
-
-<a id="output-depth"></a>
-
-In the 0.5.0 panel, choose **ComfyUI** before entering its address. The direct path never launches a platform relay. Switching back restores the saved ComfyUI address, models and depth. See [platform selection](PLATFORMS.en.md) for the other backends.
-
-## Optional 16-bit SDR output
-
-8-bit remains the default. To retain higher precision from generation:
-
-1. Find `comfyui/ps_ai_sdr16` in the source tree or matching environment tools ZIP.
-2. Copy that folder into `ComfyUI/custom_nodes/ps_ai_sdr16`. Its `__init__.py` must sit directly inside it. No core files, existing nodes or extra Python packages need replacement.
-3. Wait for current jobs to finish and restart ComfyUI normally. Node search should include **PS-AI Save PNG16 (sRGB SDR)**.
-4. Select **16-bit SDR** under Output depth in the plugin. A missing node stops generation before submission; select 8-bit to use the original path.
-5. Apply to a 16-bit source document, or choose Open in new document to create a 16-bit sRGB document automatically. Save PNG preserves the candidate depth. Applying to an 8-bit document reduces it to 8-bit.
-
-The node writes decoded VAE floats directly to tagged 16-bit RGB/RGBA PNG. Resizing, alpha processing and export retain 16-bit colors. Thumbnails and model inputs remain 8-bit; selection/protection masks remain 8-bit grayscale. A 16-bit container does not promise 16 bits of effective model detail. BF16/FP16 inference, sRGB gamut and model color shifts still apply; HDR is unsupported.
-
-The optional JSON field `"outputDepth": 16` travels with settings. Old settings default to 8-bit; historical jobs retain their own output template.
+PS-AI connects directly to your ComfyUI. The plugin includes no backend or weights. Reuse an existing compatible installation. For cloud APIs, see [platform setup](PLATFORMS.en.md).
 
 <a id="backend"></a>
 
 ## 1. Prepare a working backend
 
-Already have ComfyUI? Start it, open its page in a browser and check nodes and weights. Do not overwrite existing models or workflows just to connect the plugin.
+Start ComfyUI and confirm its page opens in a browser. For a new installation, follow the official [Windows Portable](https://docs.comfy.org/installation/comfyui_portable_windows) or [manual installation](https://docs.comfy.org/installation/manual_install) guide. Install [ComfyUI-GGUF](https://github.com/leejet/ComfyUI-GGUF) using that backend's Python, then restart normally.
 
-For a new installation, follow the official [Windows Portable guide](https://docs.comfy.org/installation/comfyui_portable_windows) or [manual installation guide](https://docs.comfy.org/installation/manual_install). Follow that distribution's driver, Python and PyTorch requirements. The plugin's environment tools generate configuration and run checks; they do not install the backend, dependencies or weights.
-
-| Component | Tested baseline |
-| --- | --- |
-| ComfyUI | `0.37.4`, commit `8ff6dc384ba5c410266b40e137799e049459d4f2` |
-| [leejet/ComfyUI-GGUF](https://github.com/leejet/ComfyUI-GGUF) | Commit `373048b8403a7820620065210a691263d4da0a61` |
-| Python / PyTorch | Existing backend: `3.13.15` / `2.14.0+cu130`. Not minimum requirements for other hardware. |
-
-Newer versions may work, but must meet the node and API requirements below. `UnetLoaderGGUF` comes from the GGUF extension. A compatible ComfyUI supplies the Qwen 2.1 and other core nodes. Follow the extension's instructions for `custom_nodes`, use the backend's own Python for dependencies and restart through your normal procedure. A matching node name alone does not prove compatibility.
+The recorded baseline is ComfyUI `0.37.4` (`8ff6dc384ba5c410266b40e137799e049459d4f2`) and GGUF commit `373048b8403a7820620065210a691263d4da0a61`. See [compatibility.json](../../config/compatibility.json) for required nodes, hashes and validation scope. Other versions must provide the same node schemas and task API.
 
 <a id="model-files"></a>
 
@@ -69,9 +39,7 @@ ComfyUI/
 | `text_encoders` | [qwen3vl_8b_int8_convrot.safetensors](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/df94239739eef7205973a145ffa6f441f7b64e84/text_encoders/qwen3vl_8b_int8_convrot.safetensors) | 9.35 GB |
 | `vae` | [qwen_image_2.1_vae_bf16.safetensors](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/df94239739eef7205973a145ffa6f441f7b64e84/vae/qwen_image_2.1_vae_bf16.safetensors) | 0.68 GB |
 
-Start local ComfyUI, open Settings → Backend and models in the plugin and scan models. Choose the complete diffusion-model, vision/text-encoder and VAE filenames. This actual installed 0.5.0 capture separately scans the existing catalog at `localhost:8188`, without submitting inference. A listed file does not establish architecture, node or output-quality compatibility.
-
-![0.5.0 scanned model, encoder and VAE mappings, Chinese UI](../../assets/guide/050-models-zh.png)
+![Model, encoder and VAE mappings, Chinese UI](../../assets/guide/050-models-zh.png)
 
 This is a tested combination, not a recommendation for every use. The diffusion model is a third-party quantization. Read its model card and the upstream [Qwen license](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE): current terms permit non-commercial research / evaluation; commercial use requires separate permission. Weights are not distributed with the plugin.
 
@@ -81,98 +49,42 @@ Exact sizes, pinned sources and SHA256 values are in [compatibility.json](../../
 
 ## 3. Address and settings format
 
-Enter a complete **HTTP(S) origin** in Settings → Backend and models:
-
-```text
-http://localhost:8188
-http://localhost:8199
-http://192.168.1.20:8188
-https://comfy.example.com
-```
-
-A local backend normally listens on `127.0.0.1`. A remote backend needs a reachable interface and a firewall configured by its administrator. The plugin changes neither. Credentials, query strings and paths such as `/comfy` are unsupported. A reverse proxy must forward HTTP and WebSocket at its root; HTTPS needs a valid certificate. API-key authentication is not integrated.
-
 ### Configure the panel
 
-1. Open **Settings → Backend and models**. Enter the service origin that opens in your browser under **ComfyUI address**. If you changed the backend port, change it here too.
-2. With the backend running, click **Scan models**. Select the **Diffusion model**, **Vision / text encoder** and **VAE** using the table above. Scanning uses the address currently entered.
-3. Click **Save settings**, then **Connect** at the top. Wait for **Connected**, then try a test generation. If connection fails, read the message and the troubleshooting table below.
-4. To move settings to another machine, **Export JSON** here and **Import JSON** there, then check its address and model names. Changing language saves only the language, without submitting an unsaved address.
+1. Open **Settings → Backend and models** and choose **ComfyUI**.
+2. Enter the HTTP(S) origin that opens in your browser, such as `http://localhost:8188`, `http://192.168.1.20:8188` or `https://comfy.example.com`.
+3. **Scan models**, then choose the diffusion model, vision/text encoder and VAE. Use the exact relative filenames, including any subdirectories.
+4. Choose **Save settings** and **Connect**. After it reports **Connected**, try one generation.
 
-<details>
-<summary>Settings screenshots · 0.5.0 controlled UI sample</summary>
+Addresses cannot contain credentials, paths or query strings. A reverse proxy must forward HTTP and WebSocket at its root; HTTPS needs a valid certificate. API-key authentication is not integrated. Remote backends receive images, references and prompts; keep unauthenticated services private.
 
-These actual Photoshop 27 captures show installed Portable **0.5.0 c3adef56**, in Chinese and English. The endpoint `127.0.0.1:8194` is an isolated local controlled-response service (lighting multiplier field), not the actual ComfyUI inference endpoint. They illustrate Settings navigation and controls, **not real model inference, cloud access or visual-quality acceptance**. For real ComfyUI, enter your backend origin and compatible model files as described above.
-
-<table>
-  <tr>
-    <th width="50%" align="center">Chinese UI</th>
-    <th width="50%" align="center">English UI</th>
-  </tr>
-  <tr>
-    <td align="center" valign="top"><a href="../../assets/guide/050-settings-zh.png"><img src="../../assets/guide/050-settings-zh.png" width="340" alt="0.5.0 Chinese Settings, controlled demonstration"></a></td>
-    <td align="center" valign="top"><a href="../../assets/guide/050-settings-en.png"><img src="../../assets/guide/050-settings-en.png" width="340" alt="0.5.0 English Settings, controlled demonstration"></a></td>
-  </tr>
-</table>
-
-<p align="center"><sub>Click either capture for its original resolution. These are UI-operation samples; follow the connection steps for your actual backend.</sub></p>
-
-</details>
-
-**Connect** saves settings only after checks pass. Failed connections keep the previous settings. **Save settings** and **Import JSON** can save an unchecked draft. Equivalent settings:
-
-```json
-{
-  "schemaVersion": 1,
-  "baseUrl": "http://localhost:8188",
-  "language": "en-US",
-  "models": {
-    "unet": "qwen-image-2.1-Q4_K_M.gguf",
-    "clip": "qwen3vl_8b_int8_convrot.safetensors",
-    "vae": "qwen_image_2.1_vae_bf16.safetensors"
-  }
-}
-```
-
-`language` accepts `zh-CN` or `en-US`; older settings may omit it and default to Chinese. Model names must match the scan, including subdirectories and separators, for example `my-qwen/model.gguf`. Absolute paths and `..` are rejected. Settings are locked during generation. History records its backend origin; legacy records without one belong to `http://localhost:8188`.
-
-To support custom hosts, the UXP manifest declares network `domains: "all"`. Runtime requests go to the configured ComfyUI; there is no telemetry. A remote server receives and may retain uploaded images, references and prompts. Do not expose an unauthenticated backend to untrusted networks.
-
+**Connect** saves settings after checks pass; **Save settings** and **Import JSON** can save an unchecked draft. Export/import JSON to move configuration, then check the address and filenames. See the [settings example](../../config/settings.example.json). Model names cannot be absolute paths or contain `..`. Settings lock during generation; each task keeps its original backend address.
 
 ### Setup wizard
 
-First launch shows three steps. A valid saved configuration opens the workspace directly; **Setup** can reopen the checks.
-
-1. Open **Backend and models**, enter the address and click **Test and save address**. The address is saved only after the connection succeeds.
-2. Scan and select the three model files, then **Check environment**. This reads the host version, backend API, node fields and model inventory. It installs no dependencies and changes no models.
-3. **Generate example** explicitly submits a task. It creates a separate test document, edits its central color patch and applies a masked new layer. Inspect the layer and mask, then undo with Ctrl+Z.
-
-The preset names a tested Qwen 2.1 combination. A custom mapping passing file and API checks still needs real inference to confirm model compatibility. Saving an address does not add support for authenticated cloud platforms.
-
-Failures include their category, effect and next action. Expand **Technical details (copyable)** for the original error. Recover or cancel an existing task by its original ID before resubmitting. A failure is classified as insufficient memory only when the backend explicitly reports it.
+First launch walks through address testing, model scanning and environment checks. **Generate example** then submits a real job in a separate test document. Inspect its result layer and mask, then undo once. **Setup** reopens the checks later. A connection or scan alone does not confirm model compatibility.
 
 ### Color and safe editing
 
-Main and reference images support RGB / Grayscale 8/16-bit with a resolved color space. An existing document ICC is preserved, including color conversions made when opening or editing in Photoshop.
+Use RGB/Grayscale 8/16-bit with a resolved color profile. Photoshop's loaded ICC is preserved. Supported untagged WebP/PNG may require selecting the original file and creating a tagged working copy; unknown color needs a correctly profiled copy. CMYK, Lab and 32-bit HDR are unsupported. See [source color](../usage/USER_GUIDE.en.md#source-color).
 
-**0.5.0 source-color handling:** if the document has no ICC, select its original file to read saved color declarations. Static WebP without embedded ICC uses the format's sRGB default; an explicit PNG sRGB chunk is also recognized. The file must match the current document path, dimensions and native depth, and the current document state is checked again after reading. Successful resolution creates an unmerged sRGB working copy for capture and apply, leaving the original untouched and retaining unsaved layers. All untagged edits in the copy receive the original-file color interpretation; this cannot guarantee their previous appearance. A disposable untagged WebP8 copy passed capture, identity apply (zero pixel difference), single undo and cleanup in Photoshop 27. Public PNG8 selection/document capture also passed native API checks, and limited installed b3548bd4/291c1d40 picker/capture flows are recorded separately. Reference import, persistent access and broader controls remain pending; these records do not establish all installed behavior or real model quality.
+Model inputs are sRGB8, so wide-gamut colors and source precision can be lost. Results apply through the saved selection/protection mask on a new layer, with one undo step. Changed, closed or expired sources block application while keeping export available. Inspect alpha, color and edges on a saved copy.
 
-Other formats fall back to Photoshop's loaded document ICC. Unknown color, gamma alone, custom declarations without a loaded ICC, and untagged documents without a verifiable original file still require the correct profile on a copy. Source-file reading is limited to 64 MB; RGB mode alone does not imply sRGB. Prepare RGB copies of CMYK, Lab and HDR documents.
+<a id="output-depth"></a>
 
-Working-copy profile assignment commits a separate history baseline. PS27 RGB8/16 synthetic API checks passed repeated undo, creation of a recovered tagged copy, fresh capture and application/undo. Installed 0.5.0 b3548bd4 also passed a limited public PNG8 document-scope recovery after three native Undo operations reached NONE, preserving the old document, lights and candidates. Recovery is explicit and available only for exact origins and history states proven in this plugin session; it creates a new tagged copy and grants no old-candidate application rights. Explicit NONE still rejects normal capture even if the display name says sRGB. Arbitrary pathless or earlier-session copies need verified manual assignment. Other sources/scopes and current broader installed behavior remain pending. See [source color and undo](../usage/USER_GUIDE.en.md#source-color).
+## Optional 16-bit SDR output
 
-| Boundary | Contract |
-| --- | --- |
-| Capture, reference, model input | Photoshop converts copied pixels to sRGB. Model exchange uses 8-bit RGBA PNG with straight alpha. |
-| Backend output | The 8-bit template accepts sRGB8 PNG and its verified untagged convention. The 16-bit template requires tagged sRGB RGB/RGBA16 PNG. Conflicting gamma, ICC and HDR tags are rejected; the raw output is retained. |
-| Preview and PNG export | Both use explicitly tagged sRGB PNG. Monitor and host color management can still affect appearance. |
-| Layer application | Photoshop converts candidate sRGB into the source profile. Original layers, document profile and depth stay unchanged. 16-bit output retains its color precision in a 16-bit destination. Expanding an 8-bit result does not create extra precision. |
+8-bit remains the default. To retain higher precision from generation:
 
-Downloads are also checked for PNG checksums, pixel format, decompressed length and scanlines. Text metadata is excluded from decoding. Invalid pixels cannot be applied as a candidate; the original download remains in the task record.
+1. Find `comfyui/ps_ai_sdr16` in the source tree or matching environment tools ZIP.
+2. Copy that folder into `ComfyUI/custom_nodes/ps_ai_sdr16`. Its `__init__.py` must sit directly inside it. No core files, existing nodes or extra Python packages need replacement.
+3. Wait for current jobs to finish and restart ComfyUI normally. Node search should include **PS-AI Save PNG16 (sRGB SDR)**.
+4. Select **16-bit SDR** under Output depth in the plugin. A missing node stops generation before submission; select 8-bit to use the original path.
+5. Apply to a 16-bit source document, or choose Open in new document to create a 16-bit sRGB document automatically. Save PNG preserves the candidate depth. Applying to an 8-bit document reduces it to 8-bit.
 
-Native round trips and independent conversions passed on PS 27.0 for sRGB, Adobe RGB, Display P3 and ProPhoto source documents at 8/16-bit, using 8-bit model exchange. The new 16-bit output path was separately tested for actual generation, application, export and known sample values in sRGB / 16-bit documents. Model input still loses colors outside sRGB and original high-depth detail; 16-bit output avoids additional quantization, without guaranteeing a seamless color match. Optional context matching only corrects small overall shifts. See the [user guide](../usage/USER_GUIDE.en.md) for an example.
+The node writes decoded VAE floats directly to tagged 16-bit RGB/RGBA PNG. Resizing, alpha processing and export retain 16-bit colors. Thumbnails and model inputs remain 8-bit; selection/protection masks remain 8-bit grayscale. A 16-bit container does not promise 16 bits of effective model detail. BF16/FP16 inference, sRGB gamut and model color shifts still apply; HDR is unsupported.
 
-The captured range is shown during generation: amber means effective edit, blue manual protection and gray context. A real feathered Photoshop mask controls application; the visual guide is not a strict latent inpaint mask. Candidates identify their source and whether application adds a result or replaces this capture’s plugin layer. Closed, changed or expired source sessions block application while keeping candidates exportable. Investigate host crashes using logs and separate GPU/network controls. One successful run is not a long-term stability guarantee; work on saved copies.
+The optional JSON field `"outputDepth": 16` travels with settings. Old settings default to 8-bit; historical jobs retain their own output template.
 
 <a id="model-compatibility"></a>
 
@@ -197,12 +109,11 @@ Input / output rules:
 - Edit input is pre-scaled sRGB 8-bit RGBA PNG. `image_1` is the source. An enabled selection guide uses `image_2`; character reference uses the next slot. `JoinImageWithAlpha` restores alpha from `LoadImage`'s inverted MASK.
 - Editing uses `resolution=0`; output dimensions must equal the first input. The plugin rejects mismatches. Text-to-image uses the selected resolution.
 - The selection guide is a visual prompt, not a latent inpaint mask. Photoshop's final mask enforces selection and protection boundaries.
-- Background / scene modes select the subject to keep, capture the whole canvas and use source alpha when handling background and translucent edges. They omit the visual guide, which Qwen can encode as picture content. A character reference still follows the source. Only model input is matted over white; the saved capture stays intact. Source-transparency preservation, alignment and context color matching are automatically disabled, with ordinary preferences restored on exit. Manual protection still applies; old background candidates retain their saved color-matching setting. Transparent candidates warn and block apply while keeping export available. Subject selection and the new RGBA flow still need native and inference acceptance; the earlier stage test does not validate them. See [background replacement and acceptance scope](../usage/USER_GUIDE.en.md#background-fix). Published v0.4.0 does not contain this change.
-- 0.5.0 [Image Blending](../usage/USER_GUIDE.en.md#blend) uses the edit workflow with full-canvas environment context and native-size application to the subject minus protection. New ComfyUI tasks omit the grayscale range reference; any character reference follows the source directly. The built-in instruction asks for environment-based relighting and color adjustment without changing models or node configuration. Two real comparisons with the existing models showed clear lighting changes on the illustration but weak changes on the photographic portrait. A small RGB8 installed Portable flow with a controlled backend passed one source upload/submission, masked application and one Undo. Identity, style, edges and broader host interactions still need acceptance. Removal uses a built-in instruction without a prompt.
-- The [relighting workbench](../usage/USER_GUIDE.en.md#relight) uses the same edit workflow and models, with no extra downloads. Light parameters become semantic text; the clean source remains first, followed by the existing guide/reference order. Local illustrations and markers are never uploaded. Structured relighting disables alignment and color matching, retains native-depth source data, and uses sRGB8 model input. Output choices are Full-image redraw and experimental Lighting layers; rejected extraction retains the reference without automatically switching to redraw. Real photographs and platform capabilities require separate acceptance.
 - Results come from node `8`'s `images`. The plugin then applies optional transparency, alignment and color processing; raw browser workflow output can differ.
 
 SD, SDXL, Flux, other Qwen architectures and arbitrary workflow import are unsupported. They need separate templates, node checks, size / mask contracts and Photoshop round-trip validation. Changing a dropdown filename is insufficient.
+
+Background/scene and blending omit the ComfyUI grayscale guide; Photoshop still applies the saved mask. Relighting reuses these models with no extra download. Image-context assets have failed visual acceptance in tested samples; inspect source residue, guide marks, transparency and edges. See the [user guide](../usage/USER_GUIDE.en.md).
 
 <a id="api"></a>
 
@@ -260,4 +171,4 @@ This creates `extra_model_paths.yaml`, `start-comfyui.ps1` and importable `ps-ai
 | No percentage before sampling | The node has not reported sampling steps yet. The panel shows a phase, then the task's real step progress. |
 | Wrong candidate dimensions | Check source scaling and first-reference dimensions. Do not bypass checks by changing output size. |
 | White fringe / color shift | Check whether preserving the source silhouette is appropriate, then ICC, raw model output, alignment and color matching. Composite manually if needed. |
-| Reference PNG is reported as untagged | v0.4.0 requires the correct ICC embedded on a copy. Version 0.5.0 can read an explicit sRGB chunk and process a working copy; unknown color still needs manual confirmation. See the [reference example](../usage/USER_GUIDE.en.md#reference). |
+| Untagged source/reference | Follow the [source-color guidance](../usage/USER_GUIDE.en.md#source-color); use a correctly profiled copy when needed. |

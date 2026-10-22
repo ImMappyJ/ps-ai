@@ -2,56 +2,54 @@
 <h1 align="center">Choose an image platform</h1>
 <p align="center"><a href="PLATFORMS.md">简体中文</a> · <strong>English</strong> · <a href="../README.en.md">Home</a></p>
 
-Version **0.5.0 (experimental prerelease)** offers ComfyUI, Nano Banana, GPT Image and BaiLian. Use matching packages from [Releases](https://github.com/ImMappyJ/ps-ai/releases); if no 0.5.0 assets are available, [build from source](../README.en.md#build-from-source). Historical v0.4.0 lacks platform selection and relighting. ComfyUI has real inference and limited Photoshop evidence; cloud adapters have offline tests only, with live keys and platform host acceptance pending.
+PS-AI 0.5.0 connects to local ComfyUI or a cloud image API. Cloud generation needs an API key and model access; the provider handles billing.
 
 ## Choose a backend
 
-| Panel option | Inference | Prepare | Local connection |
-| --- | --- | --- | --- |
-| ComfyUI | Your ComfyUI | Compatible backend, nodes and models | Default `http://localhost:8188`; host and port are editable |
-| Nano Banana | Google Gemini API | Project API key and model access | `http://127.0.0.1:8192`, managed automatically |
-| GPT Image | OpenAI Images API | Project API key and model access | `http://127.0.0.1:8193`, managed automatically |
-| BaiLian | Alibaba Cloud Model Studio API | Key for the mainland China endpoint and model access | `http://127.0.0.1:8191`, managed automatically |
+| Panel option | What you need | Connection |
+| --- | --- | --- |
+| [ComfyUI](COMFYUI.en.md) | Compatible backend, nodes and Qwen 2.1 models | Default `http://localhost:8188`; editable |
+| [Nano Banana](../providers/GEMINI.en.md) | Google Gemini API key | `http://127.0.0.1:8192` |
+| [GPT Image](../providers/OPENAI.en.md) | OpenAI API key | `http://127.0.0.1:8193` |
+| [BaiLian](../providers/BAILIAN.en.md) | Model Studio key for the mainland China endpoint | `http://127.0.0.1:8191` |
 
-ComfyUI connects directly and never launches a platform relay. Each platform has a separate key and task directory. Platform generation needs no local inference weights, but requires **Node.js 24+** on this computer. A web subscription does not establish API access.
+ComfyUI connects directly. Cloud platforms use the bundled local relay and need **Node.js 24+**, with no local inference weights. A web subscription does not establish API access.
 
 ## Configure a platform in the panel
 
-1. Install Node.js 24 or later on Windows. Check `node --version`, then restart Photoshop so it receives the updated PATH.
-2. Open **Settings → Backend and models**, then choose the platform under **Backend type**. Its local address is filled and locked; do not enter the upstream API URL.
-3. Enter the platform's **API Key** and choose **Save key**. Photoshop requests permission to open the local PS-AI launcher on first use. A denied launch can be retried by connecting again.
-4. Choose **Scan models**, select a model available to the account, then **Save settings** and **Connect**. Scanning and connecting create no images and do not validate upstream account access.
-5. Return to **Create** and prepare the source/range for the selected mode. Removal needs no prompt; relighting opens its workbench for explicit generation. Other modes use **Generate**. Images and prompts are uploaded when generating. Inspect one candidate first. See the [mode requirements](../usage/USER_GUIDE.en.md).
+1. On Windows, install Node.js 24+, check `node --version`, then restart Photoshop.
+2. Open **Settings → Backend and models** and choose a platform. Keep its automatically filled local address.
+3. Enter the **API Key**, choose **Save key**, and allow Photoshop to open the local PS-AI launcher when prompted.
+4. **Scan models**, select your model, then **Save settings** and **Connect**.
+5. Return to Create and try one candidate. See the [user guide](../usage/USER_GUIDE.en.md) for source and selection requirements.
 
-The password field clears after saving; **Key saved (encrypted)** indicates storage. UXP secureStorage encrypts keys per plugin. A key is sent only to the authenticated local relay and used in its memory. JSON exports, task history and stage logs exclude keys. CCX and Portable keep separate data. Uninstallation, clearing plugin data or damaged account credentials can require re-entry.
+Scanning and connecting do not generate images or check upstream account access. Images, references and prompts upload when you generate and are also saved locally.
 
-Each platform retains its model choice. ComfyUI restores its previous address, model mapping and depth. Configuration controls lock during generation. Recover unfinished jobs by their original ID before replacing or clearing a key; the running relay rejects those changes for pending jobs. After a relay restart, use the original job's account.
+Keys are encrypted in UXP secureStorage and sent only after the local relay proves its identity. The relay uses them in memory; settings exports, history and logs exclude them. The field clears after saving. CCX and Portable keep separate data, so switching installations may require entering the key again.
+
+Each platform retains its model choice. Switching back restores ComfyUI's address, models and depth. Resolve pending jobs using their original account before replacing or clearing a key.
 
 ## Modes and parameters
 
-| Feature | ComfyUI | Nano Banana | GPT Image | BaiLian |
+| Capability | ComfyUI | Nano Banana | GPT Image | BaiLian |
 | --- | --- | --- | --- | --- |
-| Text to image, local edits, clothing, references, scenes, relighting, blending | Corresponding workflow | Edit adapter implemented | Edit adapter implemented | Edit adapter implemented |
-| Text-only effects / atmosphere | Implemented; inspect alpha/residue | Disabled | Adapter implemented | Qwen 2.1 models only |
-| Assets from current image + selection | Experimental; real samples failed visual acceptance | Disabled | Adapter implemented | Qwen 2.1 models only |
-| Sampling steps | Configurable | Platform-controlled | Platform-controlled | Platform-controlled |
-| Seed | Configurable | Disabled | Disabled | Configurable |
-| Output depth | 8-bit / optional SDR16 | 8-bit | 8-bit | 8-bit |
-| Progress / stopping | Stages and actual steps; task cancellation | Stages / stop future candidates | Stages / stop future candidates | Stages / stop future candidates |
+| Text-to-image and edits, including relighting/blending | Supported workflow | Adapter implemented | Adapter implemented | Adapter implemented |
+| Effects / atmosphere assets | Experimental | Disabled | Adapter implemented | Qwen 2.1 only |
+| Steps / seed | Both configurable | Neither | Neither | Seed only |
+| Output | 8-bit / optional SDR16 | 8-bit | 8-bit | 8-bit |
+| Stop | Cancel by task ID | Stop future candidates | Stop future candidates | Stop future candidates |
 
-An implemented adapter is not accepted output quality. Assets default to the current image and selection; text-only is an explicit alternative. Five real pinned ComfyUI image-context samples retained source content or painted guide boundaries and failed visual acceptance. Transparent pixels alone do not establish a usable asset. See [asset limits](../usage/USER_GUIDE.en.md#context-assets). Blending has limited illustration/portrait comparisons and a small controlled RGB8 installed flow; photographic quality and broader native acceptance remain pending. Capabilities constrain operations, seeds, inputs, pixel count and aspect ratio; unsupported combinations fail before upload. See [Bailian](../providers/BAILIAN.en.md), [Gemini](../providers/GEMINI.en.md) and [OpenAI](../providers/OPENAI.en.md) for model and geometry details.
+Cloud adapters have offline tests; real API output and Photoshop application still need acceptance with real keys. Listed models may be unavailable to your account. Image-context ComfyUI assets failed visual acceptance in tested samples; inspect source residue, guide marks and alpha. See [asset limits](../usage/USER_GUIDE.en.md#context-assets). Inspect blending and relighting for subject, edge and detail changes before applying.
 
 ## Stop, recover and troubleshoot
 
-- **Stop remaining candidates** lets the current platform request finish. It does not guarantee interrupted inference or billing. Recover the original ID rather than creating it again.
-- Switching to ComfyUI leaves an existing relay running. **Stop local relay** stops all three local listeners and drains current work. Connect to a platform to restart it. Closing Photoshop does not terminate the independent Node process.
-- Launch failure: check Node, Photoshop's launch consent and ports **8191–8193**. Keep only one CCX or Portable instance active; separate installations conflict on the managed ports.
-- Missing key: save it for the selected platform. For 401/403, check account, region and model access; for 429, check quota and rate limits.
-- PNG/color rejection: retain raw output and preserve strict decoding. Untagged output is rejected by default. After confirming its color interpretation, use a manual gateway with an explicit `PSAI_*_ASSUME_SRGB` policy.
-- After an abnormal exit, jobs remain under `relay/<provider>/` in plugin data. Confirm the PID recorded in `gateway.lock` is dead before removing a stale lock. Back up the complete directory, including images, rather than JSON alone. Keep it out of Issues.
+- **Stop remaining candidates** lets the current cloud request finish. It does not cancel that call or guarantee billing stops. Recover the original task ID after a disconnect before generating again.
+- **Stop local relay** drains current work and stops all three listeners. Closing Photoshop or switching to ComfyUI leaves it running; connecting to a platform restarts it.
+- For launch failures, check Node, Photoshop launch permission and ports **8191–8193**. Run one CCX or Portable instance at a time.
+- For 401/403, check the key, region and model access. For 429, check quota and rate limits.
+- Untagged PNGs are rejected by default. Use a manual gateway's explicit sRGB policy only after confirming the output's color encoding.
+- Managed tasks live in plugin data under `relay/<provider>/`. Back up the entire private directory when migrating. Remove a stale `gateway.lock` only after confirming its recorded process has exited.
 
 ## Manual gateways and other systems
 
-Automatic launching currently supports Windows. Node itself is not bundled. For other systems, custom ports, other Bailian regions/workspaces or explicit color policy, start a gateway using its provider guide and choose **Manual gateway (advanced)** in the panel. Enter its local address. Manual gateways read keys from the process environment and do not use the panel's key buttons. They have separate data from the managed relay.
-
-The local token authenticates this plugin on this computer; it is not a public account system. Do not expose or forward these ports to the internet.
+Automatic launch supports Windows and requires Node on PATH. For other systems, custom ports, other Bailian regions or color settings, follow the provider guide and choose **Manual gateway (advanced)**. Manual gateways read keys from the terminal environment and keep separate data. Keep these local services off the public internet.
