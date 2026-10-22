@@ -28,9 +28,9 @@
 
 ## 系统要求
 
-- **Photoshop：**Windows Photoshop 2026 / 27.0+，目前实测 27.0；macOS 未测试。
-- **本地生成：**兼容的 ComfyUI、Qwen-Image 2.1 GGUF 模型及节点，需另行安装。测试机器使用 RTX 5080 16 GiB 和约 48 GB 内存，尚未确定最低配置。
-- **云端生成：**对应平台的 Key 和模型权限；自动启动本机中转需要 Windows、Node.js 24+ 及 Photoshop 的启动授权。
+- **Photoshop**：Windows Photoshop 2026 / 27.0+，目前实测 27.0；macOS 未测试。
+- **本地生成**：兼容的 ComfyUI、Qwen-Image 2.1 GGUF 模型及节点，需另行安装。测试机器使用 RTX 5080 16 GiB 和约 48 GB 内存，尚未确定最低配置。
+- **云端生成**：对应平台的 Key 和模型权限；自动启动本机中转需要 Windows、Node.js 24+ 及 Photoshop 的启动授权。
 
 ComfyUI 使用固定的 Qwen 2.1 工作流，不能直接换成 SD、SDXL 或 Flux。模型文件约 14.63 GB，另外需要后端、依赖和缓存空间。具体版本见[兼容清单](config/compatibility.json)。
 
