@@ -2,7 +2,7 @@
 <h1 align="center">PS-AI User Guide</h1>
 <p align="center"><a href="USER_GUIDE.md">简体中文</a> · <strong>English</strong></p>
 
-For **0.5.0 experimental**. [Install the plugin](../README.en.md#install-a-release-package), then connect [ComfyUI](../setup/COMFYUI.en.md) or a [cloud platform](../setup/PLATFORMS.en.md). Screenshots show the actual Photoshop 27 interface with `3F3F3F.webp`. Configuration screens and lighting illustrations are not model results. Click an image to view it at full size.
+For **0.5.0 experimental**. [Install the plugin](../README.en.md#install-a-release-package), then connect [ComfyUI](../setup/COMFYUI.en.md) or a [cloud platform](../setup/PLATFORMS.en.md). Interface screenshots show Photoshop 27 with `3F3F3F.webp`. The mode examples below show real generated results and composed previews, separately from the interface screenshots. Configuration screens and local lighting illustrations are not model results. Click an image to view it at full size.
 
 <a id="current-ui"></a>
 
@@ -53,6 +53,8 @@ For full-image relighting of a transparent cutout, add a background below it on 
 
 ## Choose a mode
 
+These are real Qwen-Image 2.1 results using `3F3F3F.webp` and edited copies, except the text-only examples noted below. Edit previews combine the saved source, result and selection for each task; local examples are cropped, and transparency appears on gray. They are not screenshots of application in Photoshop and do not validate the installed apply flow.
+
 <a id="edit"></a>
 
 ### 1. Objects and materials
@@ -60,6 +62,10 @@ For full-image relighting of a transparent cutout, add a background below it on 
 Choose **Local edit → Objects and materials**.
 
 Select the object or material, describe its color, finish and the shape to retain, preview, then generate. Useful for material changes and small objects. Texture and text inside the selection may still change.
+
+![Objects and materials result: waist doll changed to a black cat](../../assets/guide/050-result-edit.png)
+
+Saved example: changing the doll at the waist into a black cat.
 
 <details>
 <summary>View mode controls</summary>
@@ -75,6 +81,10 @@ Select the object or material, describe its color, finish and the shape to retai
 Choose **Local edit → Remove objects**.
 
 Select what you want removed, with enough surrounding context for filling. This mode has a built-in instruction and no prompt field. Check the filled texture. Turn off Preserve transparency if the result needs to expand beyond the original outline.
+
+![Removal result: waist doll removed](../../assets/guide/050-result-remove.png)
+
+Saved example: removing the same waist doll with the built-in instruction.
 
 <details>
 <summary>View mode controls</summary>
@@ -96,6 +106,10 @@ Choose **Local edit → Replace background (select subject)**.
 
 This reads the full canvas and turns off source-transparency retention, subject alignment and color matching. ComfyUI also omits the selection guide. Ordinary preferences return when you leave. Candidates with a substantially transparent background remain exportable but cannot apply. Old candidates retain their saved range; their masks are not automatically inverted.
 
+![Background replacement result: pale blue studio](../../assets/guide/050-result-background.png)
+
+New generation: replacing the background with a pale blue studio.
+
 <details>
 <summary>View mode controls</summary>
 
@@ -110,6 +124,10 @@ This reads the full canvas and turns off source-transparency retention, subject 
 Choose **Portrait → Clothing and props**.
 
 Select clothing or props, avoiding faces and hands you want to keep. Specify the part, color, material and details, for example, “Make the coat tail deep purple, preserving folds and metal ornaments.” Complex props may need manual repair.
+
+![Clothing result: white over-knee socks](../../assets/guide/050-result-costume.png)
+
+Saved example: changing the socks to white over-knee socks.
 
 <details>
 <summary>View mode controls</summary>
@@ -126,6 +144,10 @@ Choose **Portrait → Character reference**.
 
 Select the editing area, import a reference image and describe the clothing, accessories or appearance to borrow. References do not guarantee identity or exact detail. If an import reports unknown color, confirm and embed the correct ICC profile on a copy, then retry.
 
+![Character reference failure: source, black-cat reference and misaligned result](../../assets/guide/050-result-reference.png)
+
+**Failed example — source / black-cat reference / result:** the model shrank the image, leaving misalignment and visible seams after composition. This needs correction before use.
+
 <details>
 <summary>View mode controls</summary>
 
@@ -140,6 +162,10 @@ Select the editing area, import a reference image and describe the clothing, acc
 Choose **Portrait → Replace scene**.
 
 As with background replacement, select the subject to keep. Describe the environment, time of day, floor and lighting direction. The full canvas provides scene context. Do not import a black-and-white range guide as a scene reference.
+
+![Scene replacement result: pink bedroom](../../assets/guide/050-result-scene.png)
+
+Saved example: placing the subject in a pink bedroom.
 
 <details>
 <summary>View mode controls</summary>
@@ -161,6 +187,10 @@ Input and destination are separate choices: choosing New document does not switc
 
 **Image-context asset quality does not yet meet the target.** Tested Qwen outputs may retain people, scenery or guide boundaries. Check transparency and unwanted content; transparent pixels alone do not make a usable asset.
 
+![Text-only blue lightning asset and manual composition](../../assets/guide/050-result-effect.png)
+
+**Source / asset / composition:** newly generated text-only blue arcing lightning, manually scaled and placed over the pink-bedroom copy. This does not demonstrate the default image-and-selection input.
+
 <details>
 <summary>View mode controls</summary>
 
@@ -176,6 +206,10 @@ Choose **Portrait → Atmosphere asset**.
 
 Use this for smoke, particles and haze. Input works like Effect asset: select placement when using the current image, or describe the asset directly in text-only mode. Check for retained people, scenery and guide boundaries.
 
+![Text-only golden particle asset and manual composition](../../assets/guide/050-result-atmosphere.png)
+
+**Source / asset / composition:** newly generated text-only golden particles, enlarged proportionally and cropped to overlay the same pink-bedroom copy. This does not demonstrate the default image-and-selection input.
+
 <details>
 <summary>View mode controls</summary>
 
@@ -190,6 +224,10 @@ Use this for smoke, particles and haze. Input works like Effect asset: select pl
 Choose **Generate → Text to image**.
 
 Describe the subject, setting, composition and style, set resolution and candidate count, then generate. Text-to-image does not use reference images. No editing selection is needed by default; selecting Current selection as the destination still requires one. Save the result as PNG or open it in a new document.
+
+![Text-to-image result: independent pink bedroom background](../../assets/guide/050-result-generate.png)
+
+Text-only generation: an independent pink-bedroom background. It does not read `3F3F3F.webp`; there is no before image.
 
 <details>
 <summary>View mode controls</summary>
@@ -216,6 +254,10 @@ Choose **Portrait → Relighting**.
 
 **The lighting illustration expresses intent, not the final result.** Lighting layers are not physical render passes and cannot guarantee unchanged detail. They require tagged sRGB RGB8/16 sources with opaque pixels in the editing area. Large structural differences stop extraction and retain the reference for inspection/export. The plugin does not silently switch to redraw or generate again; choose Full-image redraw explicitly if needed.
 
+![Relighting reference retained after failed lighting-layer extraction](../../assets/guide/050-result-relight.png)
+
+**Failed extraction:** this saved AI reference changed the structure too much, so lighting-layer extraction stopped. The reference is shown for inspection only and was not applied.
+
 If opening from the main panel fails to read the source, the workbench stays closed while retaining lights and old candidates. A failed reread inside an open workbench explains why the old image is stale. A successful read clears the corresponding old error. Internal reopening after generation/application keeps that task's source; each candidate remains bound to its submitted snapshot.
 
 The dialog briefly closes for reading or writing and then returns. Closing it does not cancel a task; use the task's Cancel button.
@@ -231,6 +273,10 @@ Choose **Portrait → Image Blending**.
 3. Check subject lighting, color temperature, edges and style, then apply. The background is context; only the subject minus protection is edited.
 
 Blending reads the full composite and disables subject alignment and color matching. ComfyUI omits the grayscale selection guide. Real illustration samples showed visible lighting changes; photographic portraits may still change too little. This does not provide precise lighting control or guarantee unchanged faces and texture.
+
+![Blending result: darker subject in the saved stage environment](../../assets/guide/050-result-blend.png)
+
+Saved stage example: the subject becomes darker while the saved mask preserves the background. Check faces and clothing texture too; they can change.
 
 <details>
 <summary>View mode controls</summary>

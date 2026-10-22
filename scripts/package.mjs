@@ -50,6 +50,7 @@ export function environmentSourceNames(){
   const guide=[
     '050-create-zh.png','050-results-zh.png','050-history-zh.png','050-settings-zh.png','050-settings-en.png','050-relight-zh.png','050-layers-zh.png','050-selection-error-zh.png',
     ...['edit','remove','background','costume','reference','scene','effect','atmosphere','generate','blend'].map(mode=>'050-mode-'+mode+'-zh.png'),
+    ...['edit','remove','background','costume','reference','scene','effect','atmosphere','generate','relight','blend'].map(mode=>'050-result-'+mode+'.png'),
     '050-advanced-zh.png','050-models-zh.png'];
   names.push('docs/usage/USER_GUIDE.md','docs/usage/USER_GUIDE.en.md',...guide.map(name=>'assets/guide/'+name));
   const brand=['mark.svg','wordmark.svg','mark-on-dark.svg','mark-on-light.svg','mark-mono-dark.svg','mark-mono-light.svg','lockup-on-dark.svg','lockup-on-light.svg','lockup-mono-dark.svg','lockup-mono-light.svg','avatar.png','favicon.ico','wordmark-on-dark.png','overview.svg',...[16,23,24,32,46,48,64,96,128,256,512].map(n=>`icons/mark-${n}.png`),...[48,96,512].map(n=>`icons/app-${n}.png`)];
