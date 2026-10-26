@@ -113,7 +113,12 @@ export class RelightWorkbench {
   private click(id:string,fn:()=>void|Promise<void>):void {this.listen(this.el(id),'click',()=>void this.guard(()=>{this.finishInteraction();return fn();}));}
   private async guard(fn:()=>void|Promise<void>):Promise<void>{try{await fn();}catch(error){this.message(error instanceof Error?error.message:String(error),error instanceof ParameterValidationError);}}
   private message(text:string,parameter=false):void {this.measurementStatus=undefined;this.parameterStatus=parameter;this.lastStatus=errorText(text);if(this.visible)this.el('status').textContent=this.lastStatus;}
-  private geometry():RelightGeometry {const b=this.session.editor.snapshot().source.bounds,w=b.right-b.left,h=b.bottom-b.top;return {bounds:b,modelWidth:w,modelHeight:h,modelContentRect:{left:0,top:0,right:w,bottom:h}};}
+  private geometry():RelightGeometry {
+    const bounds=this.session.editor.snapshot().source.bounds,{width,height}=this.session.sourceCapture.image;
+    // Native bounds control placement; the bounded capture is the image canvas.
+    // Large documents must not be validated as full-size model rasters.
+    return {bounds,modelWidth:width,modelHeight:height,modelContentRect:{left:0,top:0,right:width,bottom:height}};
+  }
   private result():RelightResult|undefined{return this.host.results().find(r=>r.jobId===this.selectedResult);}
   private assertHostIdle():void {if(this.host.busy?.())throw new Error(t('已有任务正在进行，请等待完成后再生成或应用；可以继续编辑布光'));}
   private clearInvalid(id:string):void {this.invalid.delete(id);this.el(id).removeAttribute('aria-invalid');}

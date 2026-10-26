@@ -34,6 +34,30 @@ function slide(h:Awaited<ReturnType<typeof panelHarness>>,value:string,id='inten
   slider(h,id).value=value;h.event(`relight-${id}-slider`,'input');
 }
 
+for(const [width,height] of [[3929,5893],[9000,5000]])test(`large native ${width}x${height} capture opens a bounded workbench without changing source coordinates`,async()=>{
+  const h=await panelHarness(),captured=h.capture();
+  const bounds={left:0,top:0,right:width,bottom:height};
+  Object.assign(captured.snapshot,{width,height,bounds,mask:new Uint8Array(width*height).fill(255),captureGeometry:{kind:'relight-analysis',width:2,height:2}});
+  captured.selectionMask=captured.snapshot.mask;captured.protectionMask=new Uint8Array(width*height);
+  h.session.rebind(captured,'large-source');
+  const frozen=h.session.freeze(),historyId=frozen.capture.snapshot.historyId;
+  try{
+    await open(h);
+    assert.deepEqual(h.errors,[]);assert.equal(h.workbench.isOpen,true);
+    assert.ok(h.el('relight-image').getAttribute('src'));
+    assert.ok(h.el('relight-markers').querySelector('[data-kind="light"]'));
+    const displayedWidth=parseFloat(h.el('relight-image').style.width),displayedHeight=parseFloat(h.el('relight-image').style.height);
+    assert.ok(Math.abs(displayedWidth/displayedHeight-width/height)<1e-9,'viewport retains native aspect ratio, not analysis rounding');
+    h.click('relight-zoom-in');h.click('relight-fit');
+    h.el('relight-x').value='0.75';h.change('relight-x');
+    assert.equal(h.session.editor.snapshot().lights[0].x,.75);
+    assert.deepEqual(h.session.editor.snapshot().source.bounds,bounds);
+    assert.equal(h.session.sourceCapture.snapshot.mask,frozen.capture.snapshot.mask);
+    assert.equal(h.session.sourceCapture.snapshot.historyId,historyId);
+    assert.equal(h.pixelRequests.length,0);assert.equal(h.posts.length,0);
+  }finally{await h.close();}
+});
+
 for(const reopen of [false,true])test(`viewport recovers its initial zero-size status when delayed layout becomes valid${reopen?' after reopening':''}`,async()=>{
   const h=await panelHarness();let width=0;
   h.el('relight-viewport').getBoundingClientRect=()=>({left:20,top:100,width,height:450});
