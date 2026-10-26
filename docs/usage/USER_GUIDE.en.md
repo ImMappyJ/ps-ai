@@ -252,11 +252,11 @@ Choose **Portrait → Relighting**.
 
 **Lighting layers**, the default, estimate lighting changes from an AI reference and apply them over a native source base as a masked group. Its channels remain adjustable. **Full-image redraw** applies the model image as a masked layer; structure and texture may change.
 
-**The lighting illustration expresses intent, not the final result.** Lighting layers are not physical render passes and cannot guarantee unchanged detail. They require tagged sRGB RGB8/16 sources with opaque pixels in the editing area. Large structural differences stop extraction and retain the reference for inspection/export. The plugin does not silently switch to redraw or generate again; choose Full-image redraw explicitly if needed.
+**The lighting illustration expresses intent, not the final result.** Lighting layers prioritize soft overall brightness and color changes while keeping the original image as the content base. Low structure similarity no longer stops extraction, but major misalignment can still leave lighting patches, and hard shadows or narrow rim lights may weaken. Sources must be tagged sRGB RGB8/16 with opaque pixels in the editing area. The original AI reference remains separately exportable; extraction does not silently switch to redraw or generate again.
 
 ![Relighting reference retained after failed lighting-layer extraction](../../assets/guide/050-result-relight.png)
 
-**Failed extraction:** this saved AI reference changed the structure too much, so lighting-layer extraction stopped. The reference is shown for inspection only and was not applied.
+**Historical failure:** this saved AI reference triggered an older structure check and was not applied at the time. The current version removes that similarity gate; load the saved candidate from History to extract again without generating another image. This figure does not show the new algorithm's result.
 
 If opening from the main panel fails to read the source, the workbench stays closed while retaining lights and old candidates. A failed reread inside an open workbench explains why the old image is stale. A successful read clears the corresponding old error. Internal reopening after generation/application keeps that task's source; each candidate remains bound to its submitted snapshot.
 
