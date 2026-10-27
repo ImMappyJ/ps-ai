@@ -16,11 +16,15 @@ Select an area in Photoshop, describe a change, generate candidates and apply on
 
 Generate 1–4 candidates, compare them, then apply. Results use new layers with editable masks; original layers remain intact. One Photoshop Undo reverses one application. History lets you browse saved candidates, reuse parameters and recover interrupted tasks.
 
-![PS-AI Create panel and demonstration image](../assets/guide/050-create-zh.png)
+<p align="center">
+  <a href="../assets/guide/050-create-zh.png"><img src="../assets/guide/050-create-zh.png" width="720" alt="PS-AI Create panel and demonstration image"></a>
+</p>
 
 Relighting changes brightness, light color and direction. Arrange lights in the workbench, generate an AI reference, then layer the estimated lighting changes over the original. Select a candidate to adjust Light fidelity for strength and Detail protection for smoother fine changes, without generating again. Full-image redraw is also available.
 
-![Relighting: source, AI reference and lighting-layer composite preview](../assets/guide/050-result-relight.png)
+<p align="center">
+  <a href="../assets/guide/050-result-relight.png"><img src="../assets/guide/050-result-relight.png" width="720" alt="Relighting: source, AI reference and lighting-layer composite preview"></a>
+</p>
 
 Left to right: source, real AI reference, local lighting-layer composite preview, with warm light on the left and cool light on the right. The source combines `3F3F3F.webp` with a previously generated room background. Settings: Light fidelity 1 / Detail protection 0.65. This comparison is not a Photoshop application screenshot. See the [relighting guide](usage/USER_GUIDE.en.md#relight). Interface screenshots show 0.5.0 Portable in Photoshop 27. Click an image to view it at full size.
 

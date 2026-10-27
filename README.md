@@ -18,11 +18,15 @@
 
 每次可生成 1–4 张候选，先比较再应用。结果放在新图层和可编辑蒙版中，原图层保留；一次 Photoshop 撤销可撤回一次应用。历史记录用于查看候选、复用参数和恢复中断的任务。
 
-![PS-AI 创作界面与演示图片](assets/guide/050-create-zh.png)
+<p align="center">
+  <a href="assets/guide/050-create-zh.png"><img src="assets/guide/050-create-zh.png" width="720" alt="PS-AI 创作界面与演示图片"></a>
+</p>
 
 光影重塑用于调整画面的明暗、冷暖与光线方向。在工作台摆好灯光，生成 AI 参考，再把估计出的光照变化叠加到原图上。选中候选后，可用“光效还原”调整强度，用“细节保护”柔化细碎变化，无需再次生成。也可选择“整图重绘”。
 
-![光影重塑：原图、AI 参考与光影层合成预览](assets/guide/050-result-relight.png)
+<p align="center">
+  <a href="assets/guide/050-result-relight.png"><img src="assets/guide/050-result-relight.png" width="720" alt="光影重塑：原图、AI 参考与光影层合成预览"></a>
+</p>
 
 上图从左到右为原图、真实 AI 参考、光影层本地合成预览：左侧暖光，右侧冷光。来源是 `3F3F3F.webp` 加上已生成的房间背景；使用“光效还原 1／细节保护 0.65”。这张对比图不是 Photoshop 回填截图。操作见[光影重塑指南](docs/usage/USER_GUIDE.md#relight)。界面截图来自 Photoshop 27 中的 0.5.0 Portable，点击图片可查看大图。
 
