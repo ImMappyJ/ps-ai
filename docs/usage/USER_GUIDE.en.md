@@ -298,7 +298,7 @@ Choose **Portrait → Relighting**.
   <a href="../../assets/guide/050-relight-zh.png"><img src="../../assets/guide/050-relight-zh.png" width="720" alt="Relighting workbench showing a local lighting illustration"></a>
 </p>
 
-**Lighting layers**, the default, estimate lighting changes from an AI reference and apply them over a native source base as a masked group. Its channels remain adjustable. **Full-image redraw** applies the model image as a masked layer; structure and texture may change.
+**Lighting layers**, the default, estimate lighting changes from an AI reference and apply them directly to the image below through a masked Pass Through group, without copying the source. Its channels remain adjustable. **Full-image redraw** applies the model image as a masked layer; structure and texture may change.
 
 **The lighting illustration expresses intent, not the final result.** Lighting layers estimate brightness and light-color changes from the AI reference over the original image, favoring soft overall lighting. Select a lighting-layer candidate, then adjust the controls under Selected candidate lighting layers:
 
@@ -306,6 +306,8 @@ Choose **Portrait → Relighting**.
 | --- | --- |
 | Light fidelity | Default 1. Lower it for a weaker effect; 0 returns to the source. Reduce it first if the result is too dark or strongly colored. |
 | Detail protection | Default 0.65. Raise it to reduce fine texture changes and soften transitions; some local shadows may also fade. |
+
+The group contains only lighting layers, and its opacity controls the overall effect. You can still edit the image below, but changing the subject, background or position may require rereading and generating matching lighting. Existing groups from older versions are not changed automatically.
 
 Both range from 0 to 1 and accept precise numeric input. Release a slider or confirm a value to update locally, without generating again. Settings stay with the candidate and are reused when loading or applying it.
 
