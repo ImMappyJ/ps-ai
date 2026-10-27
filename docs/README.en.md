@@ -4,9 +4,9 @@
 
 Select an area in Photoshop, describe a change, generate candidates and apply one as a new layer. PS-AI supports local edits, background replacement, clothing and props, relighting, blending and text-to-image generation.
 
-**Current version: 0.5.0, an experimental prerelease.** Connect to local ComfyUI / Qwen-Image 2.1, or configure Nano Banana (Gemini), GPT Image (OpenAI Images) or BaiLian. Cloud services require your own API key; generation with real cloud accounts has not been validated.
+**Current version: 0.5.1, an experimental prerelease.** Connect to local ComfyUI / Qwen-Image 2.1, or configure Nano Banana (Gemini), GPT Image (OpenAI Images) or BaiLian. Cloud services require your own API key; generation with real cloud accounts has not been validated.
 
-[Download 0.5.0](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.0) · [User guide](usage/USER_GUIDE.en.md) · [ComfyUI setup](setup/COMFYUI.en.md) · [Platform setup](setup/PLATFORMS.en.md)
+[Download 0.5.1](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.1) · [User guide](usage/USER_GUIDE.en.md) · [ComfyUI setup](setup/COMFYUI.en.md) · [Platform setup](setup/PLATFORMS.en.md)
 
 ## What it does
 
@@ -38,15 +38,15 @@ ComfyUI uses a fixed Qwen 2.1 workflow; SD, SDXL and Flux are not interchangeabl
 
 ## Install a release package
 
-Choose a plugin package from the [0.5.0 release](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.0) and check its matching `.sha256` file. The environment-tools archive contains instructions and setup scripts, not ComfyUI or model weights.
+Choose a plugin package from the [0.5.1 release](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.1) and check its matching `.sha256` file. The environment-tools archive contains instructions and setup scripts, not ComfyUI or model weights.
 
 ### Option 1: CCX
 
 1. Install the Adobe Creative Cloud desktop app.
-2. Double-click `ps-ai-0.5.0-experimental.ccx` and follow Adobe's installation prompts.
+2. Double-click `ps-ai-0.5.1-experimental.ccx` and follow Adobe's installation prompts.
 3. Restart Photoshop and open **Plugins → PS-AI**.
 
-If double-clicking does nothing, extract `ps-ai-0.5.0-environment-experimental.zip` and run this from its folder:
+If double-clicking does nothing, extract `ps-ai-0.5.1-environment-experimental.zip` and run this from its folder:
 
 ```powershell
 $package = Read-Host 'Full path to the CCX file'
@@ -58,7 +58,7 @@ CCX installation is managed by Adobe. Do not open it as a Photoshop document or 
 ### Option 2: Portable folder
 
 1. Save your documents and fully quit Photoshop.
-2. Extract `ps-ai-0.5.0-portable-experimental.zip` and copy the entire `PS-AI-FOR-ME` folder into Photoshop's `Plug-ins` directory.
+2. Extract `ps-ai-0.5.1-portable-experimental.zip` and copy the entire `PS-AI-FOR-ME` folder into Photoshop's `Plug-ins` directory.
 3. Check that `manifest.json` is directly inside `Plug-ins/PS-AI-FOR-ME`, without an extra nested folder.
 4. Restart and open **Plugins → PS-AI (Portable)**.
 

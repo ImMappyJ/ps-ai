@@ -4,9 +4,9 @@
 
 在 Photoshop 里圈选、描述、生成，再把结果放回独立图层。PS-AI 支持局部修改、换背景、服装道具、布光、溶图和文字生图，不用来回导出图片。
 
-**当前版本：0.5.0，实验性预发布。** 可连接本地 ComfyUI / Qwen-Image 2.1，也提供 Nano Banana（Gemini）、GPT Image（OpenAI Images）和百炼适配。云端需要自己的 API Key，尚未完成真实账号出图验证。
+**当前版本：0.5.1，实验性预发布。** 可连接本地 ComfyUI / Qwen-Image 2.1，也提供 Nano Banana（Gemini）、GPT Image（OpenAI Images）和百炼适配。云端需要自己的 API Key，尚未完成真实账号出图验证。
 
-[下载 0.5.0](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.0) · [使用指南](docs/usage/USER_GUIDE.md) · [ComfyUI 配置](docs/setup/COMFYUI.md) · [云平台配置](docs/setup/PLATFORMS.md)
+[下载 0.5.1](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.1) · [使用指南](docs/usage/USER_GUIDE.md) · [ComfyUI 配置](docs/setup/COMFYUI.md) · [云平台配置](docs/setup/PLATFORMS.md)
 
 ## 能做什么
 
@@ -40,15 +40,15 @@ ComfyUI 使用固定的 Qwen 2.1 工作流，不能直接换成 SD、SDXL 或 Fl
 
 ## 安装发行包
 
-从 [0.5.0 Release](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.0) 下载一种插件包，并核对同名 `.sha256` 文件。环境工具包提供配置说明和安装脚本，不包含 ComfyUI 或模型权重。
+从 [0.5.1 Release](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.1) 下载一种插件包，并核对同名 `.sha256` 文件。环境工具包提供配置说明和安装脚本，不包含 ComfyUI 或模型权重。
 
 ### 方式一：CCX
 
 1. 安装 Adobe Creative Cloud 桌面应用。
-2. 双击 `ps-ai-0.5.0-experimental.ccx`，按 Adobe 提示安装。
+2. 双击 `ps-ai-0.5.1-experimental.ccx`，按 Adobe 提示安装。
 3. 重启 Photoshop，打开“增效工具 → PS-AI”。
 
-双击无反应时，解压 `ps-ai-0.5.0-environment-experimental.zip`，在解压目录运行：
+双击无反应时，解压 `ps-ai-0.5.1-environment-experimental.zip`，在解压目录运行：
 
 ```powershell
 $package = Read-Host 'CCX 文件完整路径'
@@ -60,7 +60,7 @@ powershell.exe -NoProfile -File .\scripts\install-ccx.ps1 -PackagePath $package
 ### 方式二：Portable 文件夹版
 
 1. 保存文档并完全退出 Photoshop。
-2. 解压 `ps-ai-0.5.0-portable-experimental.zip`，把整个 `PS-AI-FOR-ME` 文件夹放进 Photoshop 安装目录的 `Plug-ins`。
+2. 解压 `ps-ai-0.5.1-portable-experimental.zip`，把整个 `PS-AI-FOR-ME` 文件夹放进 Photoshop 安装目录的 `Plug-ins`。
 3. 确认 `manifest.json` 直接位于 `Plug-ins/PS-AI-FOR-ME` 下，没有多套一层文件夹。
 4. 重启，打开“增效工具 → PS-AI (Portable)”。
 

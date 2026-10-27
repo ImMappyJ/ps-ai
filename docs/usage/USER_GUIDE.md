@@ -2,7 +2,7 @@
 <h1 align="center">PS-AI 使用指南</h1>
 <p align="center"><strong>简体中文</strong> · <a href="USER_GUIDE.en.md">English</a></p>
 
-适用 **0.5.0 实验版**。先[安装插件](../../README.md#安装发行包)，再连接[ComfyUI](../setup/COMFYUI.md)或[云平台](../setup/PLATFORMS.md)。界面图来自 Photoshop 27；各模式另附真实生成结果，演示图片为 `3F3F3F.webp`。配置图与布光示意不代表模型效果。点击图片可看大图。
+适用 **0.5.1 实验版**。先[安装插件](../../README.md#安装发行包)，再连接[ComfyUI](../setup/COMFYUI.md)或[云平台](../setup/PLATFORMS.md)。界面图来自 Photoshop 27；各模式另附真实生成结果，演示图片为 `3F3F3F.webp`。配置图与布光示意不代表模型效果。点击图片可看大图。
 
 <a id="current-ui"></a>
 

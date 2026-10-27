@@ -2,7 +2,7 @@
 <h1 align="center">选择生图平台</h1>
 <p align="center"><strong>简体中文</strong> · <a href="PLATFORMS.en.md">English</a> · <a href="../../README.md">返回首页</a></p>
 
-PS-AI 0.5.0 可以连接本地 ComfyUI，也可以调用云端图片 API。云端生成需要 API Key 和模型权限，费用由平台收取。
+PS-AI 0.5.1 可以连接本地 ComfyUI，也可以调用云端图片 API。云端生成需要 API Key 和模型权限，费用由平台收取。
 
 ## 选择哪条路径
 

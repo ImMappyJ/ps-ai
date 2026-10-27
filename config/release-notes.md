@@ -4,13 +4,15 @@
 
 本版本通道：**{{CHANNEL}}**。标签对应源码：[{{SOURCE_SHA}}]({{SOURCE_URL}})。[该版本提交记录]({{COMMITS_URL}})；实际变更与贡献者由下方 GitHub 生成信息和比较链接补充。
 
-### 0.5.0 的主要变化
+### 0.5.1 的主要变化
 
-- **四个平台入口**：直接连接 ComfyUI / Qwen-Image 2.1，或选择 Nano Banana（Gemini）、GPT Image（OpenAI）、百炼及手动网关。平台适配、密钥隔离和离线协议回归已实现；没有 API Key 的真实推理与宿主流程仍待验收。
-- **创作、结果、历史、设置**四导航；人像分类承接原 COSPLAY，加入光影重塑与溶图，共十一种模式。移除杂物无需提示词；背景／场景替换选择要保留的主体，素材可明确使用图片＋选区或纯文字输入。
-- **独立布光工作台**：最多八个光源、本地布光示意与单次拖动撤销，空闲打开／重新读取当前文档保留灯光。输出分整图重绘与实验光影层；本地示意不预测模型结果，提取拒绝时保留 AI 参考检查／导出，不自动重提或改成重绘。
-- **来源、历史与大图处理**：按原 UUID 和原端点恢复任务，独立历史浏览及明确本地清理；精确来源、ICC、选区与保护校验。原文档可达 4500 万像素，超出原尺寸读取预算时使用有界工作图和原坐标条带回填，不等于模型原生生成 4500 万像素。原生 16 位数据和可选 ComfyUI PNG16 输出不代表模型有原生 16 位精度。
-- **文档与实机图片同步**：中英文操作、安装更新、数据去向及验证边界按当前源码整理，演示图片全部替换为 0.5.0 实机截图。当前操作截图使用指定 WebP 的演示副本；模式配置截图不证明模型效果，受控本地响应仅证明界面与图层操作。
+- **更完整的冷暖布光**：移除相似度拦截，使用多尺度 RGB 光照估计，在原图上保留更多明暗和光色变化。
+- **两个本地调节参数**：光效还原控制强度，细节保护柔化细碎变化；调整已保存候选无需重新生成。
+- **精简光影分组**：只创建光影层，以穿透模式作用于下方原图，不再复制冻结底图。保留组蒙版、保护区和一次撤销。
+- **修复大照片工作台**：使用受限捕获尺寸计算模型几何，避免打开时出现内容超出画布的错误。
+- **更清楚的图文指南**：更新真实冷暖布光对比，统一中英文文档图片尺寸与居中排版。
+
+验证：911 项离线测试通过；Photoshop 27 临时 RGB8/16 文档通过灰阶保护、组不透明度、下方图像编辑跟随、一次撤销和取消回滚检查。样图为真实 AI 参考与本地合成预览，不代表真人视觉质量验收。
 
 ### 已知限制
 
@@ -31,13 +33,15 @@ manifest 的最低宿主为 Photoshop **{{HOST_MINIMUM}}**。现有人工记录�
 
 Release channel: **{{CHANNEL}}**. Tagged source: [{{SOURCE_SHA}}]({{SOURCE_URL}}). [Commits at this source]({{COMMITS_URL}}); GitHub-generated changes, contributors and the actual comparison link follow below.
 
-### Main changes in 0.5.0
+### Main changes in 0.5.1
 
-- **Four platform choices:** direct ComfyUI / Qwen-Image 2.1, Nano Banana (Gemini), GPT Image (OpenAI), Bailian and a manual gateway. Adapters, isolated key handling and offline protocol regressions are implemented; live inference and host flows requiring API keys remain unverified.
-- **Create, Results, History and Settings** navigation. Portrait replaces the COSPLAY label, and relighting and blending bring the total to eleven modes. Removal uses no prompt; background/scene modes select the subject to retain. Assets explicitly choose image-plus-selection or text-only input.
-- **A separate lighting workbench:** up to eight lights, local illustrations and one local undo per gesture. Idle opening and Re-read current document retain edited lights. Choose Full-image redraw or experimental Lighting layers. Illustrations do not predict model output; rejected extraction retains the AI reference for inspection/export without automatic resubmission or redraw fallback.
-- **Source, history and large-document handling:** recover the original UUID at its saved endpoint, browse History independently and explicitly clear local records. Exact source, ICC, selection and protection checks remain. Documents up to 45 million pixels can use a bounded working raster and native-coordinate strip application; this is not native 45MP model generation. Native 16-bit data and optional ComfyUI PNG16 files do not establish native 16-bit model precision.
-- **Updated bilingual guides and genuine host images:** current source behavior, installation, upgrades, data destinations and validation limits are documented, with all demonstration images replaced by 0.5.0 host captures. Operation images use a demo copy of the designated WebP; mode-configuration captures do not establish model quality, and controlled local responses illustrate actual UI/layer operations only.
+- **Richer lighting color**: replaces the similarity gate with multiscale RGB lighting estimates over the original image.
+- **Local candidate controls**: Light fidelity adjusts strength; Detail protection smooths fine changes. Saved candidates update without another generation request.
+- **Lighting-only groups**: Pass Through groups act on the image below without a frozen source copy, retaining group masks, protection and one-step undo.
+- **Large-photo workbench fix**: model geometry uses bounded capture dimensions to avoid the content-outside-canvas error.
+- **Clearer illustrated guides**: refreshed real warm/cool lighting comparisons and consistent image sizing and alignment in both languages.
+
+Validation: 911 offline tests passed. Photoshop 27 temporary RGB8/16 documents passed grayscale protection, group opacity, underlying-image edits, single undo and cancellation rollback checks. The example uses a real AI reference and local composite preview; it is not photographic visual acceptance.
 
 ### Known limits
 

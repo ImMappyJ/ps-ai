@@ -2,7 +2,7 @@
 <h1 align="center">Choose an image platform</h1>
 <p align="center"><a href="PLATFORMS.md">简体中文</a> · <strong>English</strong> · <a href="../README.en.md">Home</a></p>
 
-PS-AI 0.5.0 connects to local ComfyUI or a cloud image API. Cloud generation needs an API key and model access; the provider handles billing.
+PS-AI 0.5.1 connects to local ComfyUI or a cloud image API. Cloud generation needs an API key and model access; the provider handles billing.
 
 ## Choose a backend
 
