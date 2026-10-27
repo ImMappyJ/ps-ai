@@ -252,13 +252,22 @@ Choose **Portrait → Relighting**.
 
 **Lighting layers**, the default, estimate lighting changes from an AI reference and apply them over a native source base as a masked group. Its channels remain adjustable. **Full-image redraw** applies the model image as a masked layer; structure and texture may change.
 
-**The lighting illustration expresses intent, not the final result.** Lighting layers estimate brightness and RGB light-color changes from the AI reference while keeping the original as the content base. Select a result to adjust Light fidelity and Detail protection. Fidelity controls lighting strength; protection reduces texture transfer and also softens some local shadows. Release a slider to update locally. Settings stay with that candidate, with no new generation.
+**The lighting illustration expresses intent, not the final result.** Lighting layers estimate brightness and light-color changes from the AI reference over the original image, favoring soft overall lighting. Select a lighting-layer candidate, then adjust the controls under Selected candidate lighting layers:
+
+| Control | How to use it |
+| --- | --- |
+| Light fidelity | Default 1. Lower it for a weaker effect; 0 returns to the source. Reduce it first if the result is too dark or strongly colored. |
+| Detail protection | Default 0.65. Raise it to reduce fine texture changes and soften transitions; some local shadows may also fade. |
+
+Both range from 0 to 1 and accept precise numeric input. Release a slider or confirm a value to update locally, without generating again. Settings stay with the candidate and are reused when loading or applying it.
 
 Lighting and redraw cannot be perfectly separated. Major offsets may leave lighting patches, and hard shadows or narrow rims may weaken. Sources must be tagged sRGB RGB8/16 with opaque editable pixels. The original AI reference remains separately exportable; extraction does not silently switch to redraw or generate again.
 
-![Relighting reference retained after failed lighting-layer extraction](../../assets/guide/050-result-relight.png)
+![3F3F3F warm and cool lighting: source, AI reference and lighting-layer composite preview](../../assets/guide/050-result-relight.png)
 
-**Historical failure:** this saved AI reference triggered an older structure check and was not applied at the time. The current version removes that similarity gate; load the saved candidate from History to extract again without generating another image. This figure does not show the new algorithm's result.
+This example uses warm light from the left and cool light from the right. Left: `3F3F3F.webp` combined with a previously generated room background. Center: a real Qwen-Image 2.1 reference. Right: the local lighting-layer composite over the source, at Light fidelity 1 / Detail protection 0.65. Compare the clothing lines, hair accessories and background to distinguish lighting changes from AI redraw. No extra color grading was added. This is not a Photoshop application screenshot or evidence of photographic portrait quality.
+
+For older candidates stopped by the former similarity check, load the saved task from History to extract again without generating another image.
 
 If opening from the main panel fails to read the source, the workbench stays closed while retaining lights and old candidates. A failed reread inside an open workbench explains why the old image is stale. A successful read clears the corresponding old error. Internal reopening after generation/application keeps that task's source; each candidate remains bound to its submitted snapshot.
 
