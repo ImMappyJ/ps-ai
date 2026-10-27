@@ -3,6 +3,7 @@ import {downsampleSnapshotMask} from '../../imaging/budget';
 import {sha256} from '@noble/hashes/sha2.js';
 import type {Capture,Snapshot} from '../../infrastructure/photoshop/photoshop';
 import {RelightEditor,createRelightScene,validateRelightScene,sceneFingerprint,compileRelightScene,type RelightScene,type RelightSource,type RelightCapabilities} from './relight-scene';
+import type {RelightExtractionSettings} from './relight-layers';
 
 export type RelightScope='selection'|'document';
 export type RelightOutputKind='lighting-layers'|'full-result';
@@ -16,6 +17,8 @@ export interface RelightTaskMetadata {
   schemaVersion:1;requestId:string;provider:string;model:string;
   capabilities:{control:'semantic';edit:boolean;maxInputImages:number;maskMode:RelightCapabilities['maskMode'];seedSupport:boolean};
   scene:RelightScene;fingerprint:string;outputKind?:RelightOutputKind;
+  /** Candidate-local extraction controls; never change the submitted scene or source authority. */
+  localExtraction?:RelightExtractionSettings;
   geometry:{bounds:Snapshot['bounds'];modelWidth:number;modelHeight:number;modelContentRect:Snapshot['bounds'];providerCanvas:'provider-owned-content-relative'|'same-as-input'};
   color:{documentProfile:string;documentMode:string;documentDepth:8|16;retainedSourceDepth:8|16;sourceRepresentation?:'native-rgba'|'host-native-analysis';modelInput:'sRGB8';outputDepth:8|16;tagPolicy:string};
   seed?:number;conflictResolution?:'structured-lighting';result?:{jobId:string;outputFile:string};

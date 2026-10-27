@@ -252,7 +252,9 @@ Choose **Portrait → Relighting**.
 
 **Lighting layers**, the default, estimate lighting changes from an AI reference and apply them over a native source base as a masked group. Its channels remain adjustable. **Full-image redraw** applies the model image as a masked layer; structure and texture may change.
 
-**The lighting illustration expresses intent, not the final result.** Lighting layers prioritize soft overall brightness and color changes while keeping the original image as the content base. Low structure similarity no longer stops extraction, but major misalignment can still leave lighting patches, and hard shadows or narrow rim lights may weaken. Sources must be tagged sRGB RGB8/16 with opaque pixels in the editing area. The original AI reference remains separately exportable; extraction does not silently switch to redraw or generate again.
+**The lighting illustration expresses intent, not the final result.** Lighting layers estimate brightness and RGB light-color changes from the AI reference while keeping the original as the content base. Select a result to adjust Light fidelity and Detail protection. Fidelity controls lighting strength; protection reduces texture transfer and also softens some local shadows. Release a slider to update locally. Settings stay with that candidate, with no new generation.
+
+Lighting and redraw cannot be perfectly separated. Major offsets may leave lighting patches, and hard shadows or narrow rims may weaken. Sources must be tagged sRGB RGB8/16 with opaque editable pixels. The original AI reference remains separately exportable; extraction does not silently switch to redraw or generate again.
 
 ![Relighting reference retained after failed lighting-layer extraction](../../assets/guide/050-result-relight.png)
 

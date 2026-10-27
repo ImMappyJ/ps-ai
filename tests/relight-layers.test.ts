@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {deriveRelightLayers,previewRelightLayers,renderRelightLayerStrip,RelightExtractionError,type RelightLayerFields} from '../src/features/relight/relight-layers';
+import * as extractionApi from '../src/features/relight/relight-layers';
 import {createRelightScene,type RelightScene} from '../src/features/relight/relight-scene';
 import {resize,convertDepth,type Raster} from '../src/imaging/image';
 
@@ -9,6 +10,70 @@ function image(pixel:(x:number,y:number)=>number|number[],depth:8|16=8):Raster{c
 function changed(source:Raster,transform:(v:number,x:number,y:number,c:number)=>number):Raster{return {...source,rgba:Uint8Array.from(source.rgba,(v,i)=>i%4===3?v:Math.round(Math.max(0,Math.min(255,transform(v,Math.floor(i/4)%W,Math.floor(Math.floor(i/4)/W),i%4)))))};}
 function peak(fields:RelightLayerFields):number{return Math.max(0,...fields.channels.map(c=>c.amount.reduce((a,b)=>Math.max(a,b),0)));}
 function maxInteriorStep(fields:RelightLayerFields):number{let largest=0;for(const c of fields.channels)for(let y=16;y<H-16;y++)for(let x=16;x<W-17;x++){const p=y*W+x;largest=Math.max(largest,Math.abs(c.amount[p+1]-c.amount[p]),Math.abs(c.amount[p+W]-c.amount[p]));}return largest;}
+function maxCompositeStep(image:Raster):number{let largest=0;for(let y=16;y<H-16;y++)for(let x=16;x<W-17;x++)for(let c=0;c<3;c++){const p=(y*W+x)*4+c;largest=Math.max(largest,Math.abs(image.rgba[p+4]-image.rgba[p]),Math.abs(image.rgba[p+W*4]-image.rgba[p]));}return largest;}
+
+test('RGB transfer retains strong broad red and blue lighting rather than compressing the tint',async()=>{
+  const source=image(()=>[120,120,120]),target=image(()=>[202,141,67]);
+  const fields=await deriveRelightLayers(source,target,scene()),preview=previewRelightLayers(source,fields);
+  for(let c=0;c<3;c++)assert.ok(Math.abs(preview.rgba[c]-target.rgba[c])<=3,`channel ${c}: ${preview.rgba[c]} versus ${target.rgba[c]}`);
+  assert.equal(fields.summary.method,'rgb-guided-v2');
+});
+
+test('middle-scale colored shading survives while original high-frequency details stay visible',async()=>{
+  const source=image((x,y)=>105+((x+y)%2)*28),target=changed(source,(v,x,_y,c)=>v*(1+Math.exp(-(((x-64)/17)**2))*(c===0?.48:c===1?-.18:-.42)));
+  const fields=await deriveRelightLayers(source,target,scene()),preview=previewRelightLayers(source,fields);
+  for(const x of [56,64,72])for(let c=0;c<3;c++){const p=(48*W+x)*4+c;assert.ok(Math.abs(preview.rgba[p]-target.rgba[p])<8,`${x},${c}: ${preview.rgba[p]} versus ${target.rgba[p]}`);}
+  assert.ok(preview.rgba[(48*W+65)*4]>preview.rgba[(48*W+64)*4]+20);
+});
+
+test('local fidelity can disable or continuously reduce the saved reference transfer',async()=>{
+  const source=image(()=>[120,120,120]),target=image(()=>[190,145,70]),s=scene();
+  const run=async(fidelity:number)=>previewRelightLayers(source,await deriveRelightLayers(source,target,s,{extraction:{fidelity,detailProtection:.65}} as any));
+  assert.ok((await run(0)).rgba.every((v,i)=>v===source.rgba[i]),'zero fidelity keeps every native source sample');const half=await run(.5),full=await run(1);
+  assert.ok(half.rgba[0]>120&&half.rgba[0]<full.rgba[0]);assert.ok(half.rgba[2]<120&&half.rgba[2]>full.rgba[2]);
+});
+
+test('detail protection reduces a narrow reference redraw without discarding broad colored light',async()=>{
+  const source=image(()=>120),target=changed(source,(v,x,_y,c)=>v*(c===0?1.3:1)+(x>=61&&x<=66?50:0));
+  const run=async(detailProtection:number)=>previewRelightLayers(source,await deriveRelightLayers(source,target,scene(),{extraction:{fidelity:1,detailProtection}} as any));
+  const loose=await run(0),protectedDetail=await run(1),p=(48*W+64)*4;
+  assert.ok(loose.rgba[p+1]>protectedDetail.rgba[p+1]+5);assert.ok(protectedDetail.rgba[0]>145);
+});
+
+test('local extraction settings default only when absent and reject malformed or unknown fields',()=>{
+  const validate=(extractionApi as any).validateRelightExtractionSettings;assert.equal(typeof validate,'function');
+  assert.deepEqual(validate(),{fidelity:1,detailProtection:.65});assert.deepEqual(validate({fidelity:0,detailProtection:1}),{fidelity:0,detailProtection:1});
+  for(const bad of [null,[],{},1,{fidelity:1},{fidelity:1,detailProtection:NaN},{fidelity:-.1,detailProtection:0},{fidelity:1,detailProtection:1.1},{fidelity:1,detailProtection:.5,extra:true}])assert.throws(()=>validate(bad));
+});
+
+test('RGB strips reproduce the local composite at native depth and retain legacy scalar fields',async()=>{
+  for(const depth of [8,16] as const){
+    const source=depth===8?image(()=>[120,150,80]):image(()=>[30001,22003,17005],16),target=depth===8?image(()=>[190,80,140]):image(()=>[45000,11000,31000],16),s=scene();s.source.documentDepth=depth;
+    const fields=await deriveRelightLayers(source,target,s),preview=previewRelightLayers(source,fields),max=depth===16?65535:255,out=source.rgba.slice();
+    for(const channel of fields.channels){const strip=renderRelightLayerStrip(fields,channel,{left:0,top:0,right:W,bottom:H},{left:0,top:0,right:W,bottom:H},depth);assert.notEqual(strip.rgba[0],strip.rgba[1],'colored fields need RGB strip samples');
+      for(let p=0;p<W*H;p++)for(let c=0;c<3;c++){const b=out[p*4+c]/max,f=strip.rgba[p*4+c]/max;out[p*4+c]=Math.round(max*(channel.blendMode==='multiply'?b*f:1-(1-b)*(1-f)));}
+    }
+    for(let p=0;p<out.length;p++)assert.ok(Math.abs(out[p]-preview.rgba[p])<=1,`depth ${depth}, sample ${p}`);
+    const legacy={...fields,channels:[{kind:'shadow' as const,blendMode:'multiply' as const,amount:new Float32Array(W*H).fill(.25),energy:.25}]};
+    assert.equal(previewRelightLayers(source,legacy).rgba[0],Math.round(source.rgba[0]*.75));
+  }
+});
+
+test('RGB channel samples remain authoritative when a legacy scalar support is zero',async()=>{
+  const source=image(()=>120),fields=await deriveRelightLayers(source,image(()=>[180,150,130]),scene());
+  const channel=fields.channels.find(c=>c.kind==='light')!;channel.amount.fill(0);
+  const preview=previewRelightLayers(source,fields),strip=renderRelightLayerStrip(fields,channel,{left:0,top:0,right:W,bottom:H},{left:0,top:0,right:W,bottom:H},8);
+  assert.ok(preview.rgba[0]>source.rgba[0]);assert.ok(strip.rgba[0]>strip.rgba[1]);
+});
+
+test('malformed RGB planes and RGB data attached to legacy COLOR are rejected before preview',async()=>{
+  const source=image(()=>120),fields=await deriveRelightLayers(source,image(()=>[180,140,130]),scene()),channel=fields.channels.find(c=>c.kind==='light')!;
+  for(const bad of [new Uint8Array(W*H*3),new Float32Array(3),new Float32Array(W*H*3).fill(NaN),new Float32Array(W*H*3).fill(1.1)]){
+    const invalid={...fields,channels:[{...channel,rgbAmount:bad}]};assert.throws(()=>previewRelightLayers(source,invalid as any),/RGB/);
+  }
+  const color={kind:'color-atmosphere' as const,blendMode:'color' as const,amount:new Float32Array(W*H).fill(.2),color:new Float32Array(W*H*3).fill(.6),rgbAmount:new Float32Array(W*H*3).fill(.2),energy:.2};
+  assert.throws(()=>previewRelightLayers(source,{...fields,channels:[color]}),/RGB/);
+});
 
 test('neutral fields create no empty channels and preserve source detail/native16 sample values',async()=>{
   const source=image((x,y)=>12345+(x+y)%17,16),before=source.rgba.slice(),s=scene();s.source.documentDepth=16;
@@ -30,10 +95,11 @@ test('Light and Shadow are independent bounded influence fields, never target ph
   for(const c of fields.channels)assert.ok(c.amount.length===W*H&&c.amount.every(v=>v>=0&&v<=1));
   const noLight={...fields,channels:fields.channels.filter(c=>c.kind!=='light')};assert.equal(previewRelightLayers(source,noLight).rgba[light],source.rgba[light]);
 });
-test('Color Atmosphere has alpha-controlled support and a measurable independent chroma effect',async()=>{
-  const source=image(()=>[120,120,120]),target=changed(source,(v,_x,_y,c)=>v*(c===0?1.15:c===2?.9:1)),fields=await deriveRelightLayers(source,target,scene());
-  assert.ok(fields.channels.some(c=>c.kind==='color-atmosphere'));
-  const colorOnly={...fields,channels:fields.channels.filter(c=>c.kind==='color-atmosphere')},preview=previewRelightLayers(source,colorOnly);
+test('legacy Color Atmosphere retains alpha-controlled support and its independent chroma effect',async()=>{
+  const source=image(()=>[120,120,120]),fields=await deriveRelightLayers(source,source,scene());
+  const color=new Float32Array(W*H*3);for(let p=0;p<W*H;p++)color.set([.7,.5,.35],p*3);
+  fields.channels=[{kind:'color-atmosphere',blendMode:'color',amount:new Float32Array(W*H).fill(.35),color,energy:.35}];fields.summary.method='soft-guided-v1';
+  const preview=previewRelightLayers(source,fields);
   assert.ok(preview.rgba[0]>preview.rgba[2]);
   const strip=renderRelightLayerStrip(fields,fields.channels.find(c=>c.kind==='color-atmosphere')!,{left:0,top:0,right:W,bottom:H},{left:0,top:0,right:W,bottom:H},8);
   assert.ok(strip.rgba[3]>0&&strip.rgba[3]<255);
@@ -51,12 +117,13 @@ test('Rim Light needs a rim scene role and a real observed edge highlight',async
 });
 test('shifted fine texture yields weak smooth fields while the original supplies all detail',async()=>{
   const source=image((x,y)=>((Math.floor(x/3)+Math.floor(y/3))%2)?210:45),target=image((x,y)=>((Math.floor((x+3)/3)+Math.floor(y/3))%2)?210:45),before=source.rgba.slice();
-  const fields=await deriveRelightLayers(source,target,scene());assert.ok(peak(fields)<.12);assert.ok(maxInteriorStep(fields)<.012);assert.deepEqual(source.rgba,before);
+  const fields=await deriveRelightLayers(source,target,scene());assert.ok(peak(fields)<.13);assert.ok(maxInteriorStep(fields)<.003);assert.deepEqual(source.rgba,before);
   const preview=previewRelightLayers(source,fields);assert.ok(preview.rgba[(48*W+33)*4]>preview.rgba[(48*W+30)*4]+120,'reference texture must not replace the original checker');
 });
 test('a changed reference boundary becomes a soft bounded field without replacing original content',async()=>{
   const source=image(()=>180),target=changed(source,(v,x,y)=>y>=20&&y<=75&&(x>=40&&x<=47||x>=80&&x<=87)||x>=40&&x<=87&&y>=44&&y<=51?40:v),s=scene();s.shadow.strength=1;
-  const fields=await deriveRelightLayers(source,target,s);assert.ok(fields.channels.length>0);assert.ok(peak(fields)<.55);assert.ok(maxInteriorStep(fields)<.035);assert.equal(source.rgba[(30*W+44)*4],180);
+  const fields=await deriveRelightLayers(source,target,s),preview=previewRelightLayers(source,fields);assert.ok(fields.channels.length>0);assert.ok(peak(fields)<1);assert.ok(maxCompositeStep(preview)<35);assert.equal(source.rgba[(30*W+44)*4],180);
+  assert.ok(preview.rgba[(30*W+40)*4]>target.rgba[(30*W+40)*4]+20,'a reference glyph boundary is softened instead of copied');
 });
 test('local reference replacements do not gate otherwise valid broad lighting or tint',async()=>{
   const source=image((x,y)=>140+((x+y)%2)*40),s=scene();s.shadow.strength=1;
@@ -74,11 +141,12 @@ test('local reference replacements do not gate otherwise valid broad lighting or
 });
 test('isoluminant reference boundaries produce bounded smooth color rather than a content rejection',async()=>{
   const source=image(()=>180),target=changed(source,(v,x,y,c)=>y>=20&&y<=75&&(x>=40&&x<=47||x>=80&&x<=87)||x>=40&&x<=87&&y>=44&&y<=51?c===1?251:0:v);
-  const fields=await deriveRelightLayers(source,target,scene());assert.ok(fields.channels.some(c=>c.kind==='color-atmosphere'));assert.ok(peak(fields)<=.45);assert.ok(maxInteriorStep(fields)<.035);
+  const fields=await deriveRelightLayers(source,target,scene()),preview=previewRelightLayers(source,fields),p=(48*W+44)*4;
+  assert.ok(fields.channels.some(c=>c.rgbAmount));assert.ok(preview.rgba[p+1]>preview.rgba[p]);assert.ok(peak(fields)<1);assert.ok(maxCompositeStep(preview)<35);
 });
 test('genuine low-frequency illumination and colored atmosphere retain source high-frequency texture',async()=>{
   const source=image((x,y)=>120+((x+y)%2)*24),target=changed(source,(v,x,y,c)=>v*(.82+.28*x/(W-1)+.03*Math.sin(y/20))*(c===0?1.06:c===2?.96:1)),s=scene();s.shadow.strength=1;
-  const fields=await deriveRelightLayers(source,target,s),preview=previewRelightLayers(source,fields);assert.ok(fields.channels.some(c=>c.kind==='light'));assert.ok(fields.channels.some(c=>c.kind==='shadow'));assert.ok(fields.channels.some(c=>c.kind==='color-atmosphere'));
+  const fields=await deriveRelightLayers(source,target,s),preview=previewRelightLayers(source,fields);assert.ok(fields.channels.some(c=>c.kind==='light'));assert.ok(fields.channels.some(c=>c.kind==='shadow'));assert.ok(fields.channels.some(c=>c.rgbAmount));
   for(const [x,y] of [[20,30],[80,50]]){const p=(y*W+x)*4;assert.ok(preview.rgba[p+4]>preview.rgba[p],'the source checker texture remains the detail source');}
 });
 test('analysis work yields, honors cancellation and refuses non-sRGB numeric field conversion',async()=>{
@@ -89,7 +157,7 @@ test('analysis work yields, honors cancellation and refuses non-sRGB numeric fie
 
 test('native16 texture beside nearly white gradients has finite identity confidence despite filter roundoff',async()=>{
   const source=image((x,y)=>x<33?(x+y)%2?65500:2000:65500+x%30,16),s=scene();s.source.documentDepth=16;
-  const fields=await deriveRelightLayers(source,convertDepth(convertDepth(source,8),16),s);assert.equal(fields.summary.method,'soft-guided-v1');assert.equal(fields.channels.length,0);
+  const fields=await deriveRelightLayers(source,convertDepth(convertDepth(source,8),16),s);assert.equal(fields.summary.method,'rgb-guided-v2');assert.equal(fields.channels.length,0);
 });
 
 test('negative variance roundoff cannot poison native16 shadow channels after confidence calculation',async()=>{
@@ -100,18 +168,18 @@ test('negative variance roundoff cannot poison native16 shadow channels after co
 test('known smooth illumination on dark colored texture survives integer quantization without importing texture',async()=>{
   const source=image((x,y)=>[8+(x*13+y*7)%80,15+(x*5+y*11)%100,20+(x*17+y*3)%150]);
   const target=changed(source,(v,x,_y,c)=>v*(.82+.28*x/(W-1))*(c===0?1.06:c===2?.96:1)),fields=await deriveRelightLayers(source,target,scene());
-  assert.equal(fields.summary.method,'soft-guided-v1');assert.ok(fields.channels.length>0);
+  assert.equal(fields.summary.method,'rgb-guided-v2');assert.ok(fields.channels.length>0);
   const preview=previewRelightLayers(source,fields);assert.ok(preview.rgba.some((v,i)=>i%4!==3&&v!==source.rgba[i]));
 });
 
 test('smooth lighting across black and clipped highlights does not create boundaries from a logarithm floor',async()=>{
   const source=image((x,y)=>[(x*13+y*7)%256,(x*5+y*11)%256,(x*17+y*3)%256]),target=changed(source,(v,x,_y,c)=>v*(.82+.28*x/(W-1))*(c===0?1.06:c===2?.96:1));
-  const fields=await deriveRelightLayers(source,target,scene());assert.ok(fields.channels.length>0);assert.equal(fields.summary.method,'soft-guided-v1');
+  const fields=await deriveRelightLayers(source,target,scene());assert.ok(fields.channels.length>0);assert.equal(fields.summary.method,'rgb-guided-v2');
 });
 
 test('known model input resampling is neutral rather than an unsupported new boundary',async()=>{
   const source=image((x,y)=>(x+y)%2?[35,120,220]:[210,65,12]),target=resize(source,120,90);
-  const fields=await deriveRelightLayers(source,target,scene());assert.equal(fields.summary.method,'soft-guided-v1');assert.equal(fields.channels.length,0);
+  const fields=await deriveRelightLayers(source,target,scene());assert.equal(fields.summary.method,'rgb-guided-v2');assert.equal(fields.channels.length,0);
 });
 
 test('normal model-grid lighting retains usable fields after interpolation of quantized colored texture',async()=>{
@@ -125,14 +193,14 @@ test('native16 source remains neutral through same-size and upsampled 8/16-bit m
   const source=image((x,y)=>[(x*1301+y*701)%65536,(x*509+y*1103)%65536,(x*1709+y*307)%65536],16),s=scene();s.source.documentDepth=16;
   for(const [width,height] of [[W,H],[256,192]])for(const depth of [8,16] as const){
     const output=convertDepth(convertDepth(resize(source,width,height),8),depth),fields=await deriveRelightLayers(source,output,s);
-    assert.equal(fields.summary.method,'soft-guided-v1');assert.equal(fields.channels.length,0);assert.deepEqual(previewRelightLayers(source,fields),source);
+    assert.equal(fields.summary.method,'rgb-guided-v2');assert.equal(fields.channels.length,0);assert.deepEqual(previewRelightLayers(source,fields),source);
   }
 });
 
 test('same-size SDR16 neutral output compares to the uploaded sRGB8 source while preserving native source samples',async()=>{
   const source=image((x,y)=>[(x*1301+y*701)%65536,(x*509+y*1103)%65536,(x*1709+y*307)%65536],16),before=source.rgba.slice(),s=scene();s.source.documentDepth=16;
   const output=convertDepth(convertDepth(source,8),16),fields=await deriveRelightLayers(source,output,s);
-  assert.equal(fields.summary.method,'soft-guided-v1');assert.equal(fields.channels.length,0);assert.deepEqual(previewRelightLayers(source,fields),source);assert.deepEqual(source.rgba,before);
+  assert.equal(fields.summary.method,'rgb-guided-v2');assert.equal(fields.channels.length,0);assert.deepEqual(previewRelightLayers(source,fields),source);assert.deepEqual(source.rgba,before);
 });
 
 test('sRGB8 input projection cannot turn native16 semitransparency into an opaque editable source',async()=>{
@@ -140,10 +208,11 @@ test('sRGB8 input projection cannot turn native16 semitransparency into an opaqu
   await assert.rejects(deriveRelightLayers(source,convertDepth(convertDepth(source,8),16),s),/结构|透明/);
 });
 
-test('a genuine frame-spanning colored shadow creates independent shadow and color fields',async()=>{
+test('a genuine frame-spanning colored shadow retains independent RGB attenuation',async()=>{
   const source=image(()=>180),target=changed(source,(v,x,_y,c)=>x<W/2?v*(c===0?.65:c===1?.8:.9):v),s=scene();s.shadow.strength=1;
-  const fields=await deriveRelightLayers(source,target,s);assert.ok(fields.channels.some(c=>c.kind==='shadow'));assert.ok(fields.channels.some(c=>c.kind==='color-atmosphere'));
-  assert.ok(previewRelightLayers(source,fields).rgba[(48*W+20)*4]<source.rgba[(48*W+20)*4]);
+  const fields=await deriveRelightLayers(source,target,s);assert.ok(fields.channels.some(c=>c.kind==='shadow'&&c.rgbAmount));
+  const preview=previewRelightLayers(source,fields),p=(48*W+20)*4;assert.ok(preview.rgba[p]<preview.rgba[p+1]&&preview.rgba[p+1]<preview.rgba[p+2]);
+  for(let c=0;c<3;c++)assert.ok(Math.abs(preview.rgba[p+c]-target.rgba[p+c])<3);
 });
 
 test('resampled black or colored reference boundaries succeed as bounded soft lighting',async()=>{
@@ -153,14 +222,14 @@ test('resampled black or colored reference boundaries succeed as bounded soft li
       if(i%4===3)return v;const x=Math.floor(i/4)%120,y=Math.floor(Math.floor(i/4)/120),letter=y>=20&&y<=70&&(x>=35&&x<=42||x>=75&&x<=82)||x>=35&&x<=82&&y>=42&&y<=49;
       return letter?(colored?i%4===1?251:0:0):v;
     })};
-    const fields=await deriveRelightLayers(source,target,scene());assert.ok(fields.channels.length>0);assert.ok(peak(fields)<=.55);assert.ok(maxInteriorStep(fields)<.035);
+    const fields=await deriveRelightLayers(source,target,scene());assert.ok(fields.channels.length>0);assert.ok(peak(fields)<1);assert.ok(maxCompositeStep(previewRelightLayers(source,fields))<35);
   }
 });
 
 test('context and protection never supply observations while inside changes remain usable',async()=>{
   const source=image(()=>180),target=changed(source,(v,x,y)=>x>80&&x<112&&y>20&&y<70?40:v),mask=new Uint8Array(W*H);
   for(let y=0;y<H;y++)mask.fill(255,y*W,y*W+48);
-  const fields=await deriveRelightLayers(source,target,scene(),{editMask:mask});assert.equal(fields.summary.method,'soft-guided-v1');assert.equal(fields.channels.length,0);
+  const fields=await deriveRelightLayers(source,target,scene(),{editMask:mask});assert.equal(fields.summary.method,'rgb-guided-v2');assert.equal(fields.channels.length,0);
   const inside=changed(source,(v,x,y)=>x>15&&x<35&&y>20&&y<70?40:v);
   assert.ok((await deriveRelightLayers(source,inside,scene(),{editMask:mask})).channels.length>0);
 });
@@ -175,7 +244,7 @@ test('excluded model pixels adjacent to a narrow feathered scope cannot enter ed
         return excluded?(Array.isArray(outside)?outside[i%4]:outside):v;
       })},output=convertDepth(changed,depth),rawBefore=output.rgba.slice();
       const fields=await deriveRelightLayers(source,output,scene(),{editMask:mask});
-      assert.equal(fields.summary.method,'soft-guided-v1');assert.equal(fields.channels.length,0);assert.deepEqual(previewRelightLayers(source,fields),source);
+      assert.equal(fields.summary.method,'rgb-guided-v2');assert.equal(fields.channels.length,0);assert.deepEqual(previewRelightLayers(source,fields),source);
       assert.deepEqual(mask,before);assert.deepEqual(output.rgba,rawBefore);
     }
   }
@@ -193,9 +262,9 @@ test('narrow scope resampling retains real inside lighting without baking feathe
   assert.ok((await deriveRelightLayers(source,target(true),s,{editMask:mask})).channels.length>0);
 });
 
-test('new summaries identify soft extraction without fabricating historical similarity scores',async()=>{
+test('new summaries identify RGB extraction without fabricating historical similarity scores',async()=>{
   const fields=await deriveRelightLayers(image(()=>120),image(()=>144),scene());
-  assert.equal(fields.summary.method,'soft-guided-v1');assert.equal(Object.prototype.hasOwnProperty.call(fields.summary,'structureConfidence'),false);assert.equal(Object.prototype.hasOwnProperty.call(fields.summary,'rejectedFraction'),false);
+  assert.equal(fields.summary.method,'rgb-guided-v2');assert.equal(Object.prototype.hasOwnProperty.call(fields.summary,'structureConfidence'),false);assert.equal(Object.prototype.hasOwnProperty.call(fields.summary,'rejectedFraction'),false);
   for(const reason of ['structure-mismatch','unsupported-boundary'] as const){const old=new RelightExtractionError(reason,{structureConfidence:.3,rejectedFraction:.7,boundaryPixels:21});assert.equal(old.code,'relight-extraction');assert.deepEqual(old.metrics,{structureConfidence:.3,rejectedFraction:.7,boundaryPixels:21});}
 });
 
@@ -207,7 +276,8 @@ test('small uncorrelated noise remains weak rather than being normalized into a 
 test('broad illumination survives without source checker texture being reimprinted into the field',async()=>{
   const source=image((x,y)=>110+((x+y)%2)*30),target=changed(source,(v,x)=>v*(.75+.55*x/(W-1))),s=scene();s.shadow.strength=1;
   const fields=await deriveRelightLayers(source,target,s),preview=previewRelightLayers(source,fields),dark=(48*W+16)*4,light=(48*W+110)*4;
-  assert.ok(source.rgba[dark]-preview.rgba[dark]>12);assert.ok(preview.rgba[light]-source.rgba[light]>12);assert.ok(maxInteriorStep(fields)<.012);
+  assert.ok(source.rgba[dark]-preview.rgba[dark]>12);assert.ok(preview.rgba[light]-source.rgba[light]>12);
+  for(let y=16;y<H-16;y++)for(let x=16;x<W-16;x++){const p=(y*W+x)*4;assert.ok(Math.abs(preview.rgba[p]-target.rgba[p])<4,'smooth transfer must retain the original checker response');}
 });
 
 test('near-black source and extreme illumination stay finite and smoothly bounded',async()=>{
@@ -239,6 +309,7 @@ test('fine source texture alone cannot manufacture a rim or cast receiver from b
   for(const gain of [.8,1.2]){
     const fields=await deriveRelightLayers(source,changed(source,v=>v*gain),s);
     for(const c of fields.channels)if(c.kind==='rim-light'||c.kind==='cast-shadow')for(let y=16;y<H-16;y++)for(let x=16;x<W-16;x++)assert.ok(c.amount[y*W+x]<.002,`${c.kind} invented from fine texture at ${x},${y}`);
-    assert.ok(maxInteriorStep(fields)<.006);
+    const preview=previewRelightLayers(source,fields),target=changed(source,v=>v*gain);
+    for(let y=16;y<H-16;y++)for(let x=16;x<W-16;x++){const p=(y*W+x)*4;assert.ok(Math.abs(preview.rgba[p]-target.rgba[p])<3,'encoded fields reconstruct smooth gain on original fine texture');}
   }
 });

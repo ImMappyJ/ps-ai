@@ -106,3 +106,23 @@ test('lighting history rejects a changed native source depth or quantized source
   (f.record.relight as any).scene.source.documentDepth=16;
   await assert.rejects(prepareCandidate(f.record,encodePng(f.image),f.read),/来源|source|光影|lighting/i);
 });
+
+test('saved local extraction settings drive both candidate preview and application without changing source authority',async()=>{
+  const f=fixture('lighting-layers'),target={...f.image,rgba:f.image.rgba.slice()};
+  for(let p=0;p<target.width*target.height;p++){target.rgba[p*4]+=40;target.rgba[p*4+2]+=25;}
+  (f.record.relight as any).localExtraction={fidelity:0,detailProtection:.8};
+  const saved=JSON.stringify(f.record),bytes=encodePng(target),candidate=await prepareCandidate(f.record,bytes,f.read);
+  assert.deepEqual(candidate.image.rgba,f.image.rgba,'zero fidelity retains the source in the displayed candidate');
+  const applied=await prepareLightingLayerApplication(f.record,bytes,f.read);
+  const {previewRelightLayers}=await import('../src/features/relight/relight-layers');
+  assert.deepEqual(previewRelightLayers(applied.source,applied.fields).rgba,candidate.image.rgba,'apply derives exactly the saved preview settings');
+  assert.equal(JSON.stringify(f.record),saved);
+});
+
+test('invalid saved extraction settings fail closed before source pixels are read',async()=>{
+  for(const localExtraction of [null,{fidelity:2,detailProtection:.5},{fidelity:.5,detailProtection:.5,invented:true}]){
+    const f=fixture('lighting-layers');(f.record.relight as any).localExtraction=localExtraction;const reads:string[]=[];
+    await assert.rejects(prepareCandidate(f.record,encodePng(f.image),async name=>{reads.push(name);return f.read(name);}),/参数|extraction|settings|光影/i);
+    assert.equal(reads.includes(`${id}-source.png`),false);
+  }
+});

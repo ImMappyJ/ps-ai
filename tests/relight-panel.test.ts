@@ -628,3 +628,89 @@ test('a queued second open cannot expose the stale workbench or steal a pending 
   release();await h.wait();assert.equal(h.el('relight-dialog').hasAttribute('open'),false);assert.equal(h.el('diagnostic-box').style.display,'block');assert.match(h.el('diagnostic-summary').textContent,/source read failed/);assert.equal(JSON.parse(String(h.files['relight-draft.json'])).scene.source.snapshotId,before.source.snapshotId);assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);
  }finally{release();await h.wait();await h.close();}
 });
+test('candidate extraction controls commit once at gesture end, retain the original UUID and never submit',async()=>{
+  const source={width:2,height:2,rgba:new Uint8Array([50,80,110,255,70,90,130,255,90,100,140,255,100,120,150,255])};
+  const h=await panelHarness({source});try{
+    await open(h);assert.ok(h.el('relight-fidelity-slider'),'local result controls must exist');
+    assert.equal(h.el('relight-fidelity-slider').disabled,true);h.click('relight-generate');await h.wait();
+    const original=h.records()[0],metadata=original.relight as any,savedScene=JSON.stringify(metadata.scene),fingerprint=metadata.fingerprint,raw=(h.files[original.outputFile as string] as Uint8Array).slice();
+    assert.equal(h.el('relight-fidelity-slider').disabled,false);assert.equal(h.el('relight-fidelity').value,'1');assert.equal(h.el('relight-detail-protection').value,'0.65');
+    h.el('relight-fidelity-slider').value='.6';h.event('relight-fidelity-slider','input');h.el('relight-fidelity-slider').value='0';h.event('relight-fidelity-slider','input');
+    const writes=h.fileWrites.length;await new Promise(r=>setTimeout(r,30));assert.equal(h.fileWrites.length,writes,'intermediate slider events do not write local files');
+    assert.equal(h.el('relight-fidelity').value,'0');assert.equal((h.records()[0].relight as any).localExtraction,undefined);
+    h.change('relight-fidelity-slider');await h.wait();const adjusted=h.records()[0];
+    assert.deepEqual((adjusted.relight as any).localExtraction,{fidelity:0,detailProtection:.65});assert.equal(adjusted.id,original.id);assert.equal(JSON.stringify((adjusted.relight as any).scene),savedScene);assert.equal((adjusted.relight as any).fingerprint,fingerprint);
+    assert.deepEqual(h.files[original.outputFile as string],raw);assert.equal(h.posts.length,1);assert.equal(h.uploads.length,2);assert.equal(h.gatewayPosts.length,0);
+    const preview=h.el('relight-image').getAttribute('src');h.click('relight-close');await new Promise(r=>setTimeout(r,20));h.selectHistory(adjusted.id);h.click('load-history');await h.wait();
+    h.click('open-relight');await new Promise(r=>setTimeout(r,70));const button=h.el('relight-result-list').querySelector('button');button.id='saved-extraction-result';h.click('saved-extraction-result');
+    assert.equal(h.el('relight-fidelity').value,'0');assert.equal(h.el('relight-image').getAttribute('src'),preview);assert.equal(h.posts.length,1);
+  }finally{await h.close();}
+});
+
+test('local extraction failure preserves useful preview, settings and original files',async()=>{
+  const h=await panelHarness();try{
+    await open(h);h.click('relight-generate');await h.wait();const record=h.records()[0],name=record.outputFile as string,saved=JSON.stringify(record),raw=h.files[name],preview=h.el('relight-image').getAttribute('src');
+    h.files[name]=encodePng({width:32,height:32,rgba:new Uint8Array(32*32*4)});
+    h.el('relight-detail-protection').value='.9';h.change('relight-detail-protection');await h.wait();
+    assert.equal(JSON.stringify(h.records()[0]),saved);assert.equal(h.el('relight-image').getAttribute('src'),preview);assert.equal(h.el('relight-detail-protection').value,'0.65');assert.match(h.el('relight-status').textContent,/失败.*保留/);assert.equal(h.el('relight-apply').disabled,false);
+    h.files[name]=raw;h.failMoves.add('history.json');h.el('relight-detail-protection').value='.9';h.change('relight-detail-protection');await h.wait();
+    assert.equal(JSON.stringify(h.records()[0]),saved);assert.equal(h.el('relight-image').getAttribute('src'),preview);assert.equal(h.el('relight-detail-protection').value,'0.65');assert.match(h.el('relight-status').textContent,/失败.*保留/);h.failMoves.delete('history.json');assert.equal(h.posts.length,1);assert.equal(h.uploads.length,2);
+  }finally{await h.close();}
+});
+
+test('pending generation disables extraction of an already selected lighting candidate',async()=>{
+  const h=await panelHarness();try{
+    await open(h);h.click('relight-generate');await h.wait();const first=h.records()[0];assert.equal(h.el('relight-fidelity').disabled,false);
+    h.setJobStatus('running');h.click('relight-generate');await new Promise(r=>setTimeout(r,120));assert.equal(h.posts.length,2);assert.equal(h.el('relight-fidelity').disabled,true);assert.equal(h.el('relight-detail-protection-slider').disabled,true);
+    h.el('relight-fidelity').value='.1';h.change('relight-fidelity');assert.equal((h.records().find(r=>r.id===first.id)!.relight as any).localExtraction,undefined);
+    h.setJobStatus('ready');await h.wait();assert.equal(h.el('relight-fidelity').disabled,false);assert.equal(h.el('relight-fidelity').value,'1');
+  }finally{h.setJobStatus('ready');await h.close();}
+});
+
+for(const abandon of ['selection','close'] as const)test(`an extraction abandoned by ${abandon} before persistence cannot replace or save a candidate`,async()=>{
+  const h=await panelHarness();try{
+    await open(h);h.click('relight-generate');await h.wait();const first=h.records()[0];h.click('relight-generate');await h.wait();const second=h.records()[0];
+    const select=(id:string)=>{const button=h.el('relight-result-list').querySelector(`[data-job-id="${id}"]`);button.id='choose-extraction-result';h.click('choose-extraction-result');};
+    select(first.id);h.holdFileRead(first.outputFile as string);const saved=JSON.stringify(h.records());h.el('relight-fidelity').value='.3';h.change('relight-fidelity');await new Promise(r=>setTimeout(r,20));
+    assert.equal(h.el('relight-fidelity').disabled,true);
+    if(abandon==='selection')select(second.id);else h.click('relight-close');
+    h.releaseFileRead(first.outputFile as string);await h.wait();assert.equal(JSON.stringify(h.records()),saved);assert.equal(h.posts.length,2);assert.equal(h.uploads.length,4);
+    if(abandon==='selection'){assert.equal(h.el('relight-result-list').querySelector('.active').getAttribute('data-job-id'),second.id);assert.equal(h.el('relight-fidelity').value,'1');}
+    else assert.equal(h.el('relight-dialog').hasAttribute('open'),false);
+  }finally{await h.close();}
+});
+
+test('a selection change after extraction persistence begins keeps that selection and each candidate settings',async()=>{
+  const h=await panelHarness();try{
+    await open(h);h.click('relight-generate');await h.wait();const first=h.records()[0];h.click('relight-generate');await h.wait();const second=h.records()[0];
+    const choose=(id:string)=>{const button=h.el('relight-result-list').querySelector(`[data-job-id="${id}"]`);button.id='choose-extraction-result';h.click('choose-extraction-result');};
+    choose(first.id);const mainSelection=h.el('candidate-select').value;h.holdFileWrite('history.json.tmp');const writes=h.fileWrites.length;h.el('relight-fidelity').value='.25';h.change('relight-fidelity');
+    for(let i=0;i<80&&!h.fileWrites.slice(writes).includes('history.json.tmp');i++)await new Promise(r=>setTimeout(r,10));
+    assert.ok(h.fileWrites.slice(writes).includes('history.json.tmp'),'extraction reached the metadata commit');choose(second.id);const preview=h.el('relight-image').getAttribute('src');h.releaseFileWrite('history.json.tmp');await h.wait();
+    assert.equal(h.el('relight-result-list').querySelector('.active').getAttribute('data-job-id'),second.id);assert.equal(h.el('relight-fidelity').value,'1');assert.equal(h.el('relight-image').getAttribute('src'),preview);
+    assert.equal(h.el('candidate-select').value,mainSelection,'late completion does not select its original main-panel candidate');
+    assert.deepEqual((h.records().find(r=>r.id===first.id)!.relight as any).localExtraction,{fidelity:.25,detailProtection:.65});assert.equal((h.records().find(r=>r.id===second.id)!.relight as any).localExtraction,undefined);
+    choose(first.id);assert.equal(h.el('relight-fidelity').value,'0.25');assert.equal(h.posts.length,2);
+  }finally{h.releaseFileWrite('history.json.tmp');await h.close();}
+});
+
+test('local extraction gestures cancel with Escape and saved settings stay isolated between candidates',async()=>{
+  const h=await panelHarness();try{
+    await open(h);h.click('relight-generate');await h.wait();const first=h.records()[0];
+    const saved=JSON.stringify(h.records()),writes=h.fileWrites.length;h.event('relight-fidelity-slider','pointerdown',{button:0,pointerId:17});h.el('relight-fidelity-slider').value='.2';h.event('relight-fidelity-slider','input');h.event('relight-fidelity-slider','keydown',{key:'Escape'});h.event('relight-fidelity-slider','pointerup',{pointerId:17});await new Promise(r=>setTimeout(r,25));
+    assert.equal(h.el('relight-fidelity').value,'1');assert.equal(JSON.stringify(h.records()),saved);assert.equal(h.fileWrites.length,writes);
+    h.el('relight-detail-protection').value='1.5';h.change('relight-detail-protection');await h.wait();assert.equal(h.el('relight-detail-protection').value,'1');assert.deepEqual((h.records()[0].relight as any).localExtraction,{fidelity:1,detailProtection:1});
+    h.click('relight-generate');await h.wait();assert.equal(h.el('relight-detail-protection').value,'0.65');const next=h.records()[0];assert.notEqual(next.id,first.id);
+    const button=h.el('relight-result-list').querySelector(`[data-job-id="${first.id}"]`);button.id='first-local-settings';h.click('first-local-settings');assert.equal(h.el('relight-detail-protection').value,'1');assert.equal(h.posts.length,2);
+    h.el('relight-fidelity').value='';h.change('relight-fidelity');await h.wait();assert.equal(h.el('relight-fidelity').value,'1');assert.match(h.el('relight-status').textContent,/有限数值/);
+  }finally{await h.close();}
+});
+
+test('local extraction controls and failure feedback are translated without changing the frozen scene',async()=>{
+  const h=await panelHarness({settings:{...defaultSettings(),language:'en-US'}});try{
+    await open(h);h.click('relight-generate');await h.wait();const record=h.records()[0],scene=JSON.stringify((record.relight as any).scene);
+    assert.equal(h.el('relight-fidelity-slider').getAttribute('aria-label'),'Light fidelity');assert.equal(h.el('relight-detail-protection').getAttribute('aria-label'),'Precise value: Detail protection');
+    h.files[record.outputFile as string]=encodePng({width:32,height:32,rgba:new Uint8Array(32*32*4)});h.el('relight-fidelity').value='.5';h.change('relight-fidelity');await h.wait();
+    assert.match(h.el('relight-status').textContent,/Local adjustment failed.*retained/);assert.doesNotMatch(h.el('relight-status').textContent,/[一-龥]/);assert.equal(JSON.stringify((h.records()[0].relight as any).scene),scene);assert.equal(h.posts.length,1);
+  }finally{await h.close();}
+});

@@ -7,13 +7,24 @@ export interface RelightFieldChannel {
   kind:RelightChannelKind;blendMode:'multiply'|'color'|'screen';
   /** Multiply: 1-amount. Screen: amount. Color: amount is alpha, never a neutral RGB. */
   amount:Float32Array;color?:Float32Array;energy:number;
+  /** Independent RGB Multiply/Screen amounts override the legacy scalar; new extraction stores their maximum in amount. */
+  rgbAmount?:Float32Array;
 }
 export interface RelightLayerFields {
   version:'relight-fields-v1';width:number;height:number;source:RelightSource;sceneFingerprint:string;
   guide:Float32Array;channels:RelightFieldChannel[];
-  summary:{method?:'soft-guided-v1';/** Historical summaries only; new extraction does not compare structure. */structureConfidence?:number;rejectedFraction?:number;clippedFraction:number;warnings:string[];channels:Record<RelightChannelKind,'present'|'not-observed'|'no-rim-light'|'no-reliable-receiver'>};
+  summary:{method?:'soft-guided-v1'|'rgb-guided-v2';/** Historical summaries only; new extraction does not compare structure. */structureConfidence?:number;rejectedFraction?:number;clippedFraction:number;warnings:string[];channels:Record<RelightChannelKind,'present'|'not-observed'|'no-rim-light'|'no-reliable-receiver'>};
 }
-export interface RelightLayersOptions {signal?:AbortSignal;yieldControl?:()=>Promise<void>;editMask?:Uint8Array}
+export interface RelightExtractionSettings {fidelity:number;detailProtection:number}
+export const DEFAULT_RELIGHT_EXTRACTION:Readonly<RelightExtractionSettings>=Object.freeze({fidelity:1,detailProtection:.65});
+export function validateRelightExtractionSettings(value?:unknown):RelightExtractionSettings {
+  if(value===undefined)return {...DEFAULT_RELIGHT_EXTRACTION};
+  if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(k=>k!=='fidelity'&&k!=='detailProtection'))throw new Error('光影提取设置无效');
+  const v=value as Record<string,unknown>;
+  for(const key of ['fidelity','detailProtection'])if(typeof v[key]!=='number'||!Number.isFinite(v[key])||v[key]<0||v[key]>1)throw new Error('光影提取设置须为 0–1 的有限数值');
+  return {fidelity:v.fidelity as number,detailProtection:v.detailProtection as number};
+}
+export interface RelightLayersOptions {signal?:AbortSignal;yieldControl?:()=>Promise<void>;editMask?:Uint8Array;extraction?:RelightExtractionSettings}
 export type RelightExtractionReason='structure-mismatch'|'unsupported-boundary';
 export interface RelightExtractionMetrics {structureConfidence?:number;rejectedFraction?:number;boundaryPixels?:number}
 export class RelightExtractionError extends Error {
@@ -132,28 +143,33 @@ async function guided(values:Float32Array,guide:Float32Array,width:number,height
   for(let p=0;p<values.length;p++)product[p]=support[p]?meanA[p]*guide[p]+meanB[p]:0;
   return product;
 }
-/** Continuous weak-noise suppression and extreme compression, no peak normalization. */
-function softChange(value:number,threshold:number,limit:number):number {
-  const magnitude=Math.abs(value),weak=1-Math.exp(-((magnitude/threshold)**2));
-  return limit*Math.tanh(value*weak/limit);
-}
-/** The uploaded source is sRGB8, even when the saved source/output is16-bit.
- * Remove only that half-code uncertainty before measuring illumination. This
- * keeps an identical native16 return neutral, including near-black samples.
+const linear=(v:number)=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4;
+const encoded=(v:number)=>v<=.0031308?v*12.92:1.055*v**(1/2.4)-.055;
+const BLACK_FLOOR=.0005,MAX_LOG_GAIN=Math.log(32);
+
+/** Filter linear RGB before division so displaced dark texture cannot dominate
+ * a log-ratio average. All scales use the same binary authorized support.
+ * The fine band is optional; middle-scale shading survives the default setting.
  */
-function logChange(from:number,to:number):number {
-  const delta=to-from,adjusted=from+Math.sign(delta)*Math.max(0,Math.abs(delta)-.5/255);
-  return Math.log(.02+Math.max(0,adjusted))-Math.log(.02+Math.max(0,from));
+async function multiscaleRatio(from:Float32Array,to:Float32Array,width:number,height:number,pause:()=>Promise<void>,support:Uint8Array,detailProtection:number):Promise<Float32Array> {
+  const short=Math.min(width,height),radii=[Math.max(1,Math.round(short/160)),Math.max(2,Math.round(short/42)),Math.max(3,Math.round(short/14))];
+  const fine=.4*(1-detailProtection)**3,broad=.1+.3*detailProtection,weights=[fine,1-fine-broad,broad],out=new Float32Array(from.length);
+  for(let band=0;band<radii.length;band++){
+    if(!weights[band])continue;const radius=radii[band];
+    const lowFrom=await blur(await blur(from,width,height,radius,pause,support),width,height,radius,pause,support),lowTo=await blur(await blur(to,width,height,radius,pause,support),width,height,radius,pause,support);
+    for(let p=0;p<out.length;p++)if(support[p])out[p]+=weights[band]*Math.log((Math.max(0,lowTo[p])+BLACK_FLOOR)/(Math.max(0,lowFrom[p])+BLACK_FLOOR));
+  }
+  return out;
 }
 
 /**
- * The reference supplies broad illumination/color and source pixels supply all
- * detail. Low-frequency RGB estimates, source-guided smoothing and continuous
- * compression soften structural offsets. This cannot recover physical lighting
- * or remove all broad mismatch artifacts.
+ * The reference supplies multiscale linear RGB lighting ratios; the frozen
+ * source supplies content. Only dark/unstable ratios and out-of-gamut results
+ * are bounded. Broad colored lighting is not globally compressed. This cannot
+ * recover physical lighting or remove all broad mismatch artifacts.
  */
 export async function deriveRelightLayers(source:Raster,target:Raster,scene:RelightScene,options:RelightLayersOptions={}):Promise<RelightLayerFields> {
-  raster(source);raster(target);const s=validateRelightScene(scene);if(!isSrgb(s.source.profile)||!['rgb','rgbcolor','rgbcolormode'].includes(s.source.documentMode.toLowerCase()))throw new Error('实验光影层目前需要已标记的 sRGB RGB 8/16 位原文档；其他颜色空间可明确选择整图重绘');
+  raster(source);raster(target);const s=validateRelightScene(scene),extraction=validateRelightExtractionSettings(options.extraction);if(!isSrgb(s.source.profile)||!['rgb','rgbcolor','rgbcolormode'].includes(s.source.documentMode.toLowerCase()))throw new Error('实验光影层目前需要已标记的 sRGB RGB 8/16 位原文档；其他颜色空间可明确选择整图重绘');
   let lastYield=Date.now();
   const pause=async()=>{check(options.signal);if(options.yieldControl)await options.yieldControl();else if(Date.now()-lastYield>=12){await new Promise<void>(resolve=>setTimeout(resolve,0));lastYield=Date.now();}check(options.signal);};check(options.signal);
   const size=planRelightMemory(source.width,source.height,source.rgba instanceof Uint16Array?16:8),base=source.width===size.width&&source.height===size.height?source:resize(source,size.width,size.height),width=base.width,height=base.height,n=width*height;
@@ -172,58 +188,63 @@ export async function deriveRelightLayers(source:Raster,target:Raster,scene:Reli
   }
   if(transparent/n>.05)throw new Error('AI 光影参考含明显透明或缺失区域；无法提取可靠照明，原始输出已保留');
   if(!visible||!observed)throw new Error('原图没有可提取照明的不透明编辑像素；请检查选区与透明度');
-  const radius=Math.max(2,Math.round(Math.min(width,height)/14)),smoothRadius=Math.max(2,Math.round(radius*.75)),chromaRadius=Math.max(3,Math.round(radius*1.6));
-  const meanBase=new Float32Array(n),meanTarget=new Float32Array(n),chroma:Float32Array[]=[];
-  // Smooth RGB before logs: log-ratio averages amplify shifted dark texture.
+  const radius=Math.max(2,Math.round(Math.min(width,height)/14)),smoothRadius=Math.max(1,Math.round(Math.min(width,height)/160)),rawGuide=new Float32Array(n);
+  for(let p=0;p<n;p++)rawGuide[p]=luminance(comparison.rgba[p*4]/max,comparison.rgba[p*4+1]/max,comparison.rgba[p*4+2]/max);
+  const guide=await blur(await blur(rawGuide,width,height,radius,pause,support),width,height,radius,pause,support),ratios:Float32Array[]=[];
+  // The model sees sRGB8. Ignore only its half-code uncertainty, including an
+  // identical native16 return; never quantize the content that will be applied.
   for(let c=0;c<3;c++){
-    const from=new Float32Array(n),to=new Float32Array(n),weight=[.2126,.7152,.0722][c];
-    for(let p=0;p<n;p++){from[p]=comparison.rgba[p*4+c]/max;to[p]=result.rgba[p*4+c]/targetMax;}
-    const lowBase=await blur(await blur(from,width,height,radius,pause,support),width,height,radius,pause,support),lowTarget=await blur(await blur(to,width,height,radius,pause,support),width,height,radius,pause,support),delta=new Float32Array(n);
-    for(let p=0;p<n;p++){meanBase[p]+=weight*lowBase[p];meanTarget[p]+=weight*lowTarget[p];delta[p]=logChange(lowBase[p],lowTarget[p]);}
-    chroma.push(delta);
+    const from=new Float32Array(n),to=new Float32Array(n);
+    for(let p=0;p<n;p++){const a=comparison.rgba[p*4+c]/max,b=result.rgba[p*4+c]/targetMax,delta=b-a;from[p]=linear(a);to[p]=linear(a+Math.sign(delta)*Math.max(0,Math.abs(delta)-.5/255));}
+    const values=await multiscaleRatio(from,to,width,height,pause,support,extraction.detailProtection);
+    ratios.push(await guided(values,guide,width,height,smoothRadius,pause,support));
   }
-  const guide=meanBase,raw=new Float32Array(n);let clipped=0;
-  for(let p=0;p<n;p++){
-    raw[p]=logChange(meanBase[p],meanTarget[p]);
-    for(let c=0;c<3;c++)chroma[c][p]-=raw[p];
-    if(support[p]&&Math.abs(raw[p])>.7)clipped++;
-  }
-  const illumination=await blur(await guided(raw,guide,width,height,smoothRadius,pause,support),width,height,Math.max(1,Math.round(smoothRadius/2)),pause,support);
-  for(let c=0;c<3;c++)chroma[c]=await blur(await guided(chroma[c],guide,width,height,chromaRadius,pause,support),width,height,Math.max(2,smoothRadius),pause,support);
-  const amounts={shadow:new Float32Array(n),'cast-shadow':new Float32Array(n),'color-atmosphere':new Float32Array(n),light:new Float32Array(n),'rim-light':new Float32Array(n)},color=new Float32Array(n*3);
+  // Output arrays are allocated only after filtering: four RGB planes (48 B/p),
+  // scalar supports (16), ratios (12), guide/edge (8), support (1), model-grid
+  // rasters plus optional sRGB8 projection (<=20), source (<=8), raw guide (4):
+  // <=117 B/analysis pixel, excluding the existing model-transport reserve.
+  // Sequential filter temporaries peak below this output phase, within128 B/p.
+  const amounts={shadow:new Float32Array(n),'cast-shadow':new Float32Array(n),light:new Float32Array(n),'rim-light':new Float32Array(n)},rgbAmounts={shadow:new Float32Array(n*3),'cast-shadow':new Float32Array(n*3),light:new Float32Array(n*3),'rim-light':new Float32Array(n*3)};
   const keys=s.lights.filter(l=>l.enabled&&l.intensity>0&&l.role!=='rim'),rims=s.lights.filter(l=>l.enabled&&l.intensity>0&&l.role==='rim'),enabled=[...keys,...rims],edge=new Float32Array(n);
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){
     const p=y*width+x,left=y*width+Math.max(0,x-1),right=y*width+Math.min(width-1,x+1),up=Math.max(0,y-1)*width+x,down=Math.min(height-1,y+1)*width+x;
     // Broad source geometry only labels existing light; never restore fine edges.
     if(support[left]&&support[right]&&support[up]&&support[down])edge[p]=Math.max(0,Math.hypot(guide[right]-guide[left],guide[down]-guide[up])*radius-.02);
   }
-  let receiverObserved=false;
+  let receiverObserved=false,clipped=0;
   for(let y=0;y<height;y++){if(y%16===0)await pause();for(let x=0;x<width;x++){
     const p=y*width+x;if(!support[p])continue;
-    const nx=(x+.5)/width,ny=(y+.5)/height,d=softChange(illumination[p],.025,illumination[p]<0?.7:.55),b=clamp(meanBase[p]),desired=clamp(b*Math.exp(d));
-    const positive=d>0&&b<1?clamp((desired-b)/(1-b),0,.45):0,negative=d<0?clamp(1-Math.exp(d),0,.65)*s.shadow.strength:0;
+    const nx=(x+.5)/width,ny=(y+.5)/height;
     const key=keys.reduce((v,l)=>Math.max(v,lightWeight(l,nx,ny)),0),rim=rims.reduce((v,l)=>Math.max(v,lightWeight(l,nx,ny)),0),rimSupport=clamp(edge[p]*2),rimShare=clamp(rim*rimSupport/(Math.max(.25,key)+rim*rimSupport));
-    amounts.light[p]=positive*(1-rimShare);amounts['rim-light'][p]=positive*rimShare;
     // Divide observed darkness only; do not manufacture a cast projection.
     let receiver=0;
-    if(negative>.003&&edge[p]<.08)for(const l of enabled){
+    if(ratios.some(values=>values[p]<-.008)&&edge[p]<.08)for(const l of enabled){
       const [dx,dy]=upstream(l,nx,ny);
       for(const distance of [1,2,3]){const qx=Math.round(x+dx*radius*distance),qy=Math.round(y+dy*radius*distance);if(qx<0||qx>=width||qy<0||qy>=height)continue;const q=qy*width+qx;if(support[q])receiver=Math.max(receiver,clamp(edge[q]*3));}
     }
-    const castShare=clamp(receiver)*clamp(1-edge[p]*8),cast=negative*castShare;if(cast>.003)receiverObserved=true;
-    amounts['cast-shadow'][p]=cast;amounts.shadow[p]=clamp(1-(1-negative)/(1-cast));
-    const r=softChange(chroma[0][p],.018,.18),g=softChange(chroma[1][p],.018,.18),blue=softChange(chroma[2][p],.018,.18),span=Math.max(r,g,blue)-Math.min(r,g,blue),alpha=clamp(span*1.7,0,.4);
-    if(alpha<.002)continue;amounts['color-atmosphere'][p]=alpha;color[p*3]=clamp(.5*Math.exp(r*3));color[p*3+1]=clamp(.5*Math.exp(g*3));color[p*3+2]=clamp(.5*Math.exp(blue*3));
+    const castShare=clamp(receiver)*clamp(1-edge[p]*8);let limited=false;
+    for(let c=0;c<3;c++){
+      const raw=ratios[c][p],bounded=clamp(raw,-MAX_LOG_GAIN,MAX_LOG_GAIN),d=bounded*(1-Math.exp(-((Math.abs(bounded)/.008)**2)))*extraction.fidelity,b=base.rgba[p*4+c]/sourceMax,gain=Math.exp(d);
+      // Encoded Screen is source dependent even for constant linear gain. This
+      // conversion uses original pixels only, never reference texture/content.
+      const desiredLinear=linear(b)*gain+BLACK_FLOOR*Math.max(0,gain-1),desired=encoded(clamp(desiredLinear));
+      limited ||= raw!==bounded||desiredLinear<0||desiredLinear>1;
+      const negative=desired<b&&b>0?clamp(1-desired/b):0,positive=desired>b&&b<1?clamp((desired-b)/(1-b)):0,cast=negative*castShare,rimAmount=positive*rimShare;
+      const values={shadow:cast<1?clamp(1-(1-negative)/(1-cast)):0,'cast-shadow':cast,light:rimAmount<1?clamp(1-(1-positive)/(1-rimAmount)):0,'rim-light':rimAmount};
+      for(const kind of ['shadow','cast-shadow','light','rim-light'] as const){rgbAmounts[kind][p*3+c]=values[kind];amounts[kind][p]=Math.max(amounts[kind][p],values[kind]);}
+      if(cast>.003)receiverObserved=true;
+    }
+    if(limited)clipped++;
   }}
   const channels:RelightFieldChannel[]=[],states:RelightLayerFields['summary']['channels']={shadow:'not-observed','cast-shadow':receiverObserved?'not-observed':'no-reliable-receiver','color-atmosphere':'not-observed',light:'not-observed','rim-light':rims.length?'not-observed':'no-rim-light'};
-  for(const kind of ['shadow','cast-shadow','color-atmosphere','light','rim-light'] as const){
+  for(const kind of ['shadow','cast-shadow','light','rim-light'] as const){
     let energy=0,peak=0;for(const v of amounts[kind]){energy+=v;peak=Math.max(peak,v);}energy/=n;
-    if(peak>=.004&&energy>=.00001){states[kind]='present';channels.push({kind,blendMode:kind==='color-atmosphere'?'color':kind==='shadow'||kind==='cast-shadow'?'multiply':'screen',amount:amounts[kind],...(kind==='color-atmosphere'?{color}:{}),energy});}
+    if(peak>=.002&&energy>=.000005){states[kind]='present';channels.push({kind,blendMode:kind==='shadow'||kind==='cast-shadow'?'multiply':'screen',amount:amounts[kind],rgbAmount:rgbAmounts[kind],energy});}
   }
-  const warnings=['柔和光影由单张参考估计大范围明暗与色调；严重结构错位仍可能留下宽泛明暗伪影，硬阴影和细窄轮廓光会被柔化。'];
-  if(clipped/observed>.01)warnings.push('部分照明超过安全增益范围，已柔和压缩强度以保留高光和暗部细节。');
+  const warnings=['RGB 光影由单张参考的多尺度颜色比率估计，保留原图内容；结构错位仍可能留下宽泛光影伪影，细窄阴影和轮廓光会被柔化。'];
+  if(clipped/observed>.01)warnings.push('部分暗部比率或高光超出安全范围，已限制极端增益或输出色域。');
   if(!receiverObserved)warnings.push('没有可靠且获准修改的承影区域，本场景未创建 Cast Shadow。');
-  return {version:'relight-fields-v1',width,height,source:s.source,sceneFingerprint:sceneFingerprint(s),guide,channels,summary:{method:'soft-guided-v1',clippedFraction:clipped/observed,warnings,channels:states}};
+  return {version:'relight-fields-v1',width,height,source:s.source,sceneFingerprint:sceneFingerprint(s),guide,channels,summary:{method:'rgb-guided-v2',clippedFraction:clipped/observed,warnings,channels:states}};
 }
 
 export function validateRelightLayerFields(fields:RelightLayerFields):void {
@@ -232,7 +253,9 @@ export function validateRelightLayerFields(fields:RelightLayerFields):void {
   if(fields.guide.some(v=>!Number.isFinite(v)||v<0||v>1)||!fields.source||typeof fields.sceneFingerprint!=='string'||!fields.sceneFingerprint)throw new Error('光影来源或引导数据无效');
   for(const c of fields.channels){
     const position=order.indexOf(c.kind);
-    if(position<0||position<=previous||kinds.has(c.kind)||c.blendMode!==(c.kind==='color-atmosphere'?'color':c.kind==='shadow'||c.kind==='cast-shadow'?'multiply':'screen')||!(c.amount instanceof Float32Array)||c.amount.length!==fields.width*fields.height||c.amount.some(v=>!Number.isFinite(v)||v<0||v>1)||!c.amount.some(v=>v>0)||!Number.isFinite(c.energy)||c.energy<=0||c.kind==='color-atmosphere'&&(!(c.color instanceof Float32Array)||c.color.length!==c.amount.length*3||c.color.some(v=>!Number.isFinite(v)||v<0||v>1)))throw new Error('光影通道数据无效');
+    if(position<0||position<=previous||kinds.has(c.kind)||c.blendMode!==(c.kind==='color-atmosphere'?'color':c.kind==='shadow'||c.kind==='cast-shadow'?'multiply':'screen')||!(c.amount instanceof Float32Array)||c.amount.length!==fields.width*fields.height||c.amount.some(v=>!Number.isFinite(v)||v<0||v>1)||!Number.isFinite(c.energy)||c.energy<=0||c.kind==='color-atmosphere'&&(!(c.color instanceof Float32Array)||c.color.length!==c.amount.length*3||c.color.some(v=>!Number.isFinite(v)||v<0||v>1)))throw new Error('光影通道数据无效');
+    if(c.rgbAmount!==undefined&&(c.blendMode==='color'||!(c.rgbAmount instanceof Float32Array)||c.rgbAmount.length!==c.amount.length*3||c.rgbAmount.some(v=>!Number.isFinite(v)||v<0||v>1)))throw new Error('RGB 光影通道数据无效');
+    if(!(c.rgbAmount??c.amount).some(v=>v>0))throw new Error('光影通道没有可见影响');
     kinds.add(c.kind);previous=position;
   }
 }
@@ -247,7 +270,7 @@ export function renderRelightLayerStrip(fields:RelightLayerFields,channel:Religh
   const max=depth===16?65535:255,rgba=depth===16?new Uint16Array(width*height*4):new Uint8Array(width*height*4);
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){
     const sx=(strip.left+x+.5-region.left)*fields.width/(region.right-region.left)-.5,sy=(strip.top+y+.5-region.top)*fields.height/(region.bottom-region.top)-.5,a=clamp(sample(channel.amount,fields.width,fields.height,sx,sy)),p=(y*width+x)*4;
-    for(let c=0;c<3;c++)rgba[p+c]=Math.round(max*(channel.blendMode==='multiply'?1-a:channel.blendMode==='screen'?a:sample(channel.color!,fields.width,fields.height,sx,sy,3,c)));
+    for(let c=0;c<3;c++){const rgb=channel.rgbAmount?clamp(sample(channel.rgbAmount,fields.width,fields.height,sx,sy,3,c)):a;rgba[p+c]=Math.round(max*(channel.blendMode==='multiply'?1-rgb:channel.blendMode==='screen'?rgb:sample(channel.color!,fields.width,fields.height,sx,sy,3,c)));}
     rgba[p+3]=channel.blendMode==='color'?Math.round(a*max):max;
   }
   return {width,height,rgba};
@@ -265,11 +288,11 @@ function colorBlend(base:number[],color:number[]):number[] {
 export function previewRelightLayers(source:Raster,fields:RelightLayerFields):Raster {
   raster(source);validateRelightLayerFields(fields);const base=source.width===fields.width&&source.height===fields.height?{...source,rgba:source.rgba.slice()}:resize(source,fields.width,fields.height),max=rasterMax(base);
   for(const channel of fields.channels)for(let p=0;p<fields.width*fields.height;p++){
-    const a=channel.amount[p];if(!a)continue;
+    const a=channel.amount[p];if(!a&&!channel.rgbAmount)continue;
     if(channel.blendMode==='color'){
       const before=[base.rgba[p*4]/max,base.rgba[p*4+1]/max,base.rgba[p*4+2]/max],mixed=colorBlend(before,[channel.color![p*3],channel.color![p*3+1],channel.color![p*3+2]]);
       for(let c=0;c<3;c++)base.rgba[p*4+c]=Math.round(max*(before[c]*(1-a)+mixed[c]*a));
-    }else for(let c=0;c<3;c++){const b=base.rgba[p*4+c]/max;base.rgba[p*4+c]=Math.round(max*(channel.blendMode==='multiply'?b*(1-a):1-(1-b)*(1-a)));}
+    }else for(let c=0;c<3;c++){const b=base.rgba[p*4+c]/max,rgb=channel.rgbAmount?channel.rgbAmount[p*3+c]:a;base.rgba[p*4+c]=Math.round(max*(channel.blendMode==='multiply'?b*(1-rgb):1-(1-b)*(1-rgb)));}
   }
   return base;
 }

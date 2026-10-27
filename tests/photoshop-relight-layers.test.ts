@@ -133,3 +133,20 @@ test('failed current pixel reads and capture validation never mutate source laye
     assert.equal(appearance(h),before);assert.equal(writes(h).length,beforeWrites);assert.ok(h.resources.every(r=>r.disposed));
   }
 });
+
+for(const depth of [8,16] as const)test(`native RGB${depth} lighting writes independent color amounts and one group mask`,async()=>{
+  const h=host(depth,32,16,true),n=h.fields.width*h.fields.height,max=depth===16?65535:255;
+  h.fields.channels=h.fields.channels.filter(c=>c.kind==='shadow'||c.kind==='light');
+  for(const channel of h.fields.channels){channel.amount.fill(.6);const rgb=new Float32Array(n*3);for(let p=0;p<n;p++)rgb.set([.1,.3,.6],p*3);(channel as any).rgbAmount=rgb;}
+  const written=new Map<number,number[]>(),put=h.ps.imaging.putPixels;
+  h.ps.imaging.putPixels=async(o:any)=>{written.set(o.layerID,Array.from((await o.imageData.getData()).slice(0,4)));return put(o);};
+  const id=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'RGB lighting'),group=h.doc.layers.find((l:any)=>l.id===id);
+  for(const channel of h.fields.channels){const layer=group.layers.find((l:any)=>l.blendMode===channel.blendMode),actual=written.get(layer.id)!;
+    const expected=channel.blendMode==='multiply'?[.9,.7,.4]:[.1,.3,.6];
+    for(let c=0;c<3;c++)assert.ok(Math.abs(actual[c]-Math.round(expected[c]*max))<=1,`${channel.kind} component${c}: ${actual[c]}`);
+    assert.equal(actual[3],max);
+  }
+  assert.equal(h.calls.filter(c=>c[0]==='mask'&&c[1].layerID===id).length,1);
+  assert.deepEqual(h.calls.filter(c=>c[0]==='resume'),[['resume',true]]);
+  assert.ok(h.resources.every(r=>r.disposed));
+});
