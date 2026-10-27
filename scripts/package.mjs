@@ -5,7 +5,7 @@ export const INSTALL_GUIDE=`# PS-AI — 安装 / Installation
 
 ## 中文
 
-0.5.0 实验版，现有宿主证据来自 Windows Photoshop 27.0；不代表所有安装形式、控件和模式均已验收。先保存文档并退出 Photoshop。
+0.5.1 实验版，现有宿主证据来自 Windows Photoshop 27.0；不代表所有安装形式、控件和模式均已验收。先保存文档并退出 Photoshop。
 
 CCX：用 Adobe Creative Cloud 桌面应用安装包；安装位置由 Adobe 管理，不要手动复制到 Photoshop 的 Plug-ins。关联到 UPIA 后双击没有反应时，用环境工具中的 scripts/install-ccx.ps1 -PackagePath 指定完整包路径；不要用 Photoshop 的“打开”导入。更新时退出 Photoshop 后安装新版 CCX；卸载使用 Creative Cloud 的插件管理。
 
@@ -25,7 +25,7 @@ Portable：解压后把整个 PS-AI-FOR-ME 文件夹放入你实际安装的 Pho
 
 ## English
 
-0.5.0 experimental. Existing host evidence comes from Windows Photoshop 27.0; it does not establish acceptance of every installation method, control or mode. Save your work and quit Photoshop first.
+0.5.1 experimental. Existing host evidence comes from Windows Photoshop 27.0; it does not establish acceptance of every installation method, control or mode. Save your work and quit Photoshop first.
 
 CCX: install using Adobe Creative Cloud desktop. Adobe manages its installation location; do not copy it into Photoshop Plug-ins manually. If double-clicking a CCX associated with UPIA does nothing, run scripts/install-ccx.ps1 -PackagePath with the full package path from the environment tools. Photoshop File → Open does not install plugins. For updates, quit Photoshop and install the newer CCX; uninstall through Creative Cloud plugin management.
 

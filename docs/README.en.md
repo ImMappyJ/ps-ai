@@ -4,9 +4,9 @@
 
 Select an area in Photoshop, describe a change, generate candidates and apply one as a new layer. PS-AI supports local edits, background replacement, clothing and props, relighting, blending and text-to-image generation.
 
-**Current version: 0.5.0, an experimental prerelease.** Connect to local ComfyUI / Qwen-Image 2.1, or configure Nano Banana (Gemini), GPT Image (OpenAI Images) or BaiLian. Cloud services require your own API key; generation with real cloud accounts has not been validated.
+**Current version: 0.5.1, an experimental prerelease.** Connect to local ComfyUI / Qwen-Image 2.1, or configure Nano Banana (Gemini), GPT Image (OpenAI Images) or BaiLian. Cloud services require your own API key; generation with real cloud accounts has not been validated.
 
-[Download 0.5.0](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.0) · [User guide](usage/USER_GUIDE.en.md) · [ComfyUI setup](setup/COMFYUI.en.md) · [Platform setup](setup/PLATFORMS.en.md)
+[Download 0.5.1](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.1) · [User guide](usage/USER_GUIDE.en.md) · [ComfyUI setup](setup/COMFYUI.en.md) · [Platform setup](setup/PLATFORMS.en.md)
 
 ## What it does
 
@@ -16,13 +16,17 @@ Select an area in Photoshop, describe a change, generate candidates and apply on
 
 Generate 1–4 candidates, compare them, then apply. Results use new layers with editable masks; original layers remain intact. One Photoshop Undo reverses one application. History lets you browse saved candidates, reuse parameters and recover interrupted tasks.
 
-![PS-AI Create panel and demonstration image](../assets/guide/050-create-zh.png)
+<p align="center">
+  <a href="../assets/guide/050-create-zh.png"><img src="../assets/guide/050-create-zh.png" width="720" alt="PS-AI Create panel and demonstration image"></a>
+</p>
 
-Relighting has its own workbench. Add and move lights, adjust color, direction and intensity, then generate an AI result. Choose Lighting layers or Full-image redraw. The screenshot below shows a **local lighting illustration, not a model result**.
+Relighting changes brightness, light color and direction. Arrange lights in the workbench, generate an AI reference, then layer the estimated lighting changes over the original. Select a candidate to adjust Light fidelity for strength and Detail protection for smoother fine changes, without generating again. Full-image redraw is also available.
 
-![Relighting workbench](../assets/guide/050-relight-zh.png)
+<p align="center">
+  <a href="../assets/guide/050-result-relight.png"><img src="../assets/guide/050-result-relight.png" width="720" alt="Relighting: source, AI reference and lighting-layer composite preview"></a>
+</p>
 
-Screenshots show 0.5.0 Portable running in Photoshop 27 with `3F3F3F.webp` as the demonstration image. Click an image to view it at full size.
+Left to right: source, real AI reference, local lighting-layer composite preview, with warm light on the left and cool light on the right. The source combines `3F3F3F.webp` with a previously generated room background. Settings: Light fidelity 1 / Detail protection 0.65. This comparison is not a Photoshop application screenshot. See the [relighting guide](usage/USER_GUIDE.en.md#relight). Interface screenshots show 0.5.0 Portable in Photoshop 27. Click an image to view it at full size.
 
 ## Requirements
 
@@ -34,15 +38,15 @@ ComfyUI uses a fixed Qwen 2.1 workflow; SD, SDXL and Flux are not interchangeabl
 
 ## Install a release package
 
-Choose a plugin package from the [0.5.0 release](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.0) and check its matching `.sha256` file. The environment-tools archive contains instructions and setup scripts, not ComfyUI or model weights.
+Choose a plugin package from the [0.5.1 release](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.1) and check its matching `.sha256` file. The environment-tools archive contains instructions and setup scripts, not ComfyUI or model weights.
 
 ### Option 1: CCX
 
 1. Install the Adobe Creative Cloud desktop app.
-2. Double-click `ps-ai-0.5.0-experimental.ccx` and follow Adobe's installation prompts.
+2. Double-click `ps-ai-0.5.1-experimental.ccx` and follow Adobe's installation prompts.
 3. Restart Photoshop and open **Plugins → PS-AI**.
 
-If double-clicking does nothing, extract `ps-ai-0.5.0-environment-experimental.zip` and run this from its folder:
+If double-clicking does nothing, extract `ps-ai-0.5.1-environment-experimental.zip` and run this from its folder:
 
 ```powershell
 $package = Read-Host 'Full path to the CCX file'
@@ -54,7 +58,7 @@ CCX installation is managed by Adobe. Do not open it as a Photoshop document or 
 ### Option 2: Portable folder
 
 1. Save your documents and fully quit Photoshop.
-2. Extract `ps-ai-0.5.0-portable-experimental.zip` and copy the entire `PS-AI-FOR-ME` folder into Photoshop's `Plug-ins` directory.
+2. Extract `ps-ai-0.5.1-portable-experimental.zip` and copy the entire `PS-AI-FOR-ME` folder into Photoshop's `Plug-ins` directory.
 3. Check that `manifest.json` is directly inside `Plug-ins/PS-AI-FOR-ME`, without an extra nested folder.
 4. Restart and open **Plugins → PS-AI (Portable)**.
 
@@ -74,7 +78,7 @@ After a disconnection, select the original task in History and choose **Recover 
 ## Limitations and precautions
 
 - **Inspect every result.** The model can change faces, text, linework and texture. Character references do not guarantee identity. Routine skin smoothing, blemish removal and skin-tone retouching are outside scope.
-- **Relighting and blending remain experimental.** Lighting layers estimate changes from an AI reference; they cannot guarantee unchanged detail. Large structural differences stop extraction and retain the reference. Blending changes on photographic portraits may still be weak.
+- **Relighting and blending remain experimental.** Lighting layers keep the original as the content base, but cannot perfectly separate lighting from redraw. Large offsets in the reference may leave lighting patches; hard shadows and narrow rim lights may weaken. Blending changes on photographic portraits may still be weak.
 - **Image-context assets do not yet meet the quality target.** Effects and atmosphere may retain people, backgrounds or guide boundaries. Check transparency and residue; consider text-only assets or manual cleanup.
 - **Color and size have limits.** Sources must be RGB/Grayscale 8/16-bit with a known color space. Model input is sRGB8; SDR16 saving does not mean native 16-bit generation or HDR. Documents are limited to 45 million pixels and 30,000 per side. Plugin exports may use a working raster's dimensions; apply to the source and export through Photoshop for original-size delivery.
 - **Work on copies.** CMYK, Lab, Indexed, Multichannel and 32-bit HDR are unsupported. Unknown color or unsafe translucent multilayer sources need a suitable copy. Modified, closed or previous-session sources cannot receive stale candidates; those candidates remain exportable.

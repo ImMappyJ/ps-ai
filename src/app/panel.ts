@@ -15,6 +15,7 @@ import {DEFAULT_GATEWAY_MODEL,GATEWAY_TEMPLATE,validateGeneration} from '../infr
 import type {GatewayCapabilities,GenerationRequest,AssetContext} from '../infrastructure/backends/gateway-protocol';
 import {RelightSession,RelightDraftStore,relightTaskMetadata,type FrozenRelightSubmission,type RelightTaskMetadata,type RelightScope,type RelightOutputKind} from '../features/relight/relight-session';
 import {RelightWorkbench,type RelightResult} from '../features/relight/relight-workbench';
+import {validateRelightExtractionSettings,type RelightExtractionSettings} from '../features/relight/relight-layers';
 import {compileRelightScene,validateRelightScene,type RelightScene,type RelightCapabilities} from '../features/relight/relight-scene';
 import {PanelViews,OperationFeedback,ResultNavigation,CandidatePreview,SourceCaption,captureSizeSummary,localValidationMessage,isSourceCaptureDiagnostic,createCandidateCard,setCandidateCardState,displayPreview as preview} from './panel-view';import type {OperationContext,PanelPage,CaptureSizeDetails} from './panel-view';
 import {HistoryTable,historyTaskType,historyPrompt,historyState,historySource,historyDate} from './history-table';
@@ -339,7 +340,36 @@ async function captureRelight(expectedDocumentId=activeDocumentId(),scope:Religh
   }));
 }
 function relightResults():RelightResult[]{
-  return candidates.flatMap(c=>{const metadata=c.job.relight as RelightTaskMetadata|undefined;if(!metadata||metadata.schemaVersion!==1||!relightSession?.ownsSnapshot(metadata.scene?.source?.snapshotId))return [];return [{jobId:c.job.id,fingerprint:metadata.fingerprint,sourceSnapshotId:metadata.scene.source.snapshotId,image:c.image,warning:c.warning,outputKind:c.outputKind,lightingState:c.lightingState,lightingFailure:c.lightingFailure}];});
+  return candidates.flatMap(c=>{const metadata=c.job.relight as RelightTaskMetadata|undefined;if(!metadata||metadata.schemaVersion!==1||!relightSession?.ownsSnapshot(metadata.scene?.source?.snapshotId))return [];return [{jobId:c.job.id,fingerprint:metadata.fingerprint,sourceSnapshotId:metadata.scene.source.snapshotId,image:c.image,warning:c.warning,outputKind:c.outputKind,lightingState:c.lightingState,lightingFailure:c.lightingFailure,localExtraction:metadata.localExtraction}];});
+}
+/** Only a successful, still-owned local extraction may replace this candidate. */
+async function reextractLightingCandidate(jobId:string,value:RelightExtractionSettings,owns:()=>boolean):Promise<void>{
+  if(busy||historyRecords.some(blocksGeneration)||!owns())return;
+  const extraction=validateRelightExtractionSettings(value),prior=candidateById(jobId);
+  if(prior.outputKind!=='lighting-layers')return;
+  lock(true);
+  try{await withImagePixels(async()=>{
+    const current=()=>owns()&&candidates.includes(prior);
+    if(!current())return;
+    const record:JobRecord={...prior.job,relight:{...(prior.job.relight as RelightTaskMetadata),localExtraction:extraction}};
+    const raw=await store.readBinary(historyOutputName(record));if(!current())return;
+    const prepared=await prepareCandidate(record,raw,name=>store.readBinary(name),retainedImageBytes(true));if(!current())return;
+    if(prepared.lightingState!=='composite')throw prepared.lightingFailure??new DiagnosticError('relight-extraction','lighting-extraction',prepared.warning??t('本地光影提取未完成；原始 AI 参考图已保留，请检查参考图和来源的作用范围。'));
+    const bytes=encodePng(prepared.image),url=await preview(prepared.image);if(!current())return;
+    // Persist only metadata after a complete preview exists. Raw output/source,
+    // masks and the frozen source/fingerprint remain owned by the original UUID.
+    await store.save(record);
+    // The save is the commit point: close/selection changes while it is in
+    // progress cannot undo persisted metadata. Keep the cache consistent, but
+    // publish no stale status or selection into the current workbench.
+    const stillOwned=current(),mainSelection=candidates[Number(el('candidate-select').value)]?.job.id;
+    const next:Candidate={...prepared,job:record,bytes,preview:url,snapshot:prepared.snapshot?.captureGeometry?{...prepared.snapshot,mask:new Uint8Array()}:prepared.snapshot};
+    const index=candidates.indexOf(prior);if(index<0)return;candidates[index]=next;
+    historyPreview.invalidate();const historyIndex=historyRecords.findIndex(item=>item.id===jobId);if(historyIndex>=0)historyRecords[historyIndex]=record;
+    historyTable.setRecords(historyRecords);historyUi();
+    await renderCandidates(mainSelection);
+    if(stillOwned)relightWorkbench?.refreshAvailability();
+  });}finally{lock(false);}
 }
 const reportedRelightErrors=new WeakSet<object>();
 async function relightOperation(feature:string,stage:Stage,action:()=>Promise<void>):Promise<void>{
@@ -467,6 +497,7 @@ function publishRelightSession(session:RelightSession):void {
       colorRecovery:()=>colorRecoveryAction(session.sourceCapture.snapshot.documentId,session),recoverColor:()=>relightOperation('recover-color','capture',()=>recoverSourceColor(session.sourceCapture.snapshot.documentId,session)),
       resultSourceState:id=>candidateApplicationMode(candidates.find(c=>c.job.id===id))==='unavailable'?'changed':'current',
       apply:id=>relightOperation('apply','apply',()=>apply(id)),inspectResult:id=>relightOperation('apply','apply',()=>apply(id,true)),export:exportCandidate,results:relightResults,
+      reextract:reextractLightingCandidate,
     });
     relightWorkbench.show();
 }

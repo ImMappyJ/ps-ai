@@ -9,7 +9,7 @@ import {t} from '../localization/i18n';
 import {checkDocumentSize,downsampleSnapshotMask,resampleGray,IMAGE_BUDGETS,planEditApplyMemory} from '../imaging/budget';
 import {validateRelightScene} from '../features/relight/relight-scene';
 import type {RelightOutputKind} from '../features/relight/relight-session';
-import type {RelightLayerFields} from '../features/relight/relight-layers';
+import {validateRelightExtractionSettings,type RelightLayerFields} from '../features/relight/relight-layers';
 import {sha256} from '@noble/hashes/sha2.js';
 
 type ReadBinary=(name:string)=>Promise<Uint8Array>;
@@ -200,6 +200,7 @@ async function prepareEditAnalysisCandidate(record:JobRecord,bytes:Uint8Array,re
 /** Decode only a bounded saved analysis PNG; a native mask never becomes a native RGBA raster. */
 async function lightingInputs(record:JobRecord,raw:Raster,snapshot:Snapshot,read:ReadBinary){
   const metadata=record.relight as any,geometry=snapshot.captureGeometry,params=record.params as any;
+  const extraction=validateRelightExtractionSettings(metadata?.localExtraction);
   if(candidateOutputKind(record)!=='lighting-layers'||metadata?.schemaVersion!==1||metadata.requestId!==record.id||!geometry||geometry.kind!=='relight-analysis'||!params||params.mode!=='relight'||params.outputKind!=='edit'||snapshot.backgroundComposite)throw lightingHistoryError();
   checkDocumentSize(snapshot.width,snapshot.height);
   const b=snapshot.bounds,w=b.right-b.left,h=b.bottom-b.top;checkDocumentSize(w,h);
@@ -217,7 +218,7 @@ async function lightingInputs(record:JobRecord,raw:Raster,snapshot:Snapshot,read
   if(header.getUint32(16)!==geometry.width||header.getUint32(20)!==geometry.height)throw lightingHistoryError();
   const source=decodePng(bytes),mask=downsampleSnapshotMask(snapshot,source.width,source.height);
   if(rasterDepth(source)!==s.documentDepth)throw lightingHistoryError();
-  return {source,mask,scene};
+  return {source,mask,scene,extraction};
 }
 
 /** Re-derive on demand rather than retain full channel buffers for every candidate. No network IO. */
@@ -226,7 +227,7 @@ export async function prepareLightingLayerApplication(record:JobRecord,bytes:Uin
   const snapshot=await restoreSnapshot(record,read);if(!snapshot)throw lightingHistoryError();
   const raw=decodeModelPng(bytes,String(record.template??'')),inputs=await lightingInputs(record,raw,snapshot,read);
   const {deriveRelightLayers}=await import('../features/relight/relight-layers');
-  const fields=await deriveRelightLayers(inputs.source,raw,inputs.scene,{signal,editMask:inputs.mask});
+  const fields=await deriveRelightLayers(inputs.source,raw,inputs.scene,{signal,editMask:inputs.mask,extraction:inputs.extraction});
   return {snapshot,fields,source:inputs.source,mask:inputs.mask};
 }
 /** Reload the original UUID for either native geometry; never reuse display pixels as apply authority. */
@@ -275,7 +276,7 @@ export async function prepareCandidate(record:JobRecord,bytes:Uint8Array,read:Re
     const inputs=await lightingInputs(record,image,snapshot,read);
     try{
       const {deriveRelightLayers,previewRelightLayers}=await import('../features/relight/relight-layers');
-      const fields=await deriveRelightLayers(inputs.source,image,inputs.scene,{editMask:inputs.mask}),composite=previewRelightLayers(inputs.source,fields);
+      const fields=await deriveRelightLayers(inputs.source,image,inputs.scene,{editMask:inputs.mask,extraction:inputs.extraction}),composite=previewRelightLayers(inputs.source,fields);
       // The native group uses this effective mask once. Match that in the bounded preview.
       for(let p=0;p<inputs.mask.length;p++){const amount=inputs.mask[p]/255;for(let c=0;c<3;c++){const i=p*4+c;composite.rgba[i]=Math.round(inputs.source.rgba[i]+(composite.rgba[i]-inputs.source.rgba[i])*amount);}composite.rgba[p*4+3]=inputs.source.rgba[p*4+3];}
       return {image:composite,snapshot,outputKind,lightingState:'composite',lightingSummary:fields.summary};

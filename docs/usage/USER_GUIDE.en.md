@@ -2,7 +2,7 @@
 <h1 align="center">PS-AI User Guide</h1>
 <p align="center"><a href="USER_GUIDE.md">简体中文</a> · <strong>English</strong></p>
 
-For **0.5.0 experimental**. [Install the plugin](../README.en.md#install-a-release-package), then connect [ComfyUI](../setup/COMFYUI.en.md) or a [cloud platform](../setup/PLATFORMS.en.md). Interface screenshots show Photoshop 27 with `3F3F3F.webp`. The mode examples below show real generated results and composed previews, separately from the interface screenshots. Configuration screens and local lighting illustrations are not model results. Click an image to view it at full size.
+For **0.5.1 experimental**. [Install the plugin](../README.en.md#install-a-release-package), then connect [ComfyUI](../setup/COMFYUI.en.md) or a [cloud platform](../setup/PLATFORMS.en.md). Interface screenshots show Photoshop 27 with `3F3F3F.webp`. The mode examples below show real generated results and composed previews, separately from the interface screenshots. Configuration screens and local lighting illustrations are not model results. Click an image to view it at full size.
 
 <a id="current-ui"></a>
 
@@ -15,7 +15,9 @@ For **0.5.0 experimental**. [Install the plugin](../README.en.md#install-a-relea
 
 Changing pages keeps your current text and parameters and does not stop a task. Opening the panel does not automatically start a backend or generate an image.
 
-![Create panel and demonstration image](../../assets/guide/050-create-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-create-zh.png"><img src="../../assets/guide/050-create-zh.png" width="720" alt="Create panel and demonstration image"></a>
+</p>
 
 ## Make your first edit
 
@@ -26,9 +28,13 @@ Changing pages keeps your current text and parameters and does not stop a task. 
 5. Generate candidates. Keep the source unchanged while waiting. After a disconnection, recover the original task instead of submitting again.
 6. Inspect the result and choose **Apply as new layer**. Original layers remain; the result has an editable mask. Adjust opacity or press Ctrl+Z once to undo the application.
 
-![Backend and models settings](../../assets/guide/050-settings-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-settings-zh.png"><img src="../../assets/guide/050-settings-zh.png" width="420" alt="Backend and models settings"></a>
+</p>
 
-![Settings in English](../../assets/guide/050-settings-en.png)
+<p align="center">
+  <a href="../../assets/guide/050-settings-en.png"><img src="../../assets/guide/050-settings-en.png" width="420" alt="Settings in English"></a>
+</p>
 
 Settings JSON transfers addresses, model choices and language. It contains no keys, model files or image history. CCX and Portable store their data separately.
 
@@ -45,11 +51,15 @@ Context helps the model understand the scene; it does not expand the application
 
 If Undo removes your selection, select again or use **Restore last selection and reread** in the same document and mode. This restores the range saved during the current session and reads current pixels. It does not submit a task or renew old candidates' application permissions.
 
-![Missing-selection message](../../assets/guide/050-selection-error-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-selection-error-zh.png"><img src="../../assets/guide/050-selection-error-zh.png" width="420" alt="Missing-selection message"></a>
+</p>
 
 For full-image relighting of a transparent cutout, add a background below it on a copy so the editing area is opaque. The demonstration copy keeps the source and background on separate layers:
 
-![Source and background layers in the demonstration copy](../../assets/guide/050-layers-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-layers-zh.png"><img src="../../assets/guide/050-layers-zh.png" width="375" alt="Source and background layers in the demonstration copy"></a>
+</p>
 
 ## Choose a mode
 
@@ -63,14 +73,18 @@ Choose **Local edit → Objects and materials**.
 
 Select the object or material, describe its color, finish and the shape to retain, preview, then generate. Useful for material changes and small objects. Texture and text inside the selection may still change.
 
-![Objects and materials result: waist doll changed to a black cat](../../assets/guide/050-result-edit.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-edit.png"><img src="../../assets/guide/050-result-edit.png" width="480" alt="Objects and materials result: waist doll changed to a black cat"></a>
+</p>
 
 Saved example: changing the doll at the waist into a black cat.
 
 <details>
 <summary>View mode controls</summary>
 
-![Objects and materials mode](../../assets/guide/050-mode-edit-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-edit-zh.png"><img src="../../assets/guide/050-mode-edit-zh.png" width="420" alt="Objects and materials mode"></a>
+</p>
 
 </details>
 
@@ -82,14 +96,18 @@ Choose **Local edit → Remove objects**.
 
 Select what you want removed, with enough surrounding context for filling. This mode has a built-in instruction and no prompt field. Check the filled texture. Turn off Preserve transparency if the result needs to expand beyond the original outline.
 
-![Removal result: waist doll removed](../../assets/guide/050-result-remove.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-remove.png"><img src="../../assets/guide/050-result-remove.png" width="412" alt="Removal result: waist doll removed"></a>
+</p>
 
 Saved example: removing the same waist doll with the built-in instruction.
 
 <details>
 <summary>View mode controls</summary>
 
-![Remove objects mode](../../assets/guide/050-mode-remove-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-remove-zh.png"><img src="../../assets/guide/050-mode-remove-zh.png" width="420" alt="Remove objects mode"></a>
+</p>
 
 </details>
 
@@ -106,14 +124,18 @@ Choose **Local edit → Replace background (select subject)**.
 
 This reads the full canvas and turns off source-transparency retention, subject alignment and color matching. ComfyUI also omits the selection guide. Ordinary preferences return when you leave. Candidates with a substantially transparent background remain exportable but cannot apply. Old candidates retain their saved range; their masks are not automatically inverted.
 
-![Background replacement result: pale blue studio](../../assets/guide/050-result-background.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-background.png"><img src="../../assets/guide/050-result-background.png" width="720" alt="Background replacement result: pale blue studio"></a>
+</p>
 
 New generation: replacing the background with a pale blue studio.
 
 <details>
 <summary>View mode controls</summary>
 
-![Replace background mode](../../assets/guide/050-mode-background-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-background-zh.png"><img src="../../assets/guide/050-mode-background-zh.png" width="420" alt="Replace background mode"></a>
+</p>
 
 </details>
 
@@ -125,14 +147,18 @@ Choose **Portrait → Clothing and props**.
 
 Select clothing or props, avoiding faces and hands you want to keep. Specify the part, color, material and details, for example, “Make the coat tail deep purple, preserving folds and metal ornaments.” Complex props may need manual repair.
 
-![Clothing result: white over-knee socks](../../assets/guide/050-result-costume.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-costume.png"><img src="../../assets/guide/050-result-costume.png" width="480" alt="Clothing result: white over-knee socks"></a>
+</p>
 
 Saved example: changing the socks to white over-knee socks.
 
 <details>
 <summary>View mode controls</summary>
 
-![Clothing and props mode](../../assets/guide/050-mode-costume-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-costume-zh.png"><img src="../../assets/guide/050-mode-costume-zh.png" width="420" alt="Clothing and props mode"></a>
+</p>
 
 </details>
 
@@ -144,14 +170,18 @@ Choose **Portrait → Character reference**.
 
 Select the editing area, import a reference image and describe the clothing, accessories or appearance to borrow. References do not guarantee identity or exact detail. If an import reports unknown color, confirm and embed the correct ICC profile on a copy, then retry.
 
-![Character reference failure: source, black-cat reference and misaligned result](../../assets/guide/050-result-reference.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-reference.png"><img src="../../assets/guide/050-result-reference.png" width="480" alt="Character reference failure: source, black-cat reference and misaligned result"></a>
+</p>
 
 **Failed example — source / black-cat reference / result:** the model shrank the image, leaving misalignment and visible seams after composition. This needs correction before use.
 
 <details>
 <summary>View mode controls</summary>
 
-![Character reference mode](../../assets/guide/050-mode-reference-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-reference-zh.png"><img src="../../assets/guide/050-mode-reference-zh.png" width="420" alt="Character reference mode"></a>
+</p>
 
 </details>
 
@@ -163,14 +193,18 @@ Choose **Portrait → Replace scene**.
 
 As with background replacement, select the subject to keep. Describe the environment, time of day, floor and lighting direction. The full canvas provides scene context. Do not import a black-and-white range guide as a scene reference.
 
-![Scene replacement result: pink bedroom](../../assets/guide/050-result-scene.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-scene.png"><img src="../../assets/guide/050-result-scene.png" width="720" alt="Scene replacement result: pink bedroom"></a>
+</p>
 
 Saved example: placing the subject in a pink bedroom.
 
 <details>
 <summary>View mode controls</summary>
 
-![Replace scene mode](../../assets/guide/050-mode-scene-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-scene-zh.png"><img src="../../assets/guide/050-mode-scene-zh.png" width="420" alt="Replace scene mode"></a>
+</p>
 
 </details>
 
@@ -187,14 +221,18 @@ Input and destination are separate choices: choosing New document does not switc
 
 **Image-context asset quality does not yet meet the target.** Tested Qwen outputs may retain people, scenery or guide boundaries. Check transparency and unwanted content; transparent pixels alone do not make a usable asset.
 
-![Text-only blue lightning asset and manual composition](../../assets/guide/050-result-effect.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-effect.png"><img src="../../assets/guide/050-result-effect.png" width="720" alt="Text-only blue lightning asset and manual composition"></a>
+</p>
 
 **Source / asset / composition:** newly generated text-only blue arcing lightning, manually scaled and placed over the pink-bedroom copy. This does not demonstrate the default image-and-selection input.
 
 <details>
 <summary>View mode controls</summary>
 
-![Effect asset mode](../../assets/guide/050-mode-effect-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-effect-zh.png"><img src="../../assets/guide/050-mode-effect-zh.png" width="420" alt="Effect asset mode"></a>
+</p>
 
 </details>
 
@@ -206,14 +244,18 @@ Choose **Portrait → Atmosphere asset**.
 
 Use this for smoke, particles and haze. Input works like Effect asset: select placement when using the current image, or describe the asset directly in text-only mode. Check for retained people, scenery and guide boundaries.
 
-![Text-only golden particle asset and manual composition](../../assets/guide/050-result-atmosphere.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-atmosphere.png"><img src="../../assets/guide/050-result-atmosphere.png" width="720" alt="Text-only golden particle asset and manual composition"></a>
+</p>
 
 **Source / asset / composition:** newly generated text-only golden particles, enlarged proportionally and cropped to overlay the same pink-bedroom copy. This does not demonstrate the default image-and-selection input.
 
 <details>
 <summary>View mode controls</summary>
 
-![Atmosphere asset mode](../../assets/guide/050-mode-atmosphere-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-atmosphere-zh.png"><img src="../../assets/guide/050-mode-atmosphere-zh.png" width="420" alt="Atmosphere asset mode"></a>
+</p>
 
 </details>
 
@@ -225,14 +267,18 @@ Choose **Generate → Text to image**.
 
 Describe the subject, setting, composition and style, set resolution and candidate count, then generate. Text-to-image does not use reference images. No editing selection is needed by default; selecting Current selection as the destination still requires one. Save the result as PNG or open it in a new document.
 
-![Text-to-image result: independent pink bedroom background](../../assets/guide/050-result-generate.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-generate.png"><img src="../../assets/guide/050-result-generate.png" width="480" alt="Text-to-image result: independent pink bedroom background"></a>
+</p>
 
 Text-only generation: an independent pink-bedroom background. It does not read `3F3F3F.webp`; there is no before image.
 
 <details>
 <summary>View mode controls</summary>
 
-![Text-to-image mode](../../assets/guide/050-mode-generate-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-generate-zh.png"><img src="../../assets/guide/050-mode-generate-zh.png" width="420" alt="Text-to-image mode"></a>
+</p>
 
 </details>
 
@@ -248,15 +294,32 @@ Choose **Portrait → Relighting**.
 4. Use **Lighting illustration** to judge approximate coverage and color, choose an output, then select **Generate AI result**. Moving lights, typing values and workbench Undo do not send model requests. One drag is one local undo step.
 5. Inspect the AI result, then apply or export. Editing lights after generation marks the old result stale.
 
-![Relighting workbench showing a local lighting illustration](../../assets/guide/050-relight-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-relight-zh.png"><img src="../../assets/guide/050-relight-zh.png" width="720" alt="Relighting workbench showing a local lighting illustration"></a>
+</p>
 
-**Lighting layers**, the default, estimate lighting changes from an AI reference and apply them over a native source base as a masked group. Its channels remain adjustable. **Full-image redraw** applies the model image as a masked layer; structure and texture may change.
+**Lighting layers**, the default, estimate lighting changes from an AI reference and apply them directly to the image below through a masked Pass Through group, without copying the source. Its channels remain adjustable. **Full-image redraw** applies the model image as a masked layer; structure and texture may change.
 
-**The lighting illustration expresses intent, not the final result.** Lighting layers are not physical render passes and cannot guarantee unchanged detail. They require tagged sRGB RGB8/16 sources with opaque pixels in the editing area. Large structural differences stop extraction and retain the reference for inspection/export. The plugin does not silently switch to redraw or generate again; choose Full-image redraw explicitly if needed.
+**The lighting illustration expresses intent, not the final result.** Lighting layers estimate brightness and light-color changes from the AI reference over the original image, favoring soft overall lighting. Select a lighting-layer candidate, then adjust the controls under Selected candidate lighting layers:
 
-![Relighting reference retained after failed lighting-layer extraction](../../assets/guide/050-result-relight.png)
+| Control | How to use it |
+| --- | --- |
+| Light fidelity | Default 1. Lower it for a weaker effect; 0 returns to the source. Reduce it first if the result is too dark or strongly colored. |
+| Detail protection | Default 0.65. Raise it to reduce fine texture changes and soften transitions; some local shadows may also fade. |
 
-**Failed extraction:** this saved AI reference changed the structure too much, so lighting-layer extraction stopped. The reference is shown for inspection only and was not applied.
+The group contains only lighting layers, and its opacity controls the overall effect. You can still edit the image below, but changing the subject, background or position may require rereading and generating matching lighting. Existing groups from older versions are not changed automatically.
+
+Both range from 0 to 1 and accept precise numeric input. Release a slider or confirm a value to update locally, without generating again. Settings stay with the candidate and are reused when loading or applying it.
+
+Lighting and redraw cannot be perfectly separated. Major offsets may leave lighting patches, and hard shadows or narrow rims may weaken. Sources must be tagged sRGB RGB8/16 with opaque editable pixels. The original AI reference remains separately exportable; extraction does not silently switch to redraw or generate again.
+
+<p align="center">
+  <a href="../../assets/guide/050-result-relight.png"><img src="../../assets/guide/050-result-relight.png" width="720" alt="3F3F3F warm and cool lighting: source, AI reference and lighting-layer composite preview"></a>
+</p>
+
+This example uses warm light from the left and cool light from the right. Left: `3F3F3F.webp` combined with a previously generated room background. Center: a real Qwen-Image 2.1 reference. Right: the local lighting-layer composite over the source, at Light fidelity 1 / Detail protection 0.65. Compare the clothing lines, hair accessories and background to distinguish lighting changes from AI redraw. No extra color grading was added. This is not a Photoshop application screenshot or evidence of photographic portrait quality.
+
+For older candidates stopped by the former similarity check, load the saved task from History to extract again without generating another image.
 
 If opening from the main panel fails to read the source, the workbench stays closed while retaining lights and old candidates. A failed reread inside an open workbench explains why the old image is stale. A successful read clears the corresponding old error. Internal reopening after generation/application keeps that task's source; each candidate remains bound to its submitted snapshot.
 
@@ -274,14 +337,18 @@ Choose **Portrait → Image Blending**.
 
 Blending reads the full composite and disables subject alignment and color matching. ComfyUI omits the grayscale selection guide. Real illustration samples showed visible lighting changes; photographic portraits may still change too little. This does not provide precise lighting control or guarantee unchanged faces and texture.
 
-![Blending result: darker subject in the saved stage environment](../../assets/guide/050-result-blend.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-blend.png"><img src="../../assets/guide/050-result-blend.png" width="720" alt="Blending result: darker subject in the saved stage environment"></a>
+</p>
 
 Saved stage example: the subject becomes darker while the saved mask preserves the background. Check faces and clothing texture too; they can change.
 
 <details>
 <summary>View mode controls</summary>
 
-![Image Blending mode](../../assets/guide/050-mode-blend-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-blend-zh.png"><img src="../../assets/guide/050-mode-blend-zh.png" width="420" alt="Image Blending mode"></a>
+</p>
 
 </details>
 
@@ -294,7 +361,9 @@ Saved stage example: the subject becomes darker while the saved mask preserves t
 
 This candidate was loaded from History. Its source belongs to an earlier session, so it remains exportable but cannot apply directly.
 
-![Results loaded from History](../../assets/guide/050-results-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-results-zh.png"><img src="../../assets/guide/050-results-zh.png" width="420" alt="Results loaded from History"></a>
+</p>
 
 Keep the source unchanged during generation. Candidates from changed, closed or previous-session sources remain exportable. **Check source** explains why a candidate cannot apply without modifying the document.
 
@@ -302,7 +371,9 @@ Keep the source unchanged during generation. Candidates from changed, closed or 
 
 Click a record to inspect it; checkboxes independently select records for bulk clearing. Pages hold 20 records. All / Unresolved filters narrow the list, and Select all includes every page in the current filter. In a narrow panel, open details and use Back to history to return.
 
-![History details and candidate preview](../../assets/guide/050-history-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-history-zh.png"><img src="../../assets/guide/050-history-zh.png" width="420" alt="History details and candidate preview"></a>
+</p>
 
 - **Load candidate:** open a saved result without generating again. Application eligibility is checked against that candidate's own source.
 - **Reuse parameters:** restore text and settings. Prepare selections, protection and references again.
@@ -315,7 +386,9 @@ After confirmation, **Clear checked history** removes the selected local records
 
 ## Adjust parameters
 
-![Advanced parameters](../../assets/guide/050-advanced-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-advanced-zh.png"><img src="../../assets/guide/050-advanced-zh.png" width="420" alt="Advanced parameters"></a>
+</p>
 
 - **Resolution:** common choices are 768, 992 and 1024. Edits keep the source aspect ratio; model capabilities depend on the backend.
 - **Steps:** 25 by default, adjustable from 1–100. More steps do not guarantee a better image.

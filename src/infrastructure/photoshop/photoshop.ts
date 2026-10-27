@@ -558,9 +558,9 @@ export class PhotoshopAdapter {
     },{commandName:'PS-AI 原尺寸条带回填'});
   }
   /**
-   * Native source composite + bounded influence strips in an isolated NORMAL
-   * group. Source alpha must be opaque wherever the effective mask is nonzero:
-   * this prevents duplicating source semitransparency over the original.
+   * Bounded influence strips in a PASSTHROUGH group act on the source below.
+   * Validate the frozen native source alpha without duplicating its pixels:
+   * editable coverage must remain opaque for these opaque influence layers.
    */
   async applyRelightLayers(snapshot:Snapshot,fields:RelightLayerFields,name:string,options:{signal?:AbortSignal;onProgress?:(done:number,total:number)=>void}={}):Promise<number> {
     validateRelightLayerFields(fields);const width=snapshot.bounds.right-snapshot.bounds.left,height=snapshot.bounds.bottom-snapshot.bounds.top;
@@ -575,7 +575,7 @@ export class PhotoshopAdapter {
     if(source.maskRef!==maskRef)throw new DiagnosticError('source-changed','apply','光影影响场的选区或保护区已改变，请重新读取原图');
     if(!/^sRGB(?: IEC61966-2\.1)?$/i.test(snapshot.profile.trim())||snapshot.mode!==this.ps.constants.DocumentMode.RGB)throw new Error('实验光影层仅支持已标记的 sRGB RGB 原文档；不能把数值影响图跨 ICC 当作普通照片转换');
     const blends=this.ps.constants.BlendMode;
-    if(![blends.NORMAL,blends.MULTIPLY,blends.SCREEN,blends.COLOR].every(v=>v!==undefined))throw new Error('当前 Photoshop 不提供所需光影混合模式');
+    if(![blends.PASSTHROUGH,blends.MULTIPLY,blends.SCREEN,blends.COLOR].every(v=>v!==undefined))throw new Error('当前 Photoshop 不提供所需光影混合模式');
     const check=(context?:any)=>{if(options.signal?.aborted||context?.isCancelled){const error=new Error('光影层回填已取消，已回滚本次操作');error.name='AbortError';throw error;}};
     check();this.key(snapshot,true);this.validate(snapshot);await this.checkpoint('apply.layers.start');
     return this.ps.core.executeAsModal(async(context:any)=>{
@@ -589,13 +589,10 @@ export class PhotoshopAdapter {
         suspension=await context.hostControl.suspendHistory({documentID:doc.id,name:'PS-AI 应用保细节光影层'});pending=true;
         const own=this.applications.get(this.key(snapshot));
         if(own&&own.historyId===doc.activeHistoryState.id){const prior=Array.from(doc.layers as any[]).find((l:any)=>l.id===own.layerId);if(prior)await prior.delete();}
-        const base=await doc.createLayer(this.ps.constants.LayerKind.NORMAL,{name:'Source — frozen native composite',blendMode:blends.NORMAL,opacity:100});
-        base.fillOpacity=100;
-        if(doc.layers[0]?.id!==base.id)await base.move(doc.layers[0],this.ps.constants.ElementPlacement.PLACEBEFORE);
-        const created=[base];
+        const created:any[]=[];
         for(const strip of strips){
           check(context);await this.checkpoint('apply.layers.source.read');
-          // Pin every strip to the captured history. New base/lighting pixels,
+          // Pin validation to the captured history. New lighting pixels,
           // including a previous owned result, cannot leak into later reads.
           const result=await this.ps.imaging.getPixels({documentID:doc.id,historyStateID:snapshot.historyId,sourceBounds:strip,colorSpace:'RGB',colorProfile:snapshot.profile,componentSize:depth,applyAlpha:false}),data=result.imageData;
           if(!data)throw new Error('来源条带没有可读取像素');
@@ -606,7 +603,6 @@ export class PhotoshopAdapter {
             for(let y=strip.top;y<strip.bottom;y++)for(let x=strip.left;x<strip.right;x++)if(snapshot.mask[(y-snapshot.bounds.top)*width+x-snapshot.bounds.left]){
               if(x<actual.left||x>=actual.right||y<actual.top||y>=actual.bottom||data.components===4&&values[((y-actual.top)*data.width+x-actual.left)*4+3]!==max)throw new Error('光影层暂不支持作用范围内的透明/半透明来源；请缩小到不透明区域，或明确使用整图重绘并检查透明度');
             }
-            await this.ps.imaging.putPixels({documentID:doc.id,layerID:base.id,imageData:data,replace:false,targetBounds:{left:actual.left,top:actual.top}});
           }finally{data.dispose();}progress();
         }
         const names={'shadow':'Shadow','cast-shadow':'Cast Shadow','color-atmosphere':'Color Atmosphere','light':'Light','rim-light':'Rim Light'};
@@ -619,10 +615,11 @@ export class PhotoshopAdapter {
             try{const pixels=renderRelightLayerStrip(fields,channel,snapshot.bounds,strip,depth);data=await this.ps.imaging.createImageDataFromBuffer(pixels.rgba,{width:pixels.width,height:pixels.height,components:4,colorSpace:'RGB',colorProfile:snapshot.profile,...(sixteen?{fullRange:true}:{})});await this.ps.imaging.putPixels({documentID:doc.id,layerID:layer.id,imageData:data,replace:false,targetBounds:{left:strip.left,top:strip.top}});}finally{data?.dispose();}progress();
           }
           // An editable white mask controls only this channel; native selection
-          // and protection are applied once, to the isolated group below.
+          // and protection are applied once, to the pass-through group below.
           await makeMask(layer.id,'revealAll');
         }
-        const group=await doc.createLayerGroup({name,opacity:100,blendMode:blends.NORMAL,fromLayers:created.slice().reverse()});group.blendMode=blends.NORMAL;group.opacity=100;group.fillOpacity=100;
+        const group=await doc.createLayerGroup({name,opacity:100,blendMode:blends.PASSTHROUGH,fromLayers:created.slice().reverse()});group.blendMode=blends.PASSTHROUGH;group.opacity=100;group.fillOpacity=100;
+        if(doc.layers[0]?.id!==group.id)await group.move(doc.layers[0],this.ps.constants.ElementPlacement.PLACEBEFORE);
         await makeMask(group.id,'hideAll');
         for(const strip of strips){
           check(context);let data:any;

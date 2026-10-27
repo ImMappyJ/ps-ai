@@ -4,9 +4,9 @@
 
 在 Photoshop 里圈选、描述、生成，再把结果放回独立图层。PS-AI 支持局部修改、换背景、服装道具、布光、溶图和文字生图，不用来回导出图片。
 
-**当前版本：0.5.0，实验性预发布。** 可连接本地 ComfyUI / Qwen-Image 2.1，也提供 Nano Banana（Gemini）、GPT Image（OpenAI Images）和百炼适配。云端需要自己的 API Key，尚未完成真实账号出图验证。
+**当前版本：0.5.1，实验性预发布。** 可连接本地 ComfyUI / Qwen-Image 2.1，也提供 Nano Banana（Gemini）、GPT Image（OpenAI Images）和百炼适配。云端需要自己的 API Key，尚未完成真实账号出图验证。
 
-[下载 0.5.0](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.0) · [使用指南](docs/usage/USER_GUIDE.md) · [ComfyUI 配置](docs/setup/COMFYUI.md) · [云平台配置](docs/setup/PLATFORMS.md)
+[下载 0.5.1](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.1) · [使用指南](docs/usage/USER_GUIDE.md) · [ComfyUI 配置](docs/setup/COMFYUI.md) · [云平台配置](docs/setup/PLATFORMS.md)
 
 ## 能做什么
 
@@ -18,13 +18,17 @@
 
 每次可生成 1–4 张候选，先比较再应用。结果放在新图层和可编辑蒙版中，原图层保留；一次 Photoshop 撤销可撤回一次应用。历史记录用于查看候选、复用参数和恢复中断的任务。
 
-![PS-AI 创作界面与演示图片](assets/guide/050-create-zh.png)
+<p align="center">
+  <a href="assets/guide/050-create-zh.png"><img src="assets/guide/050-create-zh.png" width="720" alt="PS-AI 创作界面与演示图片"></a>
+</p>
 
-光影重塑有独立工作台，可添加和拖动光源，调整颜色、方向与强度，再生成 AI 结果。输出可选“光影层”或“整图重绘”。下图是**本地布光示意，不是模型出图效果**。
+光影重塑用于调整画面的明暗、冷暖与光线方向。在工作台摆好灯光，生成 AI 参考，再把估计出的光照变化叠加到原图上。选中候选后，可用“光效还原”调整强度，用“细节保护”柔化细碎变化，无需再次生成。也可选择“整图重绘”。
 
-![光影重塑工作台](assets/guide/050-relight-zh.png)
+<p align="center">
+  <a href="assets/guide/050-result-relight.png"><img src="assets/guide/050-result-relight.png" width="720" alt="光影重塑：原图、AI 参考与光影层合成预览"></a>
+</p>
 
-截图来自 Photoshop 27 中的 0.5.0 Portable，演示图片为 `3F3F3F.webp`。点击图片可查看大图。
+上图从左到右为原图、真实 AI 参考、光影层本地合成预览：左侧暖光，右侧冷光。来源是 `3F3F3F.webp` 加上已生成的房间背景；使用“光效还原 1／细节保护 0.65”。这张对比图不是 Photoshop 回填截图。操作见[光影重塑指南](docs/usage/USER_GUIDE.md#relight)。界面截图来自 Photoshop 27 中的 0.5.0 Portable，点击图片可查看大图。
 
 ## 系统要求
 
@@ -36,15 +40,15 @@ ComfyUI 使用固定的 Qwen 2.1 工作流，不能直接换成 SD、SDXL 或 Fl
 
 ## 安装发行包
 
-从 [0.5.0 Release](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.0) 下载一种插件包，并核对同名 `.sha256` 文件。环境工具包提供配置说明和安装脚本，不包含 ComfyUI 或模型权重。
+从 [0.5.1 Release](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.1) 下载一种插件包，并核对同名 `.sha256` 文件。环境工具包提供配置说明和安装脚本，不包含 ComfyUI 或模型权重。
 
 ### 方式一：CCX
 
 1. 安装 Adobe Creative Cloud 桌面应用。
-2. 双击 `ps-ai-0.5.0-experimental.ccx`，按 Adobe 提示安装。
+2. 双击 `ps-ai-0.5.1-experimental.ccx`，按 Adobe 提示安装。
 3. 重启 Photoshop，打开“增效工具 → PS-AI”。
 
-双击无反应时，解压 `ps-ai-0.5.0-environment-experimental.zip`，在解压目录运行：
+双击无反应时，解压 `ps-ai-0.5.1-environment-experimental.zip`，在解压目录运行：
 
 ```powershell
 $package = Read-Host 'CCX 文件完整路径'
@@ -56,7 +60,7 @@ powershell.exe -NoProfile -File .\scripts\install-ccx.ps1 -PackagePath $package
 ### 方式二：Portable 文件夹版
 
 1. 保存文档并完全退出 Photoshop。
-2. 解压 `ps-ai-0.5.0-portable-experimental.zip`，把整个 `PS-AI-FOR-ME` 文件夹放进 Photoshop 安装目录的 `Plug-ins`。
+2. 解压 `ps-ai-0.5.1-portable-experimental.zip`，把整个 `PS-AI-FOR-ME` 文件夹放进 Photoshop 安装目录的 `Plug-ins`。
 3. 确认 `manifest.json` 直接位于 `Plug-ins/PS-AI-FOR-ME` 下，没有多套一层文件夹。
 4. 重启，打开“增效工具 → PS-AI (Portable)”。
 
@@ -76,7 +80,7 @@ Portable 已在 Windows PS 27.0 加载使用；其他宿主版本及关闭开发
 ## 使用限制
 
 - **效果仍需检查。** 模型可能改变脸、文字、线条和纹理。角色参考不保证身份一致；不包含常规磨皮、去痘和肤色精修。
-- **布光和溶图仍在改进。** 光影层是从 AI 参考图估计出的光照变化，不能保证完整保留细节；结构差异过大时会停止提取并保留参考图。真人溶图目前仍可能变化较弱。
+- **布光和溶图仍在改进。** 光影层保留原图作为内容基础，但无法完美分离光照与重绘。参考图的大幅错位可能留下光斑，硬阴影和细窄轮廓光可能减弱。真人溶图目前仍可能变化较弱。
 - **图片参考素材质量尚未达标。** 特效／氛围素材可能残留原人物、背景或范围边界；请检查透明度，必要时改用纯文字素材或手工修整。
 - **颜色与尺寸有边界。** 支持能确认色彩空间的 RGB／灰度 8/16 位来源。模型输入是 sRGB8，SDR16 保存不等于原生 16 位生成或 HDR。文档上限 4500 万像素、单边 30000；插件导出可能采用工作图尺寸，原尺寸交付请应用后通过 Photoshop 导出。
 - **保留副本。** 不支持 CMYK、Lab、索引色、多通道和 32 位 HDR。无法确认色彩或安全处理半透明多层时会提示处理副本。来源修改、关闭或重开插件后，旧候选仍能导出，但不能强行回填。

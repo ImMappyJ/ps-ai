@@ -2,7 +2,7 @@
 <h1 align="center">PS-AI 使用指南</h1>
 <p align="center"><strong>简体中文</strong> · <a href="USER_GUIDE.en.md">English</a></p>
 
-适用 **0.5.0 实验版**。先[安装插件](../../README.md#安装发行包)，再连接[ComfyUI](../setup/COMFYUI.md)或[云平台](../setup/PLATFORMS.md)。界面图来自 Photoshop 27；各模式另附真实生成结果，演示图片为 `3F3F3F.webp`。配置图与布光示意不代表模型效果。点击图片可看大图。
+适用 **0.5.1 实验版**。先[安装插件](../../README.md#安装发行包)，再连接[ComfyUI](../setup/COMFYUI.md)或[云平台](../setup/PLATFORMS.md)。界面图来自 Photoshop 27；各模式另附真实生成结果，演示图片为 `3F3F3F.webp`。配置图与布光示意不代表模型效果。点击图片可看大图。
 
 <a id="current-ui"></a>
 
@@ -17,7 +17,9 @@
 
 切换页面不会停止任务，也不会丢掉正在编辑的描述和参数。面板不会在打开时自动启动后端或生成图片。
 
-![创作面板与演示图片](../../assets/guide/050-create-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-create-zh.png"><img src="../../assets/guide/050-create-zh.png" width="720" alt="创作面板与演示图片"></a>
+</p>
 
 ## 完成第一次编辑
 
@@ -28,9 +30,13 @@
 5. 点“生成候选”，等待结果。生成时不要修改来源文档；断线后使用“恢复任务”，不要重复提交。
 6. 在“结果”检查细节，点“应用为新图层”。原图层保留，结果带可编辑蒙版，可调不透明度或按一次 Ctrl+Z 撤销。
 
-![模型与连接设置](../../assets/guide/050-settings-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-settings-zh.png"><img src="../../assets/guide/050-settings-zh.png" width="420" alt="模型与连接设置"></a>
+</p>
 
-![英文设置界面](../../assets/guide/050-settings-en.png)
+<p align="center">
+  <a href="../../assets/guide/050-settings-en.png"><img src="../../assets/guide/050-settings-en.png" width="420" alt="英文设置界面"></a>
+</p>
 
 设置 JSON 可迁移地址、模型和语言，不含 Key、模型文件或图片历史。CCX 与 Portable 的数据分别保存。
 
@@ -49,11 +55,15 @@
 
 撤销后选区丢失时，可重新圈选，或在同一文档、同一模式点击“恢复上次选区并重新读取”。它只恢复本次会话保存的范围，再读取当前图片；不会提交任务，也不会恢复旧候选的应用权限。
 
-![缺少选区时的提示](../../assets/guide/050-selection-error-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-selection-error-zh.png"><img src="../../assets/guide/050-selection-error-zh.png" width="420" alt="缺少选区时的提示"></a>
+</p>
 
 透明抠图要做整图布光时，可先在副本下方加入背景，让作用范围内没有透明像素。演示副本保留原图和背景两层：
 
-![演示副本的原图与背景图层](../../assets/guide/050-layers-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-layers-zh.png"><img src="../../assets/guide/050-layers-zh.png" width="375" alt="演示副本的原图与背景图层"></a>
+</p>
 
 ## 选择模式
 
@@ -69,12 +79,16 @@
 
 实测：“把这个玩偶改成一只黑猫玩偶”。左边是腰间区域，右边是按保存选区合成的结果。
 
-![3F3F3F 腰间玩偶改为黑猫的前后对比](../../assets/guide/050-result-edit.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-edit.png"><img src="../../assets/guide/050-result-edit.png" width="480" alt="3F3F3F 腰间玩偶改为黑猫的前后对比"></a>
+</p>
 
 <details>
 <summary>查看模式界面</summary>
 
-![局部修改模式](../../assets/guide/050-mode-edit-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-edit-zh.png"><img src="../../assets/guide/050-mode-edit-zh.png" width="420" alt="局部修改模式"></a>
+</p>
 
 </details>
 
@@ -88,12 +102,16 @@
 
 实测：移除腰间玩偶。衣服被补齐，接缝和线条仍需放大检查。
 
-![3F3F3F 移除腰间玩偶的前后对比](../../assets/guide/050-result-remove.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-remove.png"><img src="../../assets/guide/050-result-remove.png" width="412" alt="3F3F3F 移除腰间玩偶的前后对比"></a>
+</p>
 
 <details>
 <summary>查看模式界面</summary>
 
-![移除杂物模式](../../assets/guide/050-mode-remove-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-remove-zh.png"><img src="../../assets/guide/050-mode-remove-zh.png" width="420" alt="移除杂物模式"></a>
+</p>
 
 </details>
 
@@ -112,12 +130,16 @@
 
 实测：“浅蓝色摄影棚，柔和侧光，简洁地面，人物脚下有自然接触阴影”。选中主体保留，让透明背景变成完整场景。
 
-![3F3F3F 透明背景替换为浅蓝摄影棚的前后对比](../../assets/guide/050-result-background.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-background.png"><img src="../../assets/guide/050-result-background.png" width="720" alt="3F3F3F 透明背景替换为浅蓝摄影棚的前后对比"></a>
+</p>
 
 <details>
 <summary>查看模式界面</summary>
 
-![换背景模式](../../assets/guide/050-mode-background-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-background-zh.png"><img src="../../assets/guide/050-mode-background-zh.png" width="420" alt="换背景模式"></a>
+</p>
 
 </details>
 
@@ -131,12 +153,16 @@
 
 实测：“换成白色过膝袜”。这里只显示腿部裁切，方便检查袜口、鞋面和衣摆边缘。
 
-![3F3F3F 换成白色过膝袜的前后对比](../../assets/guide/050-result-costume.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-costume.png"><img src="../../assets/guide/050-result-costume.png" width="480" alt="3F3F3F 换成白色过膝袜的前后对比"></a>
+</p>
 
 <details>
 <summary>查看模式界面</summary>
 
-![服装与道具模式](../../assets/guide/050-mode-costume-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-costume-zh.png"><img src="../../assets/guide/050-mode-costume-zh.png" width="420" alt="服装与道具模式"></a>
+</p>
 
 </details>
 
@@ -150,12 +176,16 @@
 
 实测失败示例：参考黑猫玩偶替换原玩偶。模型把局部画面缩小了，合成后出现错位和接缝，不能直接使用。三栏依次为来源、参考图、合成结果。
 
-![3F3F3F 角色参考替换的真实失败示例，含参考图](../../assets/guide/050-result-reference.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-reference.png"><img src="../../assets/guide/050-result-reference.png" width="480" alt="3F3F3F 角色参考替换的真实失败示例，含参考图"></a>
+</p>
 
 <details>
 <summary>查看模式界面</summary>
 
-![角色参考模式](../../assets/guide/050-mode-reference-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-reference-zh.png"><img src="../../assets/guide/050-mode-reference-zh.png" width="420" alt="角色参考模式"></a>
+</p>
 
 </details>
 
@@ -169,12 +199,16 @@
 
 实测：“粉色主题的卧室”。主体保留在原位置，背景与地面替换为室内场景。
 
-![3F3F3F 场景替换为粉色卧室的前后对比](../../assets/guide/050-result-scene.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-scene.png"><img src="../../assets/guide/050-result-scene.png" width="720" alt="3F3F3F 场景替换为粉色卧室的前后对比"></a>
+</p>
 
 <details>
 <summary>查看模式界面</summary>
 
-![场景替换模式](../../assets/guide/050-mode-scene-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-scene-zh.png"><img src="../../assets/guide/050-mode-scene-zh.png" width="420" alt="场景替换模式"></a>
+</p>
 
 </details>
 
@@ -193,12 +227,16 @@
 
 可用路径示例：用“仅文字生成独立素材”生成蓝色弧形闪电，再手工缩放、定位到测试图的卧室副本。三栏为来源、透明素材、叠加预览；这不是图片参考模式的成功样本。
 
-![真实蓝色闪电素材叠加到 3F3F3F 卧室副本的效果](../../assets/guide/050-result-effect.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-effect.png"><img src="../../assets/guide/050-result-effect.png" width="720" alt="真实蓝色闪电素材叠加到 3F3F3F 卧室副本的效果"></a>
+</p>
 
 <details>
 <summary>查看模式界面</summary>
 
-![特效素材模式](../../assets/guide/050-mode-effect-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-effect-zh.png"><img src="../../assets/guide/050-mode-effect-zh.png" width="420" alt="特效素材模式"></a>
+</p>
 
 </details>
 
@@ -212,12 +250,16 @@
 
 实测：纯文字生成“稀疏漂浮的金色光粒子”，等比放大并裁切后叠加到测试图的卧室副本。三栏为来源、透明素材、叠加预览，不代表图片参考模式已通过验收。
 
-![真实金色粒子素材叠加到 3F3F3F 卧室副本的效果](../../assets/guide/050-result-atmosphere.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-atmosphere.png"><img src="../../assets/guide/050-result-atmosphere.png" width="720" alt="真实金色粒子素材叠加到 3F3F3F 卧室副本的效果"></a>
+</p>
 
 <details>
 <summary>查看模式界面</summary>
 
-![氛围素材模式](../../assets/guide/050-mode-atmosphere-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-atmosphere-zh.png"><img src="../../assets/guide/050-mode-atmosphere-zh.png" width="420" alt="氛围素材模式"></a>
+</p>
 
 </details>
 
@@ -231,12 +273,16 @@
 
 实测：“粉色主题的卧室，窗边柔和晨光，日系插画背景，没有人物”。这是独立生成的新图，没有读取或修改 `3F3F3F.webp`。
 
-![真实文字生图结果：粉色卧室插画背景](../../assets/guide/050-result-generate.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-generate.png"><img src="../../assets/guide/050-result-generate.png" width="480" alt="真实文字生图结果：粉色卧室插画背景"></a>
+</p>
 
 <details>
 <summary>查看模式界面</summary>
 
-![文字生图模式](../../assets/guide/050-mode-generate-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-generate-zh.png"><img src="../../assets/guide/050-mode-generate-zh.png" width="420" alt="文字生图模式"></a>
+</p>
 
 </details>
 
@@ -252,18 +298,35 @@
 4. 在“布光示意”看大致范围和冷暖，再选择输出，点“生成 AI 结果”。拖动、输入或工作台撤销都不会提交模型请求，一次拖动算一步撤销。
 5. 检查 AI 结果，再应用或导出。生成后改了灯光，旧结果会提示过期。
 
-![光影重塑工作台，本地布光示意](../../assets/guide/050-relight-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-relight-zh.png"><img src="../../assets/guide/050-relight-zh.png" width="720" alt="光影重塑工作台，本地布光示意"></a>
+</p>
 
 | 输出 | 区别 |
 | --- | --- |
-| 光影层（默认） | 从 AI 参考图提取光照变化，叠加在原生来源底图上，应用为带蒙版的图层组。各通道可继续调整。 |
+| 光影层（默认） | 从 AI 参考图提取光照变化，直接作用于下方原图，应用为带蒙版的穿透图层组，不再复制底图。各通道可继续调整。 |
 | 整图重绘 | 使用模型生成的图片，应用为带蒙版的新图层；结构和纹理可能变化。 |
 
-**布光示意只表达意图，不是最终效果。** 光影层也不是物理光照分层，不能保证细节完全不变。它要求有标签的 sRGB RGB 8/16 位来源，且作用范围内像素不透明。参考图结构差异过大时会停止提取，保留参考图供检查和导出，不自动改成整图重绘或重新生成。需要重绘时请明确选择该输出。
+**布光示意只表达意图，不是最终效果。** 光影层从 AI 参考中估计明暗和冷暖变化，以原图为底图，适合柔和的整体布光。选中光影层候选后，在“当前候选光影层”调整：
 
-实测失败示例：下图右侧是真实 AI 参考图，人物结构和纹理发生变化，触发了光影提取保护。它没有作为光影层应用，不能当作“保留原图细节”的成功效果。
+| 参数 | 怎么调 |
+| --- | --- |
+| 光效还原 | 默认 1。降低可减弱光效；0 回到原图。觉得太暗或颜色太浓时，先降低它。 |
+| 细节保护 | 默认 0.65。提高可减少细碎纹理变化，让过渡更柔和；局部阴影也可能变淡。 |
 
-![3F3F3F 光影提取失败示例：左为来源，右为未应用的 AI 参考](../../assets/guide/050-result-relight.png)
+光影组只包含光影层，可调整整个组的不透明度。下方原图仍可编辑，但改变人物、背景或位置后，原来的光影可能不再匹配，需要重新读取并生成。已有的旧版分组不会自动改动。
+
+两项范围均为 0–1，也可输入精确数值。松开滑块或确认数值后在本地更新，无需重新生成；参数随候选保存，重新读取和应用时保持一致。
+
+光影与重绘无法完全分离，大幅错位仍可能产生光斑，硬阴影和细窄轮廓光可能减弱。来源须为有标签的 sRGB RGB 8/16 位，作用范围内像素不透明。原始 AI 参考可单独导出；不会自动改成整图重绘或重新生成。
+
+下图展示左暖右冷的整体布光。左：`3F3F3F.webp` 与已生成房间背景的合成来源；中：真实 Qwen-Image 2.1 AI 参考；右：以原图为底图的光影层本地合成预览，参数为“光效还原 1／细节保护 0.65”。可对照衣服线条、发饰和背景，观察光色变化与 AI 重绘的区别。图片未经额外调色，不是 Photoshop 回填截图，也不代表真人照片的效果。
+
+<p align="center">
+  <a href="../../assets/guide/050-result-relight.png"><img src="../../assets/guide/050-result-relight.png" width="720" alt="3F3F3F 冷暖布光对比：原图、AI 参考、光影层合成预览"></a>
+</p>
+
+旧版因相似度检查而停止的候选，可从历史读取已保存的原任务重新提取，无需再次生成。
 
 从主面板打开时若读取失败，工作台保持关闭，并保留灯光与旧候选。已经打开的工作台重读失败会显示旧图失效原因。读成功后，对应的旧读取错误会消失。生成／应用后的内部重开保留原任务来源；已有候选始终绑定它提交时的快照。
 
@@ -283,12 +346,16 @@
 
 实测：测试图先放入舞台背景，再为主体匹配环境光。右侧人物明显变暗，背景按保存的选区保留；脸部与衣服细节也有变化，需要检查。
 
-![3F3F3F 主体融入舞台环境光的前后对比](../../assets/guide/050-result-blend.png)
+<p align="center">
+  <a href="../../assets/guide/050-result-blend.png"><img src="../../assets/guide/050-result-blend.png" width="720" alt="3F3F3F 主体融入舞台环境光的前后对比"></a>
+</p>
 
 <details>
 <summary>查看模式界面</summary>
 
-![溶图模式](../../assets/guide/050-mode-blend-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-mode-blend-zh.png"><img src="../../assets/guide/050-mode-blend-zh.png" width="420" alt="溶图模式"></a>
+</p>
 
 </details>
 
@@ -301,7 +368,9 @@
 
 下图是从历史读取的候选。来源属于此前会话，仍可导出，不能直接应用。
 
-![从历史读取的结果页](../../assets/guide/050-results-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-results-zh.png"><img src="../../assets/guide/050-results-zh.png" width="420" alt="从历史读取的结果页"></a>
+</p>
 
 生成期间不要修改来源。来源改变、关闭或来自旧插件会话时，候选仍可导出；“检查来源”会说明无法应用的原因，不会修改文档。
 
@@ -309,7 +378,9 @@
 
 点击记录查看详情，勾选框用于批量清除，两者独立。每页 20 条，可按“全部／未确认”筛选；“全选”包含当前筛选的所有页。窄面板可进入详情后再“返回历史”。
 
-![历史详情与候选预览](../../assets/guide/050-history-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-history-zh.png"><img src="../../assets/guide/050-history-zh.png" width="420" alt="历史详情与候选预览"></a>
+</p>
 
 - **读取候选**：打开已保存的结果，不重新生成。应用资格按该候选自己的来源判断。
 - **复用参数**：恢复描述和设置；选区、保护区和参考图需重新准备。
@@ -322,7 +393,9 @@
 
 ## 参数怎么调
 
-![进阶参数](../../assets/guide/050-advanced-zh.png)
+<p align="center">
+  <a href="../../assets/guide/050-advanced-zh.png"><img src="../../assets/guide/050-advanced-zh.png" width="420" alt="进阶参数"></a>
+</p>
 
 | 参数 | 建议 |
 | --- | --- |

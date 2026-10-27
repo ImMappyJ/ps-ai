@@ -5,8 +5,9 @@ import {downsampleSnapshotMask} from '../../imaging/budget';
 import {RelightSession,relightOutputKind,type RelightOutputKind,type FrozenRelightSubmission} from './relight-session';
 import {t,errorText} from '../../localization/i18n';
 import {DiagnosticError,diagnostic} from '../../diagnostics/diagnostics';
+import {validateRelightExtractionSettings,type RelightExtractionSettings} from './relight-layers';
 
-export interface RelightResult {jobId:string;fingerprint:string;sourceSnapshotId?:string;image:Raster;warning?:string;outputKind?:RelightOutputKind;lightingState?:'composite'|'reference-only';lightingFailure?:Error}
+export interface RelightResult {jobId:string;fingerprint:string;sourceSnapshotId?:string;image:Raster;warning?:string;outputKind?:RelightOutputKind;lightingState?:'composite'|'reference-only';lightingFailure?:Error;localExtraction?:RelightExtractionSettings}
 function resultLabel(result:RelightResult):string {return relightOutputKind(result)==='lighting-layers'?result.lightingState==='composite'?'光影合成预览':'AI 参考图（提取失败，仅供检查）':'整图重绘';}
 export interface RelightWorkbenchHost {
   uuid():string;save(scene:RelightScene):Promise<void>;loadDraft():Promise<RelightScene|undefined>;
@@ -14,6 +15,7 @@ export interface RelightWorkbenchHost {
   generate(frozen:FrozenRelightSubmission,onJob:(id:string)=>void):Promise<void>;
   cancel():Promise<void>;reread(options?:{explicit?:boolean}):Promise<void>;apply(jobId:string):Promise<void>;inspectResult?(jobId:string):Promise<void>;export(jobId:string):Promise<void>;
   results():RelightResult[];
+  reextract?(jobId:string,settings:RelightExtractionSettings,current:()=>boolean):Promise<void>;
   busy?():boolean;pendingTasks?():number;openPendingTasks?():Promise<void>;reportError?(error:Error):void;
   sourceState?():'current'|'changed'|'closed'|'rebind-required';observeSource?(invalidate:()=>void):()=>void;
   resultSourceState?(jobId:string):'current'|'changed';
@@ -22,12 +24,14 @@ export interface RelightWorkbenchHost {
 type Tab='original'|'illustration'|'result';
 type Drag={kind:'light'|'target'|'pan';id?:string;startX:number;startY:number;panX:number;panY:number;pointerId?:number;node?:any};
 type SliderGesture={id:string;lightId:string|null;pointerId?:number};
+type ExtractionGesture={jobId:string;settings:RelightExtractionSettings;pointerId?:number};
 type RequestOwner={lifecycle:number;fingerprint:string;outputKind:RelightOutputKind;ids:Set<string>;cancelled:boolean};
 type PreviewRequest={token:number;quality:'drag'|'final';snapshotId:string};
 export interface RelightWorkbenchPreviewStats {requested:number;started:number;completed:number;discarded:number;encoded:number;renderMs:number;encodeMs:number;running:boolean;pending:boolean;previewWidth:number;previewHeight:number}
 class ParameterValidationError extends Error {}
 const clamp=(v:number,min:number,max:number)=>Math.max(min,Math.min(max,v));
 const LIGHT_CONTROLS=['name','type','role','enabled','locked','x','y','z','intensity','range','softness','cone','targetX','targetY','direction','elevation','color-mode','temperature','color'];
+const EXTRACTION_CONTROLS={'fidelity':'光效还原','detail-protection':'细节保护'} as const;
 const SLIDER_CONTROLS:Record<string,{limits:{min:number;max:number};step:number;label:string}>={
   intensity:{limits:RELIGHT_LIMITS.intensity,step:.05,label:'相对强度'},
   temperature:{limits:RELIGHT_LIMITS.temperature,step:100,label:'色温（K）'},
@@ -72,6 +76,7 @@ export class RelightWorkbench {
   private pendingDraft?:RelightScene;private invalid=new Set<string>();private invalidLightId:string|null=null;private afterClose?:()=>Promise<void>;private reopenAfterClose=true;
   private listeners:Array<()=>void>=[];private drag?:Drag;private sliderGesture?:SliderGesture;private preview?:RelightPreparedPreview;
   private originalUrl='';private illustrationUrl='';private resultUrl='';private resultUrlId='';
+  private resultImage?:Raster;private extractionGesture?:ExtractionGesture;private extractionPending=false;private extractionToken=0;
   private displayedImageUrl='';private displayedImageGeometry='';
   private previewToken=0;private previewRequest?:PreviewRequest;private previewRun?:PreviewRequest;private lastRender=0;private previewTimer?:ReturnType<typeof setTimeout>;private resizeTimer?:ReturnType<typeof setTimeout>;private saveTimer?:ReturnType<typeof setTimeout>;
   private finalRenderer?:RelightPreviewRenderer;private dragRenderer?:RelightPreviewRenderer;
@@ -89,9 +94,9 @@ export class RelightWorkbench {
   invalidateResults(ids:readonly string[]):void {
     if(this.resultUrlId&&ids.includes(this.resultUrlId)){
       if(this.displayedImageUrl===this.resultUrl){this.el('image').removeAttribute('src');this.displayedImageUrl='';this.displayedImageGeometry='';}
-      this.resultUrl='';this.resultUrlId='';
+      this.resultUrl='';this.resultUrlId='';this.resultImage=undefined;
     }
-    if(this.selectedResult&&ids.includes(this.selectedResult)){this.selectedResult=this.host.results()[0]?.jobId;if(!this.selectedResult&&this.tab==='result')this.tab='illustration';}
+    if(this.selectedResult&&ids.includes(this.selectedResult)){this.extractionToken++;this.extractionGesture=undefined;this.selectedResult=this.host.results()[0]?.jobId;if(!this.selectedResult&&this.tab==='result')this.tab='illustration';}
     if(this.visible)this.refresh();
   }
   setSourceInvalid(invalid:boolean):void {if(invalid){this.invalidateSource();return;}const previous=this.sourceInvalid;this.sourceInvalid=false;this.sourceSyncFailed=false;if(previous)this.message(t('编辑布光不会发起 AI 请求；主动点击生成'));if(this.visible)this.refresh();}
@@ -113,7 +118,12 @@ export class RelightWorkbench {
   private click(id:string,fn:()=>void|Promise<void>):void {this.listen(this.el(id),'click',()=>void this.guard(()=>{this.finishInteraction();return fn();}));}
   private async guard(fn:()=>void|Promise<void>):Promise<void>{try{await fn();}catch(error){this.message(error instanceof Error?error.message:String(error),error instanceof ParameterValidationError);}}
   private message(text:string,parameter=false):void {this.measurementStatus=undefined;this.parameterStatus=parameter;this.lastStatus=errorText(text);if(this.visible)this.el('status').textContent=this.lastStatus;}
-  private geometry():RelightGeometry {const b=this.session.editor.snapshot().source.bounds,w=b.right-b.left,h=b.bottom-b.top;return {bounds:b,modelWidth:w,modelHeight:h,modelContentRect:{left:0,top:0,right:w,bottom:h}};}
+  private geometry():RelightGeometry {
+    const bounds=this.session.editor.snapshot().source.bounds,{width,height}=this.session.sourceCapture.image;
+    // Native bounds control placement; the bounded capture is the image canvas.
+    // Large documents must not be validated as full-size model rasters.
+    return {bounds,modelWidth:width,modelHeight:height,modelContentRect:{left:0,top:0,right:width,bottom:height}};
+  }
   private result():RelightResult|undefined{return this.host.results().find(r=>r.jobId===this.selectedResult);}
   private assertHostIdle():void {if(this.host.busy?.())throw new Error(t('已有任务正在进行，请等待完成后再生成或应用；可以继续编辑布光'));}
   private clearInvalid(id:string):void {this.invalid.delete(id);this.el(id).removeAttribute('aria-invalid');}
@@ -221,6 +231,16 @@ export class RelightWorkbench {
       this.listen(node,'change',()=>void this.guard(()=>{this.inputSlider(id);this.finishSlider();}));
       this.listen(node,'blur',()=>this.finishSlider());
     }
+    for(const [id,label]of Object.entries(EXTRACTION_CONTROLS)){
+      const slider=this.el(`${id}-slider`),number=this.el(id);
+      for(const node of [slider,number]){node.min='0';node.max='1';node.step='.01';for(const [key,value]of Object.entries({min:0,max:1,step:.01}))node.setAttribute(key,String(value));}
+      slider.setAttribute('aria-label',t(label));number.setAttribute('aria-label',t('精确值：{0}',t(label)));
+      this.listen(slider,'pointerdown',e=>{if(!(e.button>0))this.beginExtraction(e.pointerId);});
+      this.listen(slider,'input',()=>void this.guard(()=>this.inputExtraction(id,slider.value)));
+      this.listen(slider,'change',()=>void this.guard(()=>{this.inputExtraction(id,slider.value);this.finishExtraction();}));
+      this.listen(slider,'blur',()=>this.finishExtraction());
+      this.listen(number,'change',()=>void this.guard(()=>{this.inputExtraction(id,number.value);this.finishExtraction();}));
+    }
     this.el('name').maxLength=RELIGHT_LIMITS.maxName;this.el('supplement').setAttribute('maxlength',String(RELIGHT_LIMITS.maxSupplement));
     this.click('close',()=>this.dialog.close('user-close'));
     this.click('pending-tasks',()=>{
@@ -265,7 +285,7 @@ export class RelightWorkbench {
     this.click('export',async()=>{const r=this.result();if(!r)throw new Error(t('请先选择实际 AI 结果'));await this.host.export(r.jobId);});
     this.listen(this.el('acknowledge'),'change',()=>{this.acknowledged=!!this.el('acknowledge').checked;});
     this.listen(this.el('lights'),'click',e=>{const node=e.target?.closest?.('[data-light-id]');if(!node)return;this.finishInteraction();const id=node.getAttribute('data-light-id');this.session.editor.select(id);if(node.getAttribute('data-find')==='true')this.findLight(id);this.refresh();});
-    this.listen(this.el('result-list'),'click',e=>{const node=e.target?.closest?.('[data-job-id]');if(!node)return;this.selectedResult=node.getAttribute('data-job-id');this.tab='result';this.refresh();});
+    this.listen(this.el('result-list'),'click',e=>{const node=e.target?.closest?.('[data-job-id]');if(!node)return;this.extractionToken++;this.extractionGesture=undefined;this.selectedResult=node.getAttribute('data-job-id');this.tab='result';this.refresh();});
     for(const id of ['name','type','role','enabled','locked','x','y','z','intensity','range','softness','cone','targetX','targetY','direction','elevation','color-mode','temperature','color','ambient-intensity','ambient-color','existing','shadow-strength','shadow-softness','content','supplement']){
       const node=this.el(id);this.listen(node,'change',()=>void this.guard(()=>{this.finishInteraction();this.commitControl(id);}));
     }
@@ -323,12 +343,12 @@ export class RelightWorkbench {
     if(this.previewTimer)clearTimeout(this.previewTimer);this.previewTimer=undefined;
   }
   private cleanup():void {
-    this.finishInteraction();for(const remove of this.listeners.splice(0))remove();
+    this.extractionToken++;this.extractionGesture=undefined;this.finishInteraction();for(const remove of this.listeners.splice(0))remove();
     this.cancelPreview();this.finalRenderer?.clear();this.dragRenderer?.clear();this.finalRenderer=undefined;this.dragRenderer=undefined;
     if(this.resizeTimer)clearTimeout(this.resizeTimer);this.resizeTimer=undefined;
     if(this.saveTimer)clearTimeout(this.saveTimer);this.saveTimer=undefined;
     if(this.sourceSyncTimer)clearTimeout(this.sourceSyncTimer);this.sourceSyncTimer=undefined;
-    this.preview=undefined;this.originalUrl='';this.illustrationUrl='';this.resultUrl='';this.resultUrlId='';
+    this.preview=undefined;this.originalUrl='';this.illustrationUrl='';this.resultUrl='';this.resultUrlId='';this.resultImage=undefined;
     this.displayedImageUrl='';this.displayedImageGeometry='';
     this.el('image').removeAttribute('src');this.el('markers').innerHTML='';this.markerNodes.clear();this.lightListKey='';this.resultListKey='';this.interactionIdle();
   }
@@ -408,6 +428,12 @@ export class RelightWorkbench {
     const pendingTasks=this.host.pendingTasks?.()??0;this.el('pending-tasks').style.display=pendingTasks?'block':'none';this.el('pending-tasks').disabled=this.pending||this.nativeBusy||sharedBusy;this.el('pending-tasks').textContent=t('处理未确认任务（{0}）；保留布光并返回历史',pendingTasks);
     this.el('generate').disabled=this.pending||this.nativeBusy||this.sourceInvalid||this.scopePending||this.outputPending||sharedBusy;this.el('cancel').disabled=!this.pending;
     const result=this.result(),referenceOnly=!!result&&relightOutputKind(result)==='lighting-layers'&&result.lightingState!=='composite',checkSource=!!result&&(result.sourceSnapshotId!==undefined&&result.sourceSnapshotId!==scene.source.snapshotId||(this.host.resultSourceState?.(result.jobId)??(this.sourceInvalid?'changed':'current'))!=='current');
+    const extraction=this.extractionGesture&&this.extractionGesture.jobId===result?.jobId?this.extractionGesture.settings:validateRelightExtractionSettings(result?.localExtraction),extractionDisabled=this.pending||pendingTasks>0||this.nativeBusy||sharedBusy||this.extractionPending||!result||relightOutputKind(result)!=='lighting-layers'||!this.host.reextract;
+    for(const id of Object.keys(EXTRACTION_CONTROLS)){
+      const value=extraction[id==='fidelity'?'fidelity':'detailProtection'];
+      for(const node of [this.el(id),this.el(`${id}-slider`)]){node.disabled=extractionDisabled;node.value=String(value);}
+    }
+    this.el('extraction-controls').setAttribute('aria-busy',String(this.extractionPending));
     this.el('apply').disabled=this.pending||this.nativeBusy||sharedBusy||!result||!!result.warning&&!referenceOnly;this.el('export').disabled=!result;this.el('reread').disabled=this.pending||this.nativeBusy||sharedBusy;
     this.el('tab-result').textContent=t(result?resultLabel(result):'AI 结果');
     const color=this.el('recover-color'),colorAction=this.host.colorRecovery?.();
@@ -426,7 +452,7 @@ export class RelightWorkbench {
   private renderImage():void {
     if(!this.visible)return;
     const result=this.result();let url=this.tab==='original'?this.originalUrl:this.tab==='illustration'?this.illustrationUrl:'';
-    if(this.tab==='result'&&result){if(this.resultUrlId!==result.jobId){this.resultUrl=dataUrl(prepareRelightPreview(result.image,new Uint8Array(result.image.width*result.image.height)).image);this.resultUrlId=result.jobId;}url=this.resultUrl;}
+    if(this.tab==='result'&&result){if(this.resultUrlId!==result.jobId||this.resultImage!==result.image){this.resultUrl=dataUrl(prepareRelightPreview(result.image,new Uint8Array(result.image.width*result.image.height)).image);this.resultUrlId=result.jobId;this.resultImage=result.image;}url=this.resultUrl;}
     const img=this.el('image');img.alt=t(this.tab==='result'&&result?resultLabel(result):this.tab==='original'?'原图':'布光示意');
     // Assigning the identical data URL reloads PNG in UXP and can emit resize.
     // Track what this controller actually displayed, separately from cached tabs.
@@ -523,7 +549,32 @@ export class RelightWorkbench {
     if(cancel)this.session.editor.cancelGesture();else this.session.editor.endGesture();
     if(this.visible)this.changed();this.interactionIdle();
   }
-  private finishInteraction(e?:any,cancel=false):void {this.finishDrag(e,cancel);this.finishSlider(e,cancel);}
+  private beginExtraction(pointerId?:number):boolean {
+    if(this.el('fidelity-slider').disabled||!this.host.reextract)return false;
+    const result=this.result();if(!result||relightOutputKind(result)!=='lighting-layers')return false;
+    if(this.extractionGesture?.jobId===result.jobId)return true;
+    this.finishDrag();this.finishSlider();this.extractionGesture={jobId:result.jobId,settings:validateRelightExtractionSettings(result.localExtraction),pointerId};return true;
+  }
+  private inputExtraction(id:string,raw:unknown):void {
+    if(!this.beginExtraction())return;
+    const text=String(raw??'').trim(),value=Number(text);
+    if(!text||!Number.isFinite(value)){this.finishExtraction(undefined,true);throw new ParameterValidationError(t('参数无效，请输入范围内的有限数值'));}
+    const key=id==='fidelity'?'fidelity':'detailProtection';this.extractionGesture!.settings[key]=clamp(value,0,1);
+    for(const node of [this.el(id),this.el(`${id}-slider`)])node.value=String(this.extractionGesture!.settings[key]);
+  }
+  private finishExtraction(e?:any,cancel=false):void {
+    const gesture=this.extractionGesture;if(!gesture)return;
+    if(e&&gesture.pointerId!==undefined&&e.pointerId!==undefined&&gesture.pointerId!==e.pointerId)return;
+    this.extractionGesture=undefined;
+    const result=this.result();if(cancel||!result||result.jobId!==gesture.jobId){if(this.visible)this.refresh();return;}
+    const saved=validateRelightExtractionSettings(result.localExtraction);
+    if(saved.fidelity===gesture.settings.fidelity&&saved.detailProtection===gesture.settings.detailProtection){if(this.visible)this.refresh();return;}
+    const token=++this.extractionToken,lifecycle=this.lifecycle;
+    const current=()=>this.visible&&this.lifecycle===lifecycle&&this.extractionToken===token&&this.selectedResult===gesture.jobId;
+    this.extractionPending=true;this.message(t('正在本地更新光影层…'));this.refresh();
+    void this.host.reextract!(gesture.jobId,gesture.settings,current).then(()=>{if(current()){this.resultImage=undefined;this.message(t('已更新此候选的本地光影层；未重新生成。'));}}).catch(error=>{if(current())this.message(t('本地调整失败，已保留原候选和参数：{0}',errorText(error instanceof Error?error.message:String(error))));}).finally(()=>{this.extractionPending=false;if(this.visible)this.refresh();});
+  }
+  private finishInteraction(e?:any,cancel=false):void {this.finishDrag(e,cancel);this.finishSlider(e,cancel);this.finishExtraction(e,cancel);}
   private startDrag(e:any):void {
     const node=e.target?.closest?.('[data-light-id]');if(!node||e.button>0||this.drag)return;
     this.finishSlider();
@@ -569,7 +620,7 @@ export class RelightWorkbench {
     this.el('viewport').className=this.panMode?'pan':'';this.interactionIdle();
   }
   private key(e:any):void {
-    if(this.visible&&e.key==='Escape'&&(this.drag||this.sliderGesture)){e.preventDefault();e.stopPropagation();this.finishInteraction(undefined,true);return;}
+    if(this.visible&&e.key==='Escape'&&(this.drag||this.sliderGesture||this.extractionGesture)){e.preventDefault();e.stopPropagation();this.finishInteraction(undefined,true);return;}
     if(!this.visible||relightTextFocus(e.target)||relightTextFocus(this.dialog.ownerDocument.activeElement))return;
     if(!this.dialog.contains(e.target)&&!this.dialog.contains(this.dialog.ownerDocument.activeElement))return;
     const marker=e.target?.closest?.('[data-light-id]');

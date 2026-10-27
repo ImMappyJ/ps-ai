@@ -6,15 +6,15 @@ import {sha256} from '@noble/hashes/sha2.js';
 function host(depth:8|16=16,width=800,height=500,whole=false){
   const calls:any[]=[],resources:{disposed:boolean}[]=[],original:any={id:1,name:'Original',visible:true},bounds={left:whole?0:13,top:whole?0:7,right:(whole?0:13)+width,bottom:(whole?0:7)+height};let nextId=10;
   const doc:any={id:7,width:whole?width:1000,height:whole?height:700,mode:'rgb',colorProfileName:'sRGB IEC61966-2.1',bitsPerChannel:depth,activeHistoryState:{id:3},layers:[original]};
-  const makeLayer=(options:any)=>{const l:any={id:nextId++,name:options.name,blendMode:options.blendMode,opacity:options.opacity??100,fillOpacity:100,visible:true,pieces:[],move:async()=>{},delete:async()=>{doc.layers=doc.layers.filter((n:any)=>n.id!==l.id);calls.push(['delete',l.id]);}};return l;};
+  const makeLayer=(options:any)=>{const l:any={id:nextId++,name:options.name,blendMode:options.blendMode,opacity:options.opacity??100,fillOpacity:100,visible:true,pieces:[],move:async(target:any,placement:any)=>{assert.equal(placement,'before');doc.layers=doc.layers.filter((n:any)=>n.id!==l.id);const at=doc.layers.findIndex((n:any)=>n.id===target.id);assert.ok(at>=0);doc.layers.splice(at,0,l);calls.push(['move',l.id,target.id]);},delete:async()=>{doc.layers=doc.layers.filter((n:any)=>n.id!==l.id);calls.push(['delete',l.id]);}};return l;};
   doc.createLayer=async(_kind:any,o:any)=>{const l=makeLayer(o);doc.layers.unshift(l);calls.push(['create',l]);return l;};
-  doc.createLayerGroup=async(o:any)=>{const g={...makeLayer(o),layers:o.fromLayers};doc.layers=doc.layers.filter((l:any)=>!o.fromLayers.includes(l));doc.layers.unshift(g);calls.push(['group',g]);return g;};
+  doc.createLayerGroup=async(o:any)=>{const g=makeLayer(o);g.layers=o.fromLayers;doc.layers=doc.layers.filter((l:any)=>!o.fromLayers.includes(l));doc.layers.unshift(g);calls.push(['group',g]);return g;};
   const data=(values:Uint8Array|Uint16Array,w:number,h:number,components:number)=>{const r={disposed:false};resources.push(r);return {width:w,height:h,componentSize:values instanceof Uint16Array?16:8,components,colorProfile:doc.colorProfileName,getData:async()=>values,dispose:()=>{assert.equal(r.disposed,false);r.disposed=true;}};};
   let baseline:any;
-  const ps:any={app:{documents:[doc],activeDocument:doc},constants:{DocumentMode:{RGB:'rgb',GRAYSCALE:'gray'},BitsPerChannelType:{EIGHT:8,SIXTEEN:16},LayerKind:{NORMAL:'normal'},BlendMode:{NORMAL:'normal',MULTIPLY:'multiply',SCREEN:'screen',COLOR:'color'},ElementPlacement:{PLACEBEFORE:'before'}},
+  const ps:any={app:{documents:[doc],activeDocument:doc},constants:{DocumentMode:{RGB:'rgb',GRAYSCALE:'gray'},BitsPerChannelType:{EIGHT:8,SIXTEEN:16},LayerKind:{NORMAL:'normal'},BlendMode:{NORMAL:'normal',PASSTHROUGH:'passThrough',MULTIPLY:'multiply',SCREEN:'screen',COLOR:'color'},ElementPlacement:{PLACEBEFORE:'before'}},
     core:{executeAsModal:async(fn:any)=>{calls.push('modal');return fn({hostControl:{suspendHistory:async()=>{const appearance=new Map<any,unknown>();const visit=(layers:any[])=>{for(const layer of layers){appearance.set(layer,{visible:layer.visible,opacity:layer.opacity});if(layer.layers)visit(layer.layers);}};visit(doc.layers);baseline={layers:[...doc.layers],history:doc.activeHistoryState,appearance};calls.push('suspend');return 1;},resumeHistory:async(_id:number,commit:boolean)=>{calls.push(['resume',commit]);if(commit)doc.activeHistoryState={id:doc.activeHistoryState.id+1};else{doc.layers=baseline.layers;doc.activeHistoryState=baseline.history;for(const [layer,appearance]of baseline.appearance)Object.assign(layer,appearance);}}}});}},
     action:{batchPlay:async(c:any[])=>{calls.push(['batch',c]);return c.map(()=>({}));}},imaging:{
-      getPixels:async(o:any)=>{if(o.historyStateID!==undefined)assert.equal(o.historyStateID,3,'base must always use the frozen original history');const b=o.sourceBounds,w=b.right-b.left,h=b.bottom-b.top,max=depth===16?65535:255,rgba=depth===16?new Uint16Array(w*h*4):new Uint8Array(w*h*4);for(let p=0;p<w*h;p++){rgba[p*4]=depth===16?12345:48;rgba[p*4+1]=rgba[p*4+2]=rgba[p*4];rgba[p*4+3]=max;}calls.push(['read',o]);return {imageData:data(rgba,w,h,4),sourceBounds:b,level:0};},
+      getPixels:async(o:any)=>{if(o.historyStateID!==undefined)assert.equal(o.historyStateID,3,'source validation must always use the frozen original history');const b=o.sourceBounds,w=b.right-b.left,h=b.bottom-b.top,max=depth===16?65535:255,rgba=depth===16?new Uint16Array(w*h*4):new Uint8Array(w*h*4);for(let p=0;p<w*h;p++){rgba[p*4]=depth===16?12345:48;rgba[p*4+1]=rgba[p*4+2]=rgba[p*4];rgba[p*4+3]=max;}calls.push(['read',o]);return {imageData:data(rgba,w,h,4),sourceBounds:b,level:0};},
       createImageDataFromBuffer:async(v:any,o:any)=>data(v,o.width,o.height,o.components),
       putPixels:async(o:any)=>{const layer=doc.layers.find((l:any)=>l.id===o.layerID),values=await o.imageData.getData({fullRange:true});if(o.replace)layer.pieces=[];layer.pieces.push({bounds:o.targetBounds,height:o.imageData.height,first:values[0]});calls.push(['write',o.layerID,o.replace,o.targetBounds]);},
       putLayerMask:async(o:any)=>{calls.push(['mask',o]);}
@@ -25,14 +25,32 @@ function host(depth:8|16=16,width=800,height=500,whole=false){
   for(const kind of ['shadow','cast-shadow','color-atmosphere','light','rim-light'] as RelightChannelKind[])fields.channels.push({kind,blendMode:kind==='color-atmosphere'?'color':kind==='shadow'||kind==='cast-shadow'?'multiply':'screen',amount:new Float32Array(128*96).fill(.1),...(kind==='color-atmosphere'?{color:new Float32Array(128*96*3).fill(.6)}:{}),energy:.1});
   return {ps,doc,calls,resources,snapshot,fields,original,adapter:new PhotoshopAdapter(ps,'s')};
 }
-test('native lighting group preserves source16, fixed channel order, earlier strips and a single effective mask',async()=>{
-  const h=host(),progress:number[]=[];const id=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'Lighting',{onProgress:(done,total)=>{progress.push(done);assert.ok(done<=total);}});
-  const group=h.doc.layers.find((l:any)=>l.id===id);assert.equal(group.blendMode,'normal');assert.equal(h.doc.layers.includes(h.original),true);
-  assert.deepEqual(group.layers.map((l:any)=>l.name),['Rim Light','Light','Color Atmosphere','Cast Shadow','Shadow','Source — frozen native composite']);
+test('native lighting group passes effects through to source16 without duplicating source pixels',async()=>{
+  const h=host(),progress:number[]=[],maskSamples:number[][]=[],putMask=h.ps.imaging.putLayerMask;
+  h.snapshot.mask.set([0,1,64,128,255]);h.fields.source.maskRef=`relight-mask-v1:sha256:${Array.from(sha256(h.snapshot.mask),v=>v.toString(16).padStart(2,'0')).join('')}`;
+  h.ps.imaging.putLayerMask=async(o:any)=>{maskSamples.push(Array.from((await o.imageData.getData()).slice(0,5)));return putMask(o);};
+  const id=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'Lighting',{onProgress:(done,total)=>{progress.push(done);assert.ok(done<=total);}});
+  const group=h.doc.layers.find((l:any)=>l.id===id);assert.equal(group.blendMode,'passThrough');assert.deepEqual(h.doc.layers,[group,h.original]);
+  assert.deepEqual(group.layers.map((l:any)=>l.name),['Rim Light','Light','Color Atmosphere','Cast Shadow','Shadow']);
   for(const l of group.layers)assert.equal(l.pieces.length,2,'later strips must not clear earlier pixels');
-  const base=group.layers[group.layers.length-1];assert.equal(base.pieces[0].first,12345);assert.equal(base.blendMode,'normal');assert.equal(h.calls.filter(c=>c==='suspend').length,1);assert.deepEqual(h.calls.filter(c=>c[0]==='resume'),[['resume',true]]);
+  assert.equal(h.calls.filter(c=>c[0]==='write').length,10,'only five influence layers receive the two native strips');
+  assert.equal(h.calls.filter(c=>c[0]==='read').length,2,'every native source strip still receives alpha validation');
+  assert.ok(h.calls.filter(c=>c[0]==='read').every(c=>c[1].historyStateID===3&&c[1].layerID===undefined));
+  assert.equal(h.calls.filter(c=>c==='suspend').length,1);assert.deepEqual(h.calls.filter(c=>c[0]==='resume'),[['resume',true]]);
   const masks=h.calls.filter(c=>c[0]==='mask');assert.equal(masks.length,2);assert.ok(masks.every(c=>c[1].layerID===id&&c[1].replace===false));assert.deepEqual(masks[0][1].targetBounds,{left:13,top:7});
+  assert.deepEqual(maskSamples[0],[0,257,16448,32896,65535],'the one group mask retains protected zeroes and native grayscale feathers');
   assert.equal(h.calls.filter(c=>c[0]==='batch').flatMap(c=>c[1]).filter(c=>c.using?._value==='hideAll').length,1);assert.equal(progress[progress.length-1],14);assert.ok(h.resources.every(r=>r.disposed));
+});
+test('native lighting group is placed above every existing source layer',async()=>{
+  const h=host(8,8,6,true),create=h.doc.createLayerGroup;
+  h.doc.createLayerGroup=async(o:any)=>{const group=await create(o);h.doc.layers=h.doc.layers.filter((l:any)=>l.id!==group.id);h.doc.layers.push(group);return group;};
+  const id=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'Lighting');
+  assert.equal(h.doc.layers[0].id,id);assert.equal(h.doc.layers[1],h.original);
+});
+test('missing native pass-through mode rejects before document mutation or source reads',async()=>{
+  const h=host();delete h.ps.constants.BlendMode.PASSTHROUGH;
+  await assert.rejects(h.adapter.applyRelightLayers(h.snapshot,h.fields,'Lighting'),/混合模式/);
+  assert.deepEqual(h.doc.layers,[h.original]);assert.equal(h.calls.length,0);
 });
 test('mid-write cancellation and mask failures roll back the whole group and dispose native resources',async()=>{
   for(const failure of ['cancel','mask']){const h=host(8),signal=new AbortController();let masks=0;
@@ -132,4 +150,21 @@ test('failed current pixel reads and capture validation never mutate source laye
     await assert.rejects(current(h,failure==='validation'?()=>{throw Error('binding failed');}:undefined),/failed/);
     assert.equal(appearance(h),before);assert.equal(writes(h).length,beforeWrites);assert.ok(h.resources.every(r=>r.disposed));
   }
+});
+
+for(const depth of [8,16] as const)test(`native RGB${depth} lighting writes independent color amounts and one group mask`,async()=>{
+  const h=host(depth,32,16,true),n=h.fields.width*h.fields.height,max=depth===16?65535:255;
+  h.fields.channels=h.fields.channels.filter(c=>c.kind==='shadow'||c.kind==='light');
+  for(const channel of h.fields.channels){channel.amount.fill(.6);const rgb=new Float32Array(n*3);for(let p=0;p<n;p++)rgb.set([.1,.3,.6],p*3);(channel as any).rgbAmount=rgb;}
+  const written=new Map<number,number[]>(),put=h.ps.imaging.putPixels;
+  h.ps.imaging.putPixels=async(o:any)=>{written.set(o.layerID,Array.from((await o.imageData.getData()).slice(0,4)));return put(o);};
+  const id=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'RGB lighting'),group=h.doc.layers.find((l:any)=>l.id===id);
+  for(const channel of h.fields.channels){const layer=group.layers.find((l:any)=>l.blendMode===channel.blendMode),actual=written.get(layer.id)!;
+    const expected=channel.blendMode==='multiply'?[.9,.7,.4]:[.1,.3,.6];
+    for(let c=0;c<3;c++)assert.ok(Math.abs(actual[c]-Math.round(expected[c]*max))<=1,`${channel.kind} component${c}: ${actual[c]}`);
+    assert.equal(actual[3],max);
+  }
+  assert.equal(h.calls.filter(c=>c[0]==='mask'&&c[1].layerID===id).length,1);
+  assert.deepEqual(h.calls.filter(c=>c[0]==='resume'),[['resume',true]]);
+  assert.ok(h.resources.every(r=>r.disposed));
 });

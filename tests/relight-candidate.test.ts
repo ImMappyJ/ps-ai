@@ -31,19 +31,36 @@ test('lighting history keeps native mask geometry separate from analysis preview
   assert.equal(result.snapshot?.mask.length,128*128,'native effective mask must survive history restoration');
 });
 
-test('a failed lighting extraction is an inspection reference with the same typed failure on apply',async()=>{
+test('a missing-pixel lighting reference remains inspectable and cannot apply',async()=>{
   const f=fixture('lighting-layers'),target={...f.image,rgba:f.image.rgba.slice()};
-  for(let p=0;p<target.width*target.height;p++){const v=p%2?220:20;target.rgba.set([v,v,v,255],p*4);}
+  target.rgba.fill(0);
   const bytes=encodePng(target),saved=JSON.stringify(f.record),result=await prepareCandidate(f.record,bytes,f.read);
   assert.equal(result.outputKind,'lighting-layers');
   assert.equal(result.lightingState,'reference-only');
   assert.equal((result.lightingFailure as any)?.code,'relight-extraction');
-  assert.equal((result.lightingFailure as any)?.reason,'structure-mismatch');
   assert.deepEqual(result.image.rgba,target.rgba,'failed extraction keeps the original reference inspectable');
   assert.equal(result.lightingSummary,undefined);
   assert.match(result.warning!,/参考图.*不能回填/);
   assert.equal(JSON.stringify(f.record),saved,'local extraction does not change task identity or saved mode');
-  await assert.rejects(prepareLightingLayerApplication(f.record,bytes,f.read),(error:any)=>error.code==='relight-extraction'&&error.reason==='structure-mismatch');
+  await assert.rejects(prepareLightingLayerApplication(f.record,bytes,f.read),/透明|缺失/);
+});
+
+test('a historical structure rejection can be re-extracted locally without rewriting its UUID or frozen source',async()=>{
+  const f=fixture('lighting-layers'),target={...f.image,rgba:f.image.rgba.slice()};
+  for(let p=0;p<target.width*target.height;p++){const v=p%2?220:20;target.rgba.set([v,v,v,255],p*4);}
+  f.record.state='output-error';
+  const bytes=encodePng(target),saved=JSON.stringify(f.record),raw=bytes.slice(),source=f.files[`${id}-source.png`].slice();
+  const result=await prepareCandidate(f.record,bytes,f.read);
+  assert.equal(result.lightingState,'composite');
+  assert.equal(result.lightingFailure,undefined);
+  assert.notDeepEqual(result.image.rgba,target.rgba,'reference texture must not become the source composite');
+  assert.equal(JSON.stringify(f.record),saved,'browsing preserves the historical state and authority');
+  assert.deepEqual(bytes,raw);assert.deepEqual(f.files[`${id}-source.png`],source);
+  const application=await prepareLightingLayerApplication(f.record,bytes,f.read);
+  assert.equal(application.snapshot.documentId,1);assert.equal(application.snapshot.historyId,4);assert.equal(application.snapshot.sessionId,'session');
+  assert.deepEqual(application.snapshot.mask,new Uint8Array(128*128).fill(255));
+  (f.record.relight as any).scene.source.historyId=5;
+  await assert.rejects(prepareLightingLayerApplication(f.record,bytes,f.read),/来源|source|光影|lighting/i);
 });
 
 test('successful lighting preview is a source composite rather than the original AI reference',async()=>{
@@ -88,4 +105,24 @@ test('lighting history rejects a changed native source depth or quantized source
   await assert.rejects(prepareCandidate(f.record,encodePng(f.image),f.read),/来源|source|光影|lighting/i);
   (f.record.relight as any).scene.source.documentDepth=16;
   await assert.rejects(prepareCandidate(f.record,encodePng(f.image),f.read),/来源|source|光影|lighting/i);
+});
+
+test('saved local extraction settings drive both candidate preview and application without changing source authority',async()=>{
+  const f=fixture('lighting-layers'),target={...f.image,rgba:f.image.rgba.slice()};
+  for(let p=0;p<target.width*target.height;p++){target.rgba[p*4]+=40;target.rgba[p*4+2]+=25;}
+  (f.record.relight as any).localExtraction={fidelity:0,detailProtection:.8};
+  const saved=JSON.stringify(f.record),bytes=encodePng(target),candidate=await prepareCandidate(f.record,bytes,f.read);
+  assert.deepEqual(candidate.image.rgba,f.image.rgba,'zero fidelity retains the source in the displayed candidate');
+  const applied=await prepareLightingLayerApplication(f.record,bytes,f.read);
+  const {previewRelightLayers}=await import('../src/features/relight/relight-layers');
+  assert.deepEqual(previewRelightLayers(applied.source,applied.fields).rgba,candidate.image.rgba,'apply derives exactly the saved preview settings');
+  assert.equal(JSON.stringify(f.record),saved);
+});
+
+test('invalid saved extraction settings fail closed before source pixels are read',async()=>{
+  for(const localExtraction of [null,{fidelity:2,detailProtection:.5},{fidelity:.5,detailProtection:.5,invented:true}]){
+    const f=fixture('lighting-layers');(f.record.relight as any).localExtraction=localExtraction;const reads:string[]=[];
+    await assert.rejects(prepareCandidate(f.record,encodePng(f.image),async name=>{reads.push(name);return f.read(name);}),/参数|extraction|settings|光影/i);
+    assert.equal(reads.includes(`${id}-source.png`),false);
+  }
 });

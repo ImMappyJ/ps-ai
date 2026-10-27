@@ -11,10 +11,10 @@ function taggedRaw(bytes:Uint8Array,label:string):Uint8Array {
  for(const value of chunk.subarray(4,-4)){crc^=value;for(let bit=0;bit<8;bit++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}chunk.writeUInt32BE((crc^0xffffffff)>>>0,chunk.length-4);
  return new Uint8Array(Buffer.concat([bytes.subarray(0,-12),chunk,bytes.subarray(-12)]));
 }
-function fixture(id=A){
- const image={width:2,height:2,rgba:new Uint8Array(16).fill(255)},mask=new Uint8Array(4).fill(255),snapshot={documentId:11,width:2,height:2,profile:'sRGB IEC61966-2.1',mode:'rgb',depth:8,historyId:1,sessionId:'source-session',bounds:{left:0,top:0,right:2,bottom:2},mask,sourceHash:'opaque',sourceLayerIds:[2],captureGeometry:{kind:'relight-analysis' as const,width:2,height:2}};
- const session=new RelightSession({image,snapshot,selectionMask:mask,protectionMask:new Uint8Array(4)},'snapshot-'+id,'light','document'),frozen=session.freeze(),metadata=relightTaskMetadata(frozen,id,{provider:'comfyui',model:'fixture',edit:true,maxInputImages:3,maskMode:'none',seed:true},{width:2,height:2},8,0),raw=taggedRaw(encodePng(image),id);
- const record:JobRecord={id,clientId:id,state:'ready',graph:{},createdAt:'2026-10-19T00:00:00Z',template:'qwen21-local-v2-rgba',snapshot:(({mask:_,...rest})=>rest)(snapshot),relight:metadata,outputFile:`${id}-output.png`,params:{workspace:'cosplay',mode:'relight',outputKind:'edit',modelSize:{width:2,height:2}}};
+function fixture(id=A,image={width:2,height:2,rgba:new Uint8Array(16).fill(255)}){
+ const {width,height}=image,mask=new Uint8Array(width*height).fill(255),snapshot={documentId:11,width,height,profile:'sRGB IEC61966-2.1',mode:'rgb',depth:8,historyId:1,sessionId:'source-session',bounds:{left:0,top:0,right:width,bottom:height},mask,sourceHash:'opaque',sourceLayerIds:[2],captureGeometry:{kind:'relight-analysis' as const,width,height}};
+ const session=new RelightSession({image,snapshot,selectionMask:mask,protectionMask:new Uint8Array(width*height)},'snapshot-'+id,'light','document'),frozen=session.freeze(),metadata=relightTaskMetadata(frozen,id,{provider:'comfyui',model:'fixture',edit:true,maxInputImages:3,maskMode:'none',seed:true},{width,height},8,0),raw=taggedRaw(encodePng(image),id);
+ const record:JobRecord={id,clientId:id,state:'ready',graph:{},createdAt:'2026-10-19T00:00:00Z',template:'qwen21-local-v2-rgba',snapshot:(({mask:_,...rest})=>rest)(snapshot),relight:metadata,outputFile:`${id}-output.png`,params:{workspace:'cosplay',mode:'relight',outputKind:'edit',modelSize:{width,height}}};
  return {record,raw,files:{[`${id}-output.png`]:raw,[`${id}-source.png`]:encodePng(image),[`${id}-mask.bin`]:mask}};
 }
 
@@ -26,6 +26,23 @@ test('lighting Results export exact saved AI reference bytes separately from the
   const requests=h.requests.length;h.click('export-ai-reference');await h.wait();assert.deepEqual(h.files['ps-ai-11111111-ai-reference.png'],f.raw);assert.equal(h.requests.length,requests);assert.equal(h.posts.length,0);assert.equal(h.gatewayPosts.length,0);assert.equal(h.pixelRequests.length,0);assert.equal(h.appliedLayers.length,0);assert.equal(h.el('detail-preview').src,preview);assert.equal(h.el('candidate-target').textContent,caption);assert.equal(JSON.stringify(h.records()),record);
   h.el('language').value='en-US';h.change('language');await h.wait();assert.equal(h.el('export-ai-reference').textContent,'Save AI reference');assert.match(h.el('ai-reference-export-info').textContent,/local lighting reconstruction.*original model output/);
   assert.match(h.el('candidate-caption').textContent,/Lighting composite preview/);
+ }finally{await h.close();}
+});
+
+test('loading an old structure-rejected reference builds a soft preview without network or renewed document authority',async()=>{
+ const image={width:32,height:32,rgba:new Uint8Array(32*32*4)},target={...image,rgba:new Uint8Array(image.rgba.length)};
+ for(let p=0;p<32*32;p++){image.rgba.set([70+p%32,90+Math.floor(p/32),110,255],p*4);const v=p%2?220:20;target.rgba.set([v,v,v,255],p*4);}
+ const f=fixture(A,image),raw=taggedRaw(encodePng(target),'saved failed reference');f.record.state='output-error';
+ const h=await panelHarness({settings:defaultSettings(),history:[f.record],files:{...f.files,[`${A}-output.png`]:raw}});try{
+  await h.wait();const records=JSON.stringify(h.records()),requests=h.requests.length;
+  h.selectHistory(A);h.click('load-history');await h.wait();
+  assert.match(h.el('candidate-caption').textContent,/光影合成预览/);
+  assert.doesNotMatch(h.el('candidate-caption').textContent,/提取失败/);
+  assert.equal(h.requests.length,requests);assert.equal(h.posts.length,0);assert.equal(h.gatewayPosts.length,0);assert.equal(h.pixelRequests.length,0);assert.equal(h.appliedLayers.length,0);
+  assert.equal(JSON.stringify(h.records()),records);assert.deepEqual(h.files[`${A}-output.png`],raw);
+  h.click('export-ai-reference');await h.wait();assert.deepEqual(h.files['ps-ai-11111111-ai-reference.png'],raw);
+  h.click('apply');await h.wait();assert.equal(h.appliedLayers.length,0,'a prior-session snapshot gains no authority from re-extraction');
+  assert.equal(h.posts.length,0);assert.equal(h.gatewayPosts.length,0);
  }finally{await h.close();}
 });
 
@@ -52,13 +69,13 @@ test('rejected lighting references remain explicitly exportable without claiming
 
 test('lighting generation, original-ID recovery and historical loading preserve a rejected reference and its local reason',async()=>{
  const width=32,height=32,source={width,height,rgba:new Uint8Array(width*height*4)},output={width,height,rgba:new Uint8Array(width*height*4)};
- for(let p=0;p<width*height;p++){source.rgba.set([70+p%width,90+Math.floor(p/width),110,255],p*4);const v=p%2?220:20;output.rgba.set([v,v,v,255],p*4);}
+ for(let p=0;p<width*height;p++){source.rgba.set([70+p%width,90+Math.floor(p/width),110,255],p*4);output.rgba.set([0,0,0,0],p*4);}
  const h=await panelHarness({source,output});try{
   await h.wait();h.click('nav-create');h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');h.el('resolution').value='32';h.click('open-relight');await new Promise(r=>setTimeout(r,80));
   h.click('relight-generate');await h.wait();
   const job=h.records()[0],raw=(h.files[`${job.id}-output.png`] as Uint8Array).slice();
   assert.equal(h.posts.length,1);assert.equal(job.state,'output-error');assert.equal((job.relight as any).outputKind,'lighting-layers');
-  const checkDiagnostic=()=>{const d=JSON.parse(h.el('diagnostic-details').value);assert.equal(d.taskId,job.id);assert.equal(d.code,'relight-extraction');assert.equal(d.stage,'lighting-extraction');assert.equal(d.reason,'structure-mismatch');assert.ok(Number.isFinite(d.metrics.structureConfidence));assert.doesNotMatch(d.action,/PNG|ICC|sRGB/);};
+  const checkDiagnostic=()=>{const d=JSON.parse(h.el('diagnostic-details').value);assert.equal(d.taskId,job.id);assert.equal(d.code,'relight-extraction');assert.equal(d.stage,'lighting-extraction');assert.equal(d.reason,undefined);assert.doesNotMatch(d.action,/PNG|ICC|sRGB/);};
   checkDiagnostic();assert.match(h.el('relight-result-list').textContent,/AI 参考图.*提取失败/);assert.equal(h.el('relight-apply').disabled,false);assert.match(h.el('relight-apply').textContent,/查看.*原因/);assert.equal(h.el('relight-export').disabled,false);
   h.el('relight-output').value='full-result';h.change('relight-output');assert.equal(h.el('relight-apply').disabled,false);assert.match(h.el('relight-apply').textContent,/查看.*原因/);h.click('relight-apply');await pause();checkDiagnostic();assert.equal(h.appliedLayers.length,0);assert.match(h.el('relight-result-list').textContent,/AI 参考图.*提取失败/);
   h.click('relight-close');await pause();h.click('nav-history');h.selectHistory(job.id);h.click('recover');await h.wait();checkDiagnostic();
@@ -67,6 +84,6 @@ test('lighting generation, original-ID recovery and historical loading preserve 
   h.selectHistory(job.id);await new Promise(r=>setTimeout(r,60));assert.match(h.el('history-preview-status').textContent,/AI 参考图.*提取失败/);
   h.click('load-history');await h.wait();checkDiagnostic();assert.equal(h.el('view-results').style.display,'block');assert.equal(h.el('diagnostic-box').style.display,'block');assert.match(h.el('candidate-caption').textContent,/AI 参考图.*提取失败/);assert.equal(h.el('apply').disabled,false);assert.match(h.el('apply').textContent,/查看.*原因/);h.click('apply');await h.wait();checkDiagnostic();assert.equal(h.appliedLayers.length,0);
   h.click('export-ai-reference');await h.wait();assert.deepEqual(h.files[`ps-ai-${job.id.slice(0,8)}-ai-reference.png`],raw);assert.equal(h.posts.length,1);assert.equal(h.appliedLayers.length,0);
-  const trace=JSON.parse(String(h.files['runtime-trace.json']));assert.ok(trace.events.some((event:any)=>event.taskId===job.id&&event.stage==='relight.extraction.failed.structure-mismatch'));
+  const trace=JSON.parse(String(h.files['runtime-trace.json']));assert.ok(trace.events.some((event:any)=>event.taskId===job.id&&event.stage==='relight.extraction.failed.local-validation'));
  }finally{await h.close();}
 });
