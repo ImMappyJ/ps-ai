@@ -51,14 +51,25 @@ test('new blend records retain a frozen lighting choice and switch views and pro
 });
 
 test('a stale local blend adjustment cannot persist after candidate focus changes',async()=>{
-  const h=await panelHarness({source,output,selection});try{
-    await blend(h);h.el('count').value='2';h.click('generate');await h.wait();const records=h.records(),selected=records[0];
-    h.el('candidate-select').value='1';h.change('candidate-select');await new Promise(r=>setTimeout(r,20));
-    h.holdFileRead(`${selected.id}-output.png`);h.el('blend-fidelity').value='20';h.change('blend-fidelity');await new Promise(r=>setTimeout(r,180));
-    h.el('candidate-select').value='0';h.change('candidate-select');h.releaseFileRead(`${selected.id}-output.png`);await settleLocal(h);await new Promise(r=>setTimeout(r,80));
-    assert.equal((h.records().find(r=>r.id===selected.id)!.blend as any).localExtraction,undefined);assert.equal(h.posts.length,2);
+  // Auto-navigation has separate coverage; its queued completion must not change
+  // the explicit candidate selection whose in-flight local work this test owns.
+  const h=await panelHarness({source,output,selection,settings:{...defaultSettings(),autoViewResults:false}});let heldFile:string|undefined;
+  try{
+    await blend(h);h.el('count').value='2';h.click('generate');await h.wait();assert.equal(h.posts.length,2);
+    const selectedId=h.posts[1].prompt_id;assert.ok(h.records().some(record=>record.id===selectedId));
+    h.el('candidate-select').value='1';h.change('candidate-select');
+    heldFile=`${selectedId}-output.png`;h.holdFileRead(heldFile);const reads=h.fileReads.length;
+    h.el('blend-fidelity').value='20';h.change('blend-fidelity');
+    for(let attempt=0;attempt<300&&!h.fileReads.slice(reads).includes(heldFile);attempt++)await new Promise(r=>setTimeout(r,10));
+    assert.ok(h.fileReads.slice(reads).includes(heldFile),'the explicitly selected candidate is blocked inside local processing');
+    assert.equal(h.el('candidate-select').value,'1');assert.equal(h.el('blend-result-controls').getAttribute('aria-busy'),'true');
+    h.el('candidate-select').value='0';h.change('candidate-select');h.releaseFileRead(heldFile);heldFile=undefined;
+    // The released read and stale-owner check finish through microtasks before
+    // the next event-loop turn; no guessed processing duration is required.
+    await new Promise<void>(resolve=>setImmediate(resolve));
+    assert.ok(h.records().every(record=>(record.blend as any).localExtraction===undefined));assert.equal(h.posts.length,2);
     assert.equal(h.el('blend-fidelity').value,'100');assert.equal(h.el('apply').disabled,false);
-  }finally{await h.close();}
+  }finally{if(heldFile)h.releaseFileRead(heldFile);await h.close();}
 });
 
 for(const phase of ['debounce','processing'] as const)test(`invalidating ${phase} blend adjustments restores the same candidate controls and apply availability`,async()=>{
