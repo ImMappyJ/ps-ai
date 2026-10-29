@@ -3,6 +3,7 @@ import {deriveRelightLayers,previewRelightLayers,renderRelightLayerStrip,Relight
 import * as extractionApi from '../src/features/relight/relight-layers';
 import {createRelightScene,type RelightScene} from '../src/features/relight/relight-scene';
 import {resize,convertDepth,type Raster} from '../src/imaging/image';
+import {createHash} from 'node:crypto';
 
 const W=128,H=96;
 function scene():RelightScene{return createRelightScene({documentId:7,layerIds:[1],sessionId:'s',historyId:3,sourceHash:'source',snapshotId:'snap',docWidth:W,docHeight:H,bounds:{left:0,top:0,right:W,bottom:H},profile:'sRGB IEC61966-2.1',documentMode:'rgb',documentDepth:8,maskRef:'mask'},'key');}
@@ -11,6 +12,18 @@ function changed(source:Raster,transform:(v:number,x:number,y:number,c:number)=>
 function peak(fields:RelightLayerFields):number{return Math.max(0,...fields.channels.map(c=>c.amount.reduce((a,b)=>Math.max(a,b),0)));}
 function maxInteriorStep(fields:RelightLayerFields):number{let largest=0;for(const c of fields.channels)for(let y=16;y<H-16;y++)for(let x=16;x<W-17;x++){const p=y*W+x;largest=Math.max(largest,Math.abs(c.amount[p+1]-c.amount[p]),Math.abs(c.amount[p+W]-c.amount[p]));}return largest;}
 function maxCompositeStep(image:Raster):number{let largest=0;for(let y=16;y<H-16;y++)for(let x=16;x<W-17;x++)for(let c=0;c<3;c++){const p=(y*W+x)*4+c;largest=Math.max(largest,Math.abs(image.rgba[p+4]-image.rgba[p]),Math.abs(image.rgba[p+W*4]-image.rgba[p]));}return largest;}
+
+test('shared extraction preserves the prior default relight fields and native preview samples exactly',async()=>{
+  // Captured before extracting the shared numeric core: model-grid sampling,
+  // feather support, RGB ratios and lamp channel decomposition at both depths.
+  for(const [depth,expected] of [[8,'7ca51438197789e85c62229ee7f33eb85e262baefbc192f5a2825d23c3446a50'],[16,'eb2d1c729f15facf5771f65abfc05b59d28685f572300c6707540b8d10d3cb9e']] as const){
+    const max=depth===16?65535:255,source=image((x,y)=>[0,1,2].map(c=>Math.round(max*(.25+((x*(13+c*2)+y*(7+c*3))%100)/220))),depth),model=resize(source,120,90),target={...model,rgba:model.rgba.map((v,i)=>i%4===3?v:Math.round(Math.min(max,v*(.72+.55*(Math.floor(i/4)%120)/119)*(i%4===0?1.12:i%4===2?.85:1))))},s=scene();
+    s.source.documentDepth=depth;s.lights[0].role='rim';s.shadow.strength=1;const mask=new Uint8Array(W*H);for(let y=5;y<91;y++)mask.fill(192,y*W+7,y*W+117);
+    const fields=await deriveRelightLayers(source,target,s,{editMask:mask}),hash=createHash('sha256');hash.update(new Uint8Array(fields.guide.buffer));
+    for(const channel of fields.channels){hash.update(channel.kind);hash.update(new Uint8Array(channel.amount.buffer));hash.update(new Uint8Array(channel.rgbAmount!.buffer));}
+    hash.update(new Uint8Array(previewRelightLayers(source,fields).rgba.buffer));assert.equal(hash.digest('hex'),expected);
+  }
+});
 
 test('RGB transfer retains strong broad red and blue lighting rather than compressing the tint',async()=>{
   const source=image(()=>[120,120,120]),target=image(()=>[202,141,67]);

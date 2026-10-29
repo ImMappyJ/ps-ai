@@ -16,10 +16,11 @@ import type {GatewayCapabilities,GenerationRequest,AssetContext} from '../infras
 import {RelightSession,RelightDraftStore,relightTaskMetadata,type FrozenRelightSubmission,type RelightTaskMetadata,type RelightScope,type RelightOutputKind} from '../features/relight/relight-session';
 import {RelightWorkbench,type RelightResult} from '../features/relight/relight-workbench';
 import {validateRelightExtractionSettings,type RelightExtractionSettings} from '../features/relight/relight-layers';
+import {blendTaskMetadata,validateBlendTaskMetadata,withBlendProcessing,assertBlendLightingCapture,type BlendTaskMetadata} from '../features/blend/blend-session';
 import {compileRelightScene,validateRelightScene,type RelightScene,type RelightCapabilities} from '../features/relight/relight-scene';
 import {PanelViews,OperationFeedback,ResultNavigation,CandidatePreview,SourceCaption,captureSizeSummary,localValidationMessage,isSourceCaptureDiagnostic,createCandidateCard,setCandidateCardState,displayPreview as preview} from './panel-view';import type {OperationContext,PanelPage,CaptureSizeDetails} from './panel-view';
 import {HistoryTable,historyTaskType,historyPrompt,historyState,historySource,historyDate} from './history-table';
-import {prepareCandidate,prepareLightingLayerApplication,prepareEditAnalysisApplication,prepareSelectionAssetApplication,preflightEditAnalysisCandidate,preflightSelectionAssetCandidate,historyOutputName,type PreparedCandidate} from './candidate-preparation';
+import {prepareCandidate,prepareLightingLayerApplication,prepareEditAnalysisApplication,prepareSelectionAssetApplication,preflightEditAnalysisCandidate,preflightSelectionAssetCandidate,historyOutputName,loadCandidateSource,type PreparedCandidate} from './candidate-preparation';
 import {planRelightMemory,downsampleSnapshotMask,resampleGray} from '../imaging/budget';
 import {observeRelightSource} from './relight-source-monitor';
 import {HistoryPreview} from './history-preview';
@@ -63,6 +64,13 @@ interface Candidate extends PreparedCandidate {job:JobRecord;bytes:Uint8Array;pr
 function lightingPreviewLabel(candidate:PreparedCandidate):string|undefined {return candidate.outputKind==='lighting-layers'?candidate.lightingState==='composite'?'光影合成预览':'AI 参考图（提取失败，仅供检查）':undefined;}
 function assertLightingComposite(candidate:Candidate):void {if(candidate.outputKind==='lighting-layers'&&candidate.lightingState!=='composite')throw candidate.lightingFailure??new DiagnosticError('relight-extraction','lighting-extraction',t('本地光影提取未完成；原始 AI 参考图已保留，请检查参考图和来源的作用范围。'));}
 let candidates:Candidate[]=[];
+type BlendView='source'|'composite'|'ai';
+let blendView:BlendView='composite',blendSelectedId:string|undefined,blendRevision=0,blendViewRevision=0,blendPending=false,blendCommitting=false;
+let blendTimer:ReturnType<typeof setTimeout>|undefined,blendGenerationOpen=false,blendProtectionOpen=false;
+let blendDraft:{outputKind:RelightOutputKind;extraction:RelightExtractionSettings}|undefined;
+let blendMessage:{key:string;values:string[]}|undefined;
+function blendStatus(key?:string,...values:string[]):void {blendMessage=key?{key,values}:undefined;renderBlendStatus();}
+function renderBlendStatus():void {el('blend-processing-status').textContent=blendMessage?t(blendMessage.key,...blendMessage.values.map(errorText)):'';}
 let imageOperation:Promise<void>=Promise.resolve();
 function withImagePixels<T>(action:()=>Promise<T>):Promise<T>{const work=imageOperation.then(action);imageOperation=work.then(()=>{},()=>{});return work;}
 let taskActive=false,taskSucceeded=false,batchPosition='';
@@ -121,13 +129,24 @@ function assetContext():AssetContext|undefined {
 }
 function inputUi(){
   const mode=el('mode').value,blend=mode==='blend',structuredRelight=mode==='relight',nextPromptKind=blend?'blend':mode==='remove'||structuredRelight?undefined:'ordinary';
+  const create=el('view-create');create.insertBefore(blend?el('selection-tools'):el('prompt-group'),blend?el('prompt-group'):el('selection-tools'));
+  create.insertBefore(el('blend-create-controls'),blend?el('prompt-group'):el('toggle-reference').parentElement);
+  el('blend-create-controls').style.display=blend?'block':'none';el('blend-output-kind').disabled=busy;
+  el('capture').textContent=t(blend?'读取当前图片与选区':'预览选区');
+  el('toggle-protection').style.display=blend?'block':'none';el('protection-body').style.display=!blend||blendProtectionOpen?'flex':'none';
+  el('toggle-protection').textContent=t('保护区')+(blendProtectionOpen?' ▾':' ▸');el('toggle-protection').setAttribute('aria-expanded',String(blendProtectionOpen));
+  el('generation-title').style.display=blend?'none':'block';el('toggle-generation').style.display=blend?'block':'none';el('generation-body').style.display=!blend||blendGenerationOpen?'block':'none';
+  el('toggle-generation').textContent=t('生成设置')+(blendGenerationOpen?' ▾':' ▸');el('toggle-generation').setAttribute('aria-expanded',String(blendGenerationOpen));
+  for(const id of ['margin-field','align-subject','match-color','edit-controls-help'])el(id).style.display=blend?'none':'';
+  if(blend){el('selection-tools').insertBefore(el('selection-previews'),el('capture-actions'));el('destination').value='selection';}
+  else el('selection-tools').insertBefore(el('selection-previews'),el('range-legend'));
   if(nextPromptKind&&nextPromptKind!==promptKind){promptDrafts[promptKind]=el('prompt').value;el('prompt').value=promptDrafts[nextPromptKind];promptKind=nextPromptKind;}
   el('prompt-group').style.display=mode==='remove'||structuredRelight?'none':'block';el('prompt-label').textContent=t(blend?'补充要求（可选）':'描述修改或生成内容');
-  el('relight-entry').style.display=structuredRelight?'block':'none';el('open-relight').disabled=relightOpenBlocked();el('relight-reuse-history').disabled=busy||sourceCaptures>0;el('generate').textContent=t(structuredRelight?'打开布光工作台':'生成候选');
+  el('relight-entry').style.display=structuredRelight?'block':'none';el('open-relight').disabled=relightOpenBlocked();el('relight-reuse-history').disabled=busy||sourceCaptures>0;el('generate').textContent=t(structuredRelight?'打开布光工作台':blend?'生成环境光参考':'生成候选');
   const asset=assetMode(mode),context=assetContext(),standalone=workspace==='t2i'&&el('destination').value==='document'||asset&&!context;el('selection-tools').style.display=standalone?'none':'block';el('prompt').setAttribute('placeholder',blend?t('可选：补充光影、色彩或融合要求'):workspace==='t2i'?t("描述要生成的画面、主体与风格"):workspace==='cosplay'?t("描述服装道具、光影方向、角色参考或氛围效果"):t("描述选区中要修改的内容，及需要保留的细节"));
   el('asset-input-group').style.display=asset?'block':'none';el('asset-input').disabled=busy;
   el('asset-input-help').textContent=t(context?'来源图与有效灰度范围图会一起送模，输出位置不改变输入。范围仅供参考，请检查结果是否残留来源人物、背景或范围图。':'仅使用文字生成独立素材，不读取当前图片；可另存 PNG 或新建文档。');
-  if(asset&&!context)el('destination').value='document';el('destination').disabled=busy||asset&&!context;
+  if(asset&&!context)el('destination').value='document';el('destination').disabled=busy||blend||asset&&!context;
   el('toggle-reference').parentElement.style.display=asset?'none':'block';
   el('range-legend').textContent=t(context?'实际送模预览：左为 sRGB 8-bit 来源图，右为扣除保护区后的灰度范围图；白色可放置，黑色不放置，灰色为羽化。':'橙色：实际编辑 · 蓝色：手动保护 · 灰色：只提供上下文。回填使用真实灰度蒙版。');
   const restorable=workspace!=='t2i'&&mode!=='relight'&&!standalone&&(!!context||el('destination').value==='selection');el('restore-selection').style.display=restorable?'block':'none';el('restore-selection').disabled=busy||!restorable||lastSelection?.workspace!==workspace||lastSelection?.mode!==mode;
@@ -161,23 +180,36 @@ function assertCandidateSource(c:Candidate):void {
 function candidateUi(){
   const c=candidates[Number(el('candidate-select').value)],bounded=!!c?.snapshot?.captureGeometry,mode=candidateApplicationMode(c);
   const lighting=c?.outputKind==='lighting-layers',referenceOnly=lighting&&c.lightingState!=='composite';
+  const blend=!!c?.job.blend,localPending=blend&&blendPending;
   el('apply').disabled=busy||!c?.snapshot||!!c.warning&&!referenceOnly;el('apply').textContent=t(referenceOnly?'查看提取失败原因':mode==='unavailable'?'检查来源':bounded?'应用到来源文档':mode==='replace'?'替换本轮候选图层':'应用为新图层');
   el('apply').setAttribute('data-candidate-action',referenceOnly||mode==='unavailable'?'inspect':'apply');
+  if(blend){el('apply').disabled=el('apply').disabled||localPending||blendView!=='composite';if(!referenceOnly&&mode!=='unavailable')el('apply').textContent=t(lighting?'应用光影组':'应用重绘主体');}
+  el('blend-result-controls').style.display=blend?'block':'none';el('blend-result-controls').setAttribute('aria-busy',String(localPending));
+  renderBlendStatus();
+  const processing=blendDraft??{outputKind:c?.outputKind??'lighting-layers',extraction:(c?.job.blend as BlendTaskMetadata|undefined)?.localExtraction??{fidelity:1,detailProtection:.65}};
+  el('blend-result-output').disabled=busy||!blend;el('blend-result-output').value=processing.outputKind;
+  el('blend-extraction-controls').style.display=processing.outputKind==='lighting-layers'?'block':'none';
+  for(const [id,key] of [['blend-fidelity','fidelity'],['blend-detail-protection','detailProtection']] as const){
+    const value=Math.round(processing.extraction[key]*100);el(id).value=String(value);el(`${id}-slider`).value=value;
+    el(id).disabled=busy||!blend||processing.outputKind!=='lighting-layers';el(`${id}-slider`).disabled=el(id).disabled;
+  }
+  for(const view of ['source','composite','ai'] as const){el(`blend-view-${view}`).disabled=busy||!blend;el(`blend-view-${view}`).setAttribute('aria-pressed',String(blendView===view));}
   const notes=c?.lightingFailure?diagnostic(c.lightingFailure,'lighting-extraction').summary:c?.warning??c?.lightingSummary?.warnings.map(message=>errorText(message)).join(' ');el('candidate-warning').textContent=notes?errorText(notes):'';el('candidate-warning').style.display=notes?'block':'none';
   const s=c?.snapshot;el('candidate-target').textContent=s?t('来源文档 {0} · {1} · {2}',s.documentId,s.profile,referenceOnly?t('提取失败；AI 参考图仅供检查和导出，不能作为光影层应用'):mode==='unavailable'?t('来源已关闭、改变或会话已结束；候选仍可导出'):bounded?t('应用到绑定文档；同次捕获会替换插件结果，其他图层保留'):mode==='replace'?t('替换同次捕获的插件图层，其他图层保留'):t('新增独立结果，保留来源图层')):c?t('独立生成结果，可另存或新建文档'):'';
   if(c&&s){const sizes=captureSizes(s,(c.job.params as any)?.modelSize,c.image);if(sizes)el('candidate-target').textContent+='\n'+captureSizeSummary(sizes);}
   for(const id of ['zoom','export','new-document'])el(id).disabled=busy||!c;el('candidate-select').disabled=busy||!c;el('opacity').disabled=busy||!applied;el('candidate-empty').style.display=candidates.length?'none':'block';el('detail-frame').style.display=c?'block':'none';
-  el('export-ai-reference').style.display=lighting?'block':'none';el('export-ai-reference').disabled=busy||!lighting;el('ai-reference-export-info').style.display=lighting?'block':'none';
+  el('export').textContent=t(blend?'另存融合预览':'另存 PNG');
+  el('export-ai-reference').style.display=lighting||blend?'block':'none';el('export-ai-reference').disabled=busy||!c||!lighting&&!blend;el('ai-reference-export-info').style.display=lighting||blend?'block':'none';
   el('ai-reference-export-info').textContent=t(referenceOnly?'此候选未形成可用光影重组；另存 AI 参考图保留模型原始输出。':'另存 PNG 保存本地光影重组；AI 参考图保存模型原始输出。');
   const index=Number(el('candidate-select').value);
-  const label=c?lightingPreviewLabel(c):undefined;
+  const label=blend?(blendView==='source'?'原图':blendView==='ai'?'AI 参考':'融合预览'):c?lightingPreviewLabel(c):undefined;
   el('candidate-caption').textContent=c?t('候选 {0} / {1} · {2}×{3} · {4}-bit',index+1,candidates.length,c.image.width,c.image.height,rasterDepth(c.image))+(label?' · '+t(label):''):'';
   el('nav-results').textContent=t('结果')+(candidates.length?` · ${candidates.length}`:'');
   el('candidates').setAttribute('aria-label',t('候选预览'));
   for(const card of Array.from(el('candidates').children) as HTMLElement[])setCandidateCardState(card,Number(card.getAttribute('data-candidate-index'))===index,busy);
   el('applied-opacity').style.display=applied?'flex':'none';
 }
-function invalidateCapture(){capture=undefined;const visible=el('selection-previews').style.display!=='none';el('selection-previews').style.display='none';if(visible)sourceCaption.show('范围参数已改变，请重新预览选区');}
+function invalidateCapture(){invalidateBlendProcessing();capture=undefined;const visible=el('selection-previews').style.display!=='none';el('selection-previews').style.display='none';if(visible)sourceCaption.show('范围参数已改变，请重新预览选区');}
 function setWorkspace(value:Workspace,mode=modes[value][0][0]){if(workspace!==value||el('mode').value!==mode)invalidateCapture();workspace=value;const select=el('mode');select.innerHTML='';for(const [id,label] of modes[value])option(select,id,label);select.value=mode;for(const w of ['local','cosplay','t2i'])el(`tab-${w}`).className=w===value?'active':'';if(value==='t2i')el('destination').value='document';else el('destination').value='selection';inputUi();}
 function lock(value:boolean){busy=value;for(const id of ['generate','capture','restore-selection','protect','clear-protection','reference','clear-reference','tab-local','tab-cosplay','tab-t2i','mode','prompt','output-depth','usage','guide','preserve-alpha','align-subject','match-color','destination','count','steps','resolution','seed','lock-seed','margin','p0','recover','load-history','repeat-history','apply','new-document','connect','scan-models','save-settings','import-settings','export-settings','model-unet','model-clip','model-vae','backend-url','backend-kind','gateway-model','api-key','save-key','clear-key','stop-relay','language','auto-view-results','open-setup','close-setup','setup-connect','setup-check','setup-example','relight-scope','remember-source-access','forget-source-access'])el(id).disabled=value;candidateUi();renderSetup();inputUi();relightWorkbench?.refreshAvailability();}
 function showGatewayModels(selected=settings.gatewayModel??DEFAULT_GATEWAY_MODEL){const select=el('gateway-model');select.innerHTML='';for(const id of new Set([selected,...(gatewayCatalogBase===el('backend-url').value?gatewayCatalog?.models.map(m=>m.id)??[]:[])]))option(select,id,id);select.value=selected;}
@@ -198,7 +230,7 @@ function renderLanguage(){
   connection(connectionState);sourceCaption.render();
   // UXP keeps the collapsed caption when existing option text is edited.
   el('source-access-status').textContent=t(sourceAccessMessage);
-  for(const id of ['usage','destination','output-depth','backend-kind','relight-scope','asset-input']){
+  for(const id of ['usage','destination','output-depth','backend-kind','relight-scope','asset-input','blend-output-kind','blend-result-output']){
     const select=el(id),value=select.value;
     const items=Array.from(select.querySelectorAll('option')) as HTMLOptionElement[];
     const labels=items.map(node=>[node.getAttribute('value')!,node.getAttribute('data-i18n')!]);
@@ -265,13 +297,13 @@ function captureSizes(snapshot:Pick<Snapshot,'width'|'height'|'bounds'|'captureG
   const geometry=snapshot.captureGeometry;if(!geometry)return;
   return {documentWidth:snapshot.width,documentHeight:snapshot.height,nativeWidth:snapshot.bounds.right-snapshot.bounds.left,nativeHeight:snapshot.bounds.bottom-snapshot.bounds.top,workWidth:geometry.width,workHeight:geometry.height,...(model?{modelWidth:model.width,modelHeight:model.height}:{}),...(output?{outputWidth:output.width,outputHeight:output.height}:{})};
 }
-function clearCapturePreview(){capture=undefined;el('selection-previews').style.display='none';for(const id of ['source-preview','mask-preview'])el(id).removeAttribute('src');}
+function clearCapturePreview(){invalidateBlendProcessing();capture=undefined;el('selection-previews').style.display='none';for(const id of ['source-preview','mask-preview'])el(id).removeAttribute('src');}
 async function captureArea(expectedDocumentId=activeDocumentId(),showPreview=true,captureProtection=protection,beforeCommit?:(captured:Capture)=>void){
   const operation=activeOperation;
   return withSourceCapture(()=>withImagePixels(async()=>{
   const mode=el('mode').value,capturedWorkspace=workspace,context=assetContext();
   clearCapturePreview();
-  const captured=await adapter.capture(Number(el('margin').value)/100,captureProtection,expectedDocumentId,outputDepth(),{analysisResolution:Number(el('resolution').value),retainedBytes:retainedImageBytes(true),...(context?{purpose:'selection-asset' as const,preserveNativeDepth:true}:{}),...(isBackgroundMode(mode)?{context:'document' as const,selection:'subject-background' as const}:mode==='blend'?{context:'document' as const,selection:'edit' as const}:{})},beforeCommit);
+  const captured=await adapter.capture(Number(el('margin').value)/100,captureProtection,expectedDocumentId,outputDepth(),{analysisResolution:Number(el('resolution').value),retainedBytes:retainedImageBytes(true),...(context?{purpose:'selection-asset' as const,preserveNativeDepth:true}:{}),...(isBackgroundMode(mode)?{context:'document' as const,selection:'subject-background' as const}:mode==='blend'?{context:'document' as const,selection:'edit' as const,purpose:'blend-analysis' as const,preserveNativeDepth:true}:{})},beforeCommit);
   const {snapshot:s,image}=captured;
   if(capturedWorkspace!=='t2i'&&mode!=='relight'){const raw=captured.subjectMask??captured.selectionMask;lastSelection={workspace:capturedWorkspace,mode,range:{documentId:s.documentId,sessionId:s.sessionId,width:s.width,height:s.height,mode:s.mode,depth:s.depth,bounds:{...s.bounds},mask:s.captureGeometry?raw:raw.slice()}};}
   if(captureProtection&&captured.workingCopyOf===captureProtection.documentId)captureProtection={...captureProtection,documentId:s.documentId};
@@ -628,7 +660,7 @@ async function addCandidate(record:JobRecord,bytes:Uint8Array){
   const previous=candidates.findIndex(candidate=>candidate.job.id===record.id);if(previous>=0)candidates.splice(previous,1);
   if(candidates.length===4)candidates.shift();candidates.push(c);
   await renderCandidates(record.id);
-  if(c.lightingState==='reference-only'){const reason=diagnostic(c.lightingFailure,'lighting-extraction').reason;await store.trace(`relight.extraction.failed.${reason??'local-validation'}`,record.id);}
+  if(c.lightingState==='reference-only'){const reason=diagnostic(c.lightingFailure,'lighting-extraction').reason;await store.trace(`${record.blend?'blend':'relight'}.extraction.failed.${reason??'local-validation'}`,record.id);}
   await store.trace(c.lightingState==='reference-only'?'candidate.reference':'candidate.ready',record.id);
   relightWorkbench?.notifyResult(record.id);
   return c;
@@ -646,12 +678,71 @@ async function renderCandidates(preferredId?:string):Promise<void> {
 }
 async function showSelected(){
   const c=selected(),actualSize=zoomed,img=el('detail-preview'),frame=el('detail-frame');
+  if(blendSelectedId!==c.job.id){invalidateBlendProcessing();blendSelectedId=c.job.id;blendView='composite';blendStatus();}
+  const request=++blendViewRevision,view=blendView;
   candidateUi();renderDiagnostic();frame.setAttribute('aria-busy','true');img.style.visibility='hidden';
-  await candidatePreview.show(c.image,actualSize,url=>{
+  let image=c.image;
+  if(c.job.blend&&view!=='composite'){
+    image=await withImagePixels(async()=>view==='source'?loadCandidateSource(c.job,name=>store.readBinary(name)):decodeModelPng(await store.readBinary(historyOutputName(c.job)),String(c.job.template??'')));
+    if(request!==blendViewRevision||candidates[Number(el('candidate-select').value)]!==c||blendView!==view)return;
+    if(image.width!==c.image.width||image.height!==c.image.height)image=resize(image,c.image.width,c.image.height);
+  }
+  const display=(url:string)=>{
+    if(request!==blendViewRevision)return;
     if(img.getAttribute('src')!==url)img.src=url;
-    img.style.width=actualSize?`${c.image.width}px`:'100%';img.style.height=actualSize?`${c.image.height}px`:'100%';
+    img.style.width=actualSize?`${image.width}px`:'100%';img.style.height=actualSize?`${image.height}px`:'100%';
     img.alt=el('candidate-caption').textContent;img.style.visibility='visible';frame.setAttribute('aria-busy','false');
-  });
+  };
+  // Source/reference rasters are short-lived display copies. Caching them by
+  // object identity would retain additional full raster buffers between views.
+  if(c.job.blend&&view!=='composite')display(await preview(image,actualSize?Math.max(image.width,image.height):1280));
+  else await candidatePreview.show(image,actualSize,display);
+}
+function invalidateBlendProcessing():void {
+  const pending=blendPending;
+  // Saved candidate display ownership changes in showSelected. Changing current
+  // capture parameters only cancels candidate processing, not its saved preview.
+  blendRevision++;if(blendTimer)clearTimeout(blendTimer);blendTimer=undefined;blendPending=false;blendDraft=undefined;
+  if(pending)blendStatus();
+  candidateUi();
+}
+function requestBlendProcessing():void {
+  if(busy||blendCommitting)return;
+  const prior=candidates[Number(el('candidate-select').value)];if(!prior?.job.blend)return;
+  try{
+    const outputKind=el('blend-result-output').value as RelightOutputKind;
+    const fidelity=Number(el('blend-fidelity').value),detailProtection=Number(el('blend-detail-protection').value);
+    const extraction=validateRelightExtractionSettings({fidelity:fidelity/100,detailProtection:detailProtection/100});
+    withBlendProcessing(validateBlendTaskMetadata(prior.job.blend,prior.job.id),outputKind,extraction);
+    blendDraft={outputKind,extraction};blendPending=true;const revision=++blendRevision;
+    if(blendTimer)clearTimeout(blendTimer);candidateUi();blendStatus('正在本地更新光影层…');
+    blendTimer=setTimeout(()=>{blendTimer=undefined;void processBlendCandidate(prior,revision,outputKind,extraction);},120);
+  }catch(error){blendStatus(error instanceof Error?error.message:String(error));candidateUi();}
+}
+async function processBlendCandidate(prior:Candidate,revision:number,outputKind:RelightOutputKind,extraction:RelightExtractionSettings):Promise<void>{
+  const owns=()=>revision===blendRevision&&candidates[Number(el('candidate-select').value)]===prior&&!busy;
+  try{await withImagePixels(async()=>{
+    if(!owns())return;
+    const record:JobRecord={...prior.job,blend:withBlendProcessing(validateBlendTaskMetadata(prior.job.blend,prior.job.id),outputKind,extraction)};
+    const raw=await store.readBinary(historyOutputName(record));if(!owns())return;
+    const prepared=await prepareCandidate(record,raw,name=>store.readBinary(name),retainedImageBytes(true));if(!owns())return;
+    if(outputKind==='lighting-layers'&&prepared.lightingState!=='composite')throw prepared.lightingFailure??new Error(prepared.warning??t('本地光影提取未完成；原始 AI 参考图已保留，请检查参考图和来源的作用范围。'));
+    if(record.state==='output-error'){record.state='ready';delete record.detail;}
+    const bytes=encodePng(prepared.image),url=await preview(prepared.image);if(!owns())return;
+    // The narrow commit lock makes the last ownership check and persisted choice
+    // one user action. Navigation and new gestures remain available while deriving.
+    blendCommitting=true;lock(true);
+    try{
+      await store.save(record);
+      const index=candidates.indexOf(prior);if(index<0)return;
+      candidates[index]={...prepared,job:record,bytes,preview:url,snapshot:prepared.snapshot?.captureGeometry?{...prepared.snapshot,mask:new Uint8Array()}:prepared.snapshot};
+      blendDraft=undefined;blendPending=false;blendView='composite';
+      historyPreview.invalidate();const historyIndex=historyRecords.findIndex(item=>item.id===record.id);if(historyIndex>=0)historyRecords[historyIndex]=record;
+      historyTable.setRecords(historyRecords);historyUi();await renderCandidates(record.id);
+      blendStatus('已更新此候选；未重新生成。');
+    }finally{blendCommitting=false;lock(false);}
+  });}catch(error){if(revision===blendRevision)blendStatus('本地调整失败，已保留原候选和参数：{0}',error instanceof Error?error.message:String(error));}
+  finally{if(revision===blendRevision){blendPending=false;blendDraft=undefined;candidateUi();}}
 }
 function queueResultNavigation():void {
   if(navigationTimer)return;
@@ -670,7 +761,7 @@ async function saveReady(record:JobRecord,images:OutputFile[],operation=activeOp
   record.state='downloading';record.outputs=images;
   try{
     await store.trace('candidate.download',record.id);const bytes=await client.output(images[0]);await store.binary(`${record.id}-output.png`,bytes);record.outputFile=`${record.id}-output.png`;decodeModelPng(bytes,String(record.template??""));record.state='ready';if(record.relight)(record.relight as RelightTaskMetadata).result={jobId:record.id,outputFile:record.outputFile as string};await store.save(record);
-    if((record.relight as RelightTaskMetadata|undefined)?.outputKind==='lighting-layers'){if(operation)operation.stage='lighting-extraction';taskPhase(t('正在提取光影影响场…'));}
+    if(((record.blend??record.relight) as BlendTaskMetadata|RelightTaskMetadata|undefined)?.outputKind==='lighting-layers'){if(operation)operation.stage='lighting-extraction';taskPhase(t('正在提取光影影响场…'));}
     const candidate=await addCandidate(record,bytes);assertLightingComposite(candidate);
   }
   catch(error){record.state='output-error';record.detail=error instanceof Error?error.message:String(error);await store.save(record);throw error;}
@@ -731,7 +822,7 @@ async function generate(frozenRelight?:FrozenRelightSubmission,onRelightJob?:(id
   const mode=frozenRelight?'relight':el('mode').value,userPrompt=frozenRelight?frozenRelight.scene.supplement:mode==='remove'?'':el('prompt').value,destination=frozenRelight?'selection':el('destination').value,usage=el('usage').value;
   const context=frozenRelight?undefined:assetContext(),asset=assetMode(mode),behavior=asset?{guide:!!context,preserveAlpha:false,alignSubject:false,matchColor:false}:editBehavior(mode,{guide:!!el('guide').checked,preserveAlpha:!!el('preserve-alpha').checked,alignSubject:frozenRelight?false:!!el('align-subject').checked,matchColor:frozenRelight?false:!!el('match-color').checked},settings.backend??'comfyui'),guide=behavior.guide;
   let request=intent(frozenRelight?'cosplay':workspace,mode,frozenRelight?'Structured relighting':userPrompt,!asset&&!!reference,guide,usage,client instanceof GatewayClient?'semantic':'images',false,context);
-  const depth=outputDepth();const count=Number(el('count').value),steps=Number(el('steps').value),resolution=Number(el('resolution').value),margin=Number(el('margin').value)/100;
+  const depth=outputDepth(),blendKind=mode==='blend'?el('blend-output-kind').value as RelightOutputKind:undefined;const count=Number(el('count').value),steps=Number(el('steps').value),resolution=Number(el('resolution').value),margin=Number(el('margin').value)/100;
   let baseSeed=el('lock-seed').checked?Number(el('seed').value):Math.floor(Math.random()*2**31),seedSupported=true;
   if(!Number.isInteger(count)||count<1||count>4)throw new Error(t("候选数量须为 1–4"));
   if(!(client instanceof GatewayClient))buildGraph({requestId:uuid(),prompt:request.prompt,seed:baseSeed+count-1,steps,resolution,models:settings.models,outputDepth:outputDepth()});
@@ -755,6 +846,7 @@ async function generate(frozenRelight?:FrozenRelightSubmission,onRelightJob?:(id
     if(stopBatch){clearCapturePreview();return;}
     if(operation)operation.stage='capture';if(!frozenRelight){if(captureTarget)await captureArea(expectedDocumentId);else clearCapturePreview();}
     const captured=frozenRelight?.capture??capture,ref=asset?undefined:reference,hasInputs=request.kind==='edit'||!!context;
+    if(blendKind==='lighting-layers')assertBlendLightingCapture(captured!);
     for(let index=0;index<count&&!stopBatch;index++) {
       batchPosition=t("候选 {0} / {1} · ",index+1,count);taskPhase(t("准备与上传输入…"));status(t("上传候选 {0} / {1} 的输入…",index+1,count));const id=uuid(),clientId=uuid();
       const seed=seedSupported?baseSeed+index:0;
@@ -765,20 +857,21 @@ async function generate(frozenRelight?:FrozenRelightSubmission,onRelightJob?:(id
         try{generationRequest=validateGeneration({model:client.model,kind:request.kind,mode,prompt:request.prompt,seed,width:size.width,height:size.height,outputDepth:depth,...(context?{assetContext:context}:{}),...(hasInputs?{source:`${id}-source.png`,...(guide?{guide:`${id}-guide.png`}:{}),...(ref?{reference:`${id}-reference.png`}:{})}:{})},client.capabilities!);}
         catch(error){if(context&&!client.capabilities!.models.find(model=>model.id===(client as GatewayClient).model)?.assetContexts?.includes(context))throw new DiagnosticError('unsupported','environment',t('此平台模型不支持参考当前图片与选区生成透明素材；请明确选择仅文字素材或更换模型'));throw error;}
       }
-      if(snapshot&&(context||snapshot.captureGeometry?.kind==='edit-analysis')){
+      const blendMetadata=blendKind?blendTaskMetadata(captured!,id,blendKind):undefined;
+      if(snapshot&&(context||snapshot.captureGeometry?.kind==='edit-analysis'||snapshot.captureGeometry?.kind==='blend-analysis')){
         const mapping=makeMapping(snapshot.bounds,resolution);
-        (context?preflightSelectionAssetCandidate:preflightEditAnalysisCandidate)({id,clientId,state:'created',createdAt:new Date().toISOString(),graph:{},snapshot,template:generationRequest?GATEWAY_TEMPLATE:templateForDepth(depth),params:{mode,outputKind:request.kind,...(context?{assetContext:context}:{}),modelSize:{width:mapping.width,height:mapping.height}}},retainedImageBytes(true));
+        (context?preflightSelectionAssetCandidate:preflightEditAnalysisCandidate)({id,clientId,state:'created',createdAt:new Date().toISOString(),graph:{},snapshot,...(blendMetadata?{blend:blendMetadata}:{}),template:generationRequest?GATEWAY_TEMPLATE:templateForDepth(depth),params:{mode,outputKind:request.kind,...(context?{assetContext:context}:{}),modelSize:{width:mapping.width,height:mapping.height}}},retainedImageBytes(true));
       }
       if(snapshot){
         await store.binary(`${id}-mask.bin`,snapshot.mask);await store.binary(`${id}-source.png`,encodePng(captured!.image));
-        if(context||snapshot.backgroundComposite==='subject-background-v1'){
-          const raw=context?captured!.selectionMask:captured!.subjectMask;
+        if(context||blendMetadata||snapshot.backgroundComposite==='subject-background-v1'){
+          const raw=context||blendMetadata?captured!.selectionMask:captured!.subjectMask;
           if(!raw)throw new Error(t('背景历史的蒙版数据缺失或损坏，无法安全重建候选；原始输出已保留'));
           await store.binary(`${id}-subject-mask.bin`,raw);await store.binary(`${id}-protection-mask.bin`,captured!.protectionMask);
         }
       }
       if(hasInputs) {
-        if(frozenRelight||context)adapter.assertSourceCurrent(snapshot!);
+        if(frozenRelight||context||blendMetadata)adapter.assertSourceCurrent(snapshot!);
         const mapping=makeMapping(snapshot!.bounds,resolution);
         modelSize={width:mapping.width,height:mapping.height};
         const image=resize(captured!.image,mapping.width,mapping.height);
@@ -787,11 +880,12 @@ async function generate(frozenRelight?:FrozenRelightSubmission,onRelightJob?:(id
         if(ref){const refMap=makeMapping({left:0,top:0,right:ref.width,bottom:ref.height},resolution);referenceName=await client.upload(encodePng(resize(ref,refMap.width,refMap.height)),`${id}-reference.png`);}
       }
       if(stopBatch)break;
-      if(context)adapter.assertSourceCurrent(snapshot!);
+      if(context||blendMetadata)adapter.assertSourceCurrent(snapshot!);
       const graph=client instanceof GatewayClient?{}:buildGraph({requestId:id,prompt:request.prompt,seed,steps,resolution,source,guide:guideName,reference:referenceName,models:settings.models,outputDepth:outputDepth()});
       const {mask:ignored,...metadata}=snapshot??{mask:undefined};
       current={id,clientId,baseUrl:settings.baseUrl,state:'created',createdAt:new Date().toISOString(),graph,...(generationRequest?{backend:'gateway' as const,request:generationRequest}:{}),userPrompt,params:{workspace,mode,steps,resolution,seed,outputDepth:depth,guide,margin,usage,destination,outputKind:request.kind,...(context?{assetContext:context}:{}),modelSize,preserveAlpha:behavior.preserveAlpha,alignSubject:behavior.alignSubject,matchColor:behavior.matchColor},snapshot:snapshot?metadata:undefined,template:generationRequest?GATEWAY_TEMPLATE:templateForDepth(depth),...(generationRequest?{providerModel:generationRequest.model}:{models:{...settings.models}})};
       if(captured?.documentName)current.sourceName=captured.documentName;
+      if(blendMetadata)current.blend=blendMetadata;
       if(frozenRelight&&relightCaps){current.relight={...relightTaskMetadata(frozenRelight,id,relightCaps,modelSize!,depth,seed),...(relightConflictResolution?{conflictResolution:relightConflictResolution}:{})};onRelightJob?.(id);}
       batchIds.push(id);if(operation){operation.stage='inference';operation.taskId=id;}await store.trace('task.submit',id);await coordinator.submit(current);await refreshHistory(id);await store.trace('task.wait',id);
       if(current.state==='failed')throw new Error(current.detail);
@@ -846,7 +940,7 @@ async function apply(jobId?:string,checkOnly=false){
           ?adapter.applyEditAnalysis(prepared.snapshot,prepared.image,name,{preserveAlpha:false,assetContext:prepared.assetContext,retainedBytes:retainedImageBytes(true),onProgress:(done,total)=>taskPhase(t('写入原尺寸结果 {0} / {1}',done,total),Math.round(done/total*100))})
           :adapter.apply(prepared.snapshot,prepared.image,name);
       });
-    }else if(c.snapshot.captureGeometry?.kind==='edit-analysis'){
+    }else if(c.snapshot.captureGeometry?.kind==='edit-analysis'||c.snapshot.captureGeometry?.kind==='blend-analysis'){
       layerId=await withImagePixels(async()=>{
         // Every new task recaptures. Release this ordinary capture before loading
         // exact historical planes; range recovery and saved protection survive.
@@ -967,6 +1061,15 @@ on('protect',()=>configure(async()=>{protection=await adapter.protection();captu
 on('clear-protection',()=>configure(async()=>{protection=undefined;capture=undefined;el('selection-previews').style.display='none';sourceCaption.show('保护区已清除，请重新捕获');}));
 on('reference',()=>configure(async()=>{const file=await uxp.storage.localFileSystem.getFileForOpening({types:['png','jpg','jpeg','webp']});if(!file)return;reference=await adapter.importReference(file,retainedImageBytes(true));el('reference-info').textContent=`${file.name} · ${reference.width}×${reference.height} · sRGB 8-bit`;}));
 on('clear-reference',async()=>{reference=undefined;el('reference-info').setAttribute('data-i18n','未选择参考图');el('reference-info').textContent=t("未选择参考图");});
+on('toggle-protection',async()=>{blendProtectionOpen=!blendProtectionOpen;inputUi();});
+on('toggle-generation',async()=>{blendGenerationOpen=!blendGenerationOpen;inputUi();});
+el('blend-output-kind').addEventListener('change',()=>{if(capture&&el('blend-output-kind').value==='lighting-layers')void guarded(async()=>{assertBlendLightingCapture(capture!);},{page:'create',feature:'blend-output-kind',stage:'capture'});});
+el('blend-result-output').addEventListener('change',requestBlendProcessing);
+for(const id of ['blend-fidelity','blend-detail-protection']){
+  el(id).addEventListener('input',requestBlendProcessing);el(id).addEventListener('change',requestBlendProcessing);
+  for(const event of ['input','change'])el(`${id}-slider`).addEventListener(event,()=>{if(el(`${id}-slider`).disabled)return;el(id).value=String(el(`${id}-slider`).value);requestBlendProcessing();});
+}
+for(const view of ['source','composite','ai'] as const)on(`blend-view-${view}`,async()=>{blendView=view;await showSelected();});
 on('open-relight',()=>openRelightWorkbench());
 on('relight-reuse-history',()=>openRelightWorkbench(relightReuse,relightReuseDescription));
 el('relight-scope').addEventListener('change',()=>{if(relightSession)relightWorkbench?.setScopePending(relightScope()!==relightSession.scope);});
@@ -988,8 +1091,9 @@ on('export',()=>configure(async()=>{const c=selected(),file=await uxp.storage.lo
 on('export-ai-reference',()=>configure(async()=>{
   const candidate=selected(),id=candidate.job.id;
   const unavailable=()=>new DiagnosticError('invalid-output','output',t('此光影候选没有可安全导出的原始 AI 参考图，请从历史重新读取'));
-  if(candidate.outputKind!=='lighting-layers')throw unavailable();
-  const record=(await store.history()).find(value=>value.id===id);if(!record||(record.relight as RelightTaskMetadata|undefined)?.outputKind!=='lighting-layers')throw unavailable();
+  if(candidate.outputKind!=='lighting-layers'&&!candidate.job.blend)throw unavailable();
+  const record=(await store.history()).find(value=>value.id===id);if(!record||!record.blend&&(record.relight as RelightTaskMetadata|undefined)?.outputKind!=='lighting-layers')throw unavailable();
+  if(record.blend)validateBlendTaskMetadata(record.blend,id);
   const name=historyOutputName(record);if(name!==`${id}-output.png`)throw unavailable();
   const bytes=await store.readBinary(name),file=await uxp.storage.localFileSystem.getFileForSaving(`ps-ai-${id.slice(0,8)}-ai-reference.png`,{types:['png']});
   if(file){await file.write(new Uint8Array(bytes).buffer,{format:uxp.storage.formats.binary});status(t('已另存模型原始 AI 参考图；候选预览保持不变。'));}
@@ -1003,7 +1107,7 @@ on('repeat-history',async()=>{
     if(settings.backend==='gateway'&&p.outputDepth===16)throw new Error(t('此历史为 16 位输出，请切回 ComfyUI 后恢复参数；当前平台配置保留 8 位'));views.show('create');
     if(p.mode==='relight'){const metadata=r.relight as RelightTaskMetadata|undefined;relightReuse=metadata?validateRelightScene(metadata.scene):undefined;relightReuseDescription=metadata?undefined:String(r.userPrompt??'');setWorkspace('cosplay','relight');el('relight-reuse-history').style.display='block';status(t('历史光影参数已准备，请明确点击复用到当前原图；旧候选仍可读取、应用或导出'));return;}
     if(['effect','atmosphere'].includes(p.mode)&&p.assetContext!==undefined&&p.assetContext!=='selection-v1')throw new Error(t('素材输入方式无效，请重新选择'));
-    setWorkspace(p.workspace,p.mode);if(assetMode()){el('asset-input').value=p.assetContext==='selection-v1'?'selection-v1':'text';invalidateCapture();}if(p.mode!=='remove')el('prompt').value=r.userPrompt;for(const name of ['steps','resolution','seed','destination'])el(name).value=p[name];el('output-depth').value=String(p.outputDepth??8);el('usage').value=['服装','道具','材质','场景'].includes(p.usage)?p.usage:'服装';el('guide').checked=p.guide;el('preserve-alpha').checked=p.preserveAlpha!==false;el('align-subject').checked=p.alignSubject!==false;el('match-color').checked=p.matchColor===true;el('margin').value=p.margin*100;el('lock-seed').checked=true;inputUi();status(t("参数已恢复；参考图和保护区请重新指定，提交时重新捕获"));
+    setWorkspace(p.workspace,p.mode);if(p.mode==='blend')el('blend-output-kind').value=r.blend?validateBlendTaskMetadata(r.blend,r.id).outputKind:'full-result';if(assetMode()){el('asset-input').value=p.assetContext==='selection-v1'?'selection-v1':'text';invalidateCapture();}if(p.mode!=='remove')el('prompt').value=r.userPrompt;for(const name of ['steps','resolution','seed','destination'])el(name).value=p[name];el('output-depth').value=String(p.outputDepth??8);el('usage').value=['服装','道具','材质','场景'].includes(p.usage)?p.usage:'服装';el('guide').checked=p.guide;el('preserve-alpha').checked=p.preserveAlpha!==false;el('align-subject').checked=p.alignSubject!==false;el('match-color').checked=p.matchColor===true;el('margin').value=p.margin*100;el('lock-seed').checked=true;inputUi();status(t("参数已恢复；参考图和保护区请重新指定，提交时重新捕获"));
   }finally{lock(false);}
 });
 on('p0',async()=>{if(busy)return;lock(true);const trace:string[]=[];try{const report=await runHostProbe(ps,adapter,trace);await store.json('p0-host-report.json',report);status(t("P0 宿主往返通过：选区外/保护区像素、原图层、蒙版、异文档与一次撤销"));}catch(error){await store.json('p0-host-report.json',{passed:false,date:new Date().toISOString(),trace,error:error instanceof Error?error.message:String(error),stack:error instanceof Error?error.stack:undefined});throw error;}finally{lock(false);}});

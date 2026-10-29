@@ -3,6 +3,17 @@ import type {Language} from '../infrastructure/config/profile';
 // Chinese source messages are stable keys. Model prompts and saved parameter values
 // are deliberately independent of the display language.
 export const english:Record<string,string>={
+  '融合方式':'Blend method','应用方式':'Application method',
+  '保留细节 · 只应用光影':'Preserve detail · lighting only','AI 重绘主体':'AI redraw subject',
+  '读取当前图片与选区':'Read current image and selection','保护区':'Protection','保护区 ▸':'Protection ▸',
+  '生成设置':'Generation settings','生成设置 ▸':'Generation settings ▸',
+  '生成环境光参考':'Generate environment lighting reference',
+  '融合预览':'Blend preview','AI 参考':'AI reference',
+  '应用光影组':'Apply lighting group','应用重绘主体':'Apply redrawn subject',
+  '另存融合预览':'Save blend preview','已更新此候选；未重新生成。':'Updated this candidate without another generation.',
+  '从环境光参考提取明暗与冷暖，在原图上应用。参考变化较弱时不会额外增强光照。':'Extract brightness and color changes from the environment lighting reference and apply them to the source. Weak reference changes are not artificially strengthened.',
+  '保留细节的光影方式仅支持已标记的 sRGB RGB 8/16 位原文档；请明确选择 AI 重绘主体':'The lighting-only method requires a tagged sRGB RGB 8/16-bit source. Explicitly choose AI redraw subject for other sources.',
+  '光影方式暂不支持作用范围内的透明/半透明来源；请缩小到不透明区域，或明确选择 AI 重绘主体':'The lighting method does not support transparent or translucent pixels in the edit range. Select an opaque area or explicitly choose AI redraw subject.',
   '拖动滑块调整，或输入精确数值。Esc 取消本次拖动。':'Drag a slider or enter a precise value. Esc cancels the current drag.',
   '精确值：{0}':'Precise value: {0}',
   '创建已恢复色彩副本并重新读取':'Create a color-recovered copy and reread',

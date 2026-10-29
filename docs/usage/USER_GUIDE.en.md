@@ -332,19 +332,26 @@ The dialog briefly closes for reading or writing and then returns. Closing it do
 Choose **Portrait → Image Blending**.
 
 1. Place the person or object into a background, then select that foreground subject. Do not select the whole canvas. A cutout on transparency has no environment to match.
-2. Preview the range and generate directly, or add an instruction such as “Match warm window light from the left; preserve facial structure and clothing texture.”
-3. Check subject lighting, color temperature, edges and style, then apply. The background is context; only the subject minus protection is edited.
+2. Read the current image and selection, then check the subject range. Expand protection controls to preserve specific areas.
+3. Choose the processing method, optionally add an instruction such as “Match warm window light from the left,” then generate an environment-lighting reference.
+4. In Results, switch between the original, composite preview and AI reference. Inspect subject lighting, color and edges before applying. The background is context; only the subject minus protection is edited.
 
-Blending reads the full composite and disables subject alignment and color matching. ComfyUI omits the grayscale selection guide. Real illustration samples showed visible lighting changes; photographic portraits may still change too little. This does not provide precise lighting control or guarantee unchanged faces and texture.
+**New on this branch; not included in the published v0.5.1 packages:** new tasks default to lighting extraction over the original content. It estimates brightness and color changes from the AI reference and applies a lighting group without a duplicate source layer. Light fidelity adjusts strength; Detail protection smooths fine changes. Both recompute locally without another generation request or charge. Results can also use the existing AI subject-redraw method. Old history retains its original behavior.
+
+The default retains local shading on faces, shoulders and limbs. Increase Detail protection if unwanted light patches appear; higher values also soften local shadows. The algorithm smooths lighting changes, leaving the source image unblurred.
+
+Lighting extraction requires a tagged sRGB RGB8/16 source with opaque pixels throughout the editable scope. Other sources can explicitly use AI subject redraw; there is no silent fallback. Recapturing an edited source does not grant old candidates new application rights; they remain exportable for inspection.
+
+Blending reads the full composite and disables subject alignment and context color matching. ComfyUI omits the grayscale selection guide. A nearly unchanged AI reference cannot provide strong lighting changes for the local algorithm to extract. Structural shifts can leave broad lighting artifacts, and narrow shadows may soften. Photographic results still need individual inspection.
 
 <p align="center">
   <a href="../../assets/guide/050-result-blend.png"><img src="../../assets/guide/050-result-blend.png" width="720" alt="Blending result: darker subject in the saved stage environment"></a>
 </p>
 
-Saved stage example: the subject becomes darker while the saved mask preserves the background. Check faces and clothing texture too; they can change.
+This is an earlier AI subject-redraw example, **not a demonstration of the new lighting extraction**: the subject becomes darker while the saved mask preserves the background. Faces and clothing texture can also change.
 
 <details>
-<summary>View mode controls</summary>
+<summary>View earlier mode controls (new controls follow this branch)</summary>
 
 <p align="center">
   <a href="../../assets/guide/050-mode-blend-zh.png"><img src="../../assets/guide/050-mode-blend-zh.png" width="420" alt="Image Blending mode"></a>
