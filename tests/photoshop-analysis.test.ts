@@ -43,3 +43,29 @@ test('retained session buffers reject ordinary capture before source pixels are 
   await assert.rejects(h.adapter.capture(0,undefined,7,8,{retainedBytes:512_000_000} as any),/预算/);
   assert.equal(h.calls.length,0);
 });
+
+test('blend analysis freezes full visible environment and native16 subject/protection without native RGBA allocation',async()=>{
+  const h=host(1200,800,16);h.doc.selection.bounds={left:100,top:100,right:700,bottom:700};
+  const c=await h.adapter.capture(0,undefined,7,8,{purpose:'blend-analysis',preserveNativeDepth:true} as any);
+  assert.equal(c.snapshot.captureGeometry?.kind,'blend-analysis');assert.deepEqual(c.snapshot.bounds,{left:0,top:0,right:1200,bottom:800});
+  assert.ok(c.image.rgba instanceof Uint16Array);assert.equal(c.snapshot.mask.length,960000);assert.equal(c.snapshot.requiresClipping,false);
+  assert.ok(h.calls.filter(c=>c[0]==='pixels').every(c=>c[1].targetSize||(c[1].sourceBounds.right-c[1].sourceBounds.left)*(c[1].sourceBounds.bottom-c[1].sourceBounds.top)<=IMAGE_BUDGETS.stripPixels));
+  assert.equal(c.selectionMask[0],0);assert.equal(c.selectionMask[200*1200+200],128);
+});
+test('blend capture requires a subject selection plus visible outside environment and rejects document scope',async()=>{
+  const h=host(64,64,8);
+  await assert.rejects(h.adapter.capture(0,undefined,7,8,{purpose:'blend-analysis',selection:'document'} as any),/策略/);
+  await assert.rejects(h.adapter.capture(0,undefined,7,8,{purpose:'blend-analysis'} as any),/选区外/);
+  h.doc.selection.bounds=undefined;await assert.rejects(h.adapter.capture(0,undefined,7,8,{purpose:'blend-analysis'} as any),/选区/);
+});
+test('45M blend capture preserves native16 analysis values while every unscaled read stays bounded',async()=>{
+  const h=host(9000,5000,16);h.doc.selection.bounds={left:0,top:0,right:4500,bottom:5000};
+  const c=await h.adapter.capture(0,undefined,7,8,{purpose:'blend-analysis'});
+  assert.equal(c.snapshot.blendOpaqueScope,true);assert.equal(c.snapshot.mask.length,45_000_000);assert.ok(c.image.rgba instanceof Uint16Array);assert.equal(c.image.rgba[0],12345);assert.ok(c.image.width*c.image.height<=IMAGE_BUDGETS.analysisPixels);
+  const reads=h.calls.filter(c=>c[0]==='pixels');assert.equal(reads.filter(c=>c[1].targetSize).length,1);assert.ok(reads.filter(c=>!c[1].targetSize).every(c=>(c[1].sourceBounds.right-c[1].sourceBounds.left)*(c[1].sourceBounds.bottom-c[1].sourceBounds.top)<=IMAGE_BUDGETS.stripPixels));
+});
+test('blend redraw may capture a transparent subject area with visible environment while native lighting proof stays false',async()=>{
+  const h=host(64,64,8);h.doc.selection.bounds={left:0,top:0,right:32,bottom:64};const read=h.ps.imaging.getPixels;
+  h.ps.imaging.getPixels=async(o:any)=>{const r=await read(o),get=r.imageData.getData;r.imageData.getData=async()=>{const rgba=await get();for(let y=0;y<r.imageData.height;y++)for(let x=0;x<r.imageData.width;x++)if(o.sourceBounds.left+(x+.5)*(o.sourceBounds.right-o.sourceBounds.left)/r.imageData.width<32)rgba[(y*r.imageData.width+x)*4+3]=0;return rgba;};return r;};
+  const c=await h.adapter.capture(0,undefined,7,8,{purpose:'blend-analysis'});assert.equal(c.snapshot.blendOpaqueScope,false);assert.equal(c.snapshot.requiresClipping,false);assert.equal(c.image.rgba[3],0);
+});

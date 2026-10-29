@@ -1,16 +1,18 @@
 import type {JobRecord} from '../generation/jobs';
 import {decodeModelPng,decodePng,resize,maskRaster,rasterDepth,rasterMax,type Raster} from '../imaging/image';
-import {prepareEditCandidate,prepareEditModel,prepareBackgroundCandidate,backgroundEditMask} from '../imaging/composite';
+import {prepareEditCandidate,prepareEditModel,prepareBackgroundCandidate,backgroundEditMask,retainSourceAlpha} from '../imaging/composite';
 import {editBehavior,backgroundCoverage} from '../features/editing/edit-behavior';
 import {isBackgroundMode} from '../generation/intent';
 import type {Snapshot} from '../infrastructure/photoshop/photoshop';
 import {diagnostic,DiagnosticError} from '../diagnostics/diagnostics';
 import {t} from '../localization/i18n';
-import {checkDocumentSize,downsampleSnapshotMask,resampleGray,IMAGE_BUDGETS,planEditApplyMemory} from '../imaging/budget';
+import {checkDocumentSize,downsampleSnapshotMask,resampleGray,IMAGE_BUDGETS,planEditApplyMemory,imageStrips} from '../imaging/budget';
+import {sampleEditStrip} from '../imaging/native-edit';
 import {validateRelightScene} from '../features/relight/relight-scene';
 import type {RelightOutputKind} from '../features/relight/relight-session';
 import {validateRelightExtractionSettings,type RelightLayerFields} from '../features/relight/relight-layers';
 import {sha256} from '@noble/hashes/sha2.js';
+import {validateBlendTaskMetadata,assertBlendSnapshot,assertBlendLightingCapture} from '../features/blend/blend-session';
 
 type ReadBinary=(name:string)=>Promise<Uint8Array>;
 export interface PreparedCandidate {image:Raster;snapshot?:Snapshot;warning?:string;outputKind?:RelightOutputKind;lightingState?:'composite'|'reference-only';lightingFailure?:Error;lightingSummary?:RelightLayerFields['summary']}
@@ -59,6 +61,10 @@ function smallAssetGeometry(record:JobRecord,outputBytes:number,retainedBytes:nu
   return {width,height};
 }
 export function candidateOutputKind(record:JobRecord):RelightOutputKind|undefined {
+  if(record.blend!==undefined){
+    if(record.relight!==undefined||(record.params as any)?.mode!=='blend')throw lightingHistoryError();
+    return validateBlendTaskMetadata(record.blend,record.id).outputKind;
+  }
   const relight=record.relight as any;
   if(!relight)return undefined;
   if(relight.outputKind===undefined)return 'full-result';
@@ -119,7 +125,7 @@ function candidateCapturePreflight(check:()=>unknown):void {
 }
 /** Check the planned paid response before any upload or submission. */
 export function preflightEditAnalysisCandidate(record:JobRecord,retainedBytes=0):void {
-  candidateCapturePreflight(()=>editAnalysisGeometry(record,retainedBytes,estimatedCandidatePngBytes(record),false));
+  candidateCapturePreflight(()=>record.blend!==undefined?blendGeometry(record,retainedBytes,estimatedCandidatePngBytes(record)):editAnalysisGeometry(record,retainedBytes,estimatedCandidatePngBytes(record),false));
 }
 /** Every contextual asset, including a native small capture, must fit the later candidate peak. */
 export function preflightSelectionAssetCandidate(record:JobRecord,retainedBytes=0):void {
@@ -168,6 +174,11 @@ async function editAnalysisInputs(record:JobRecord,bytes:Uint8Array,read:ReadBin
 /** Native strips receive a transformed target before any source-alpha baking. */
 export async function prepareEditAnalysisApplication(record:JobRecord,bytes:Uint8Array,read:ReadBinary,retainedBytes=0):Promise<{snapshot:Snapshot;image:Raster;preserveAlpha:boolean;assetContext?:'selection-v1';subjectMask?:Uint8Array;protectionMask?:Uint8Array}>{
   if(candidateOutputKind(record)==='lighting-layers')throw editAnalysisHistoryError();
+  if(record.blend!==undefined){
+    blendGeometry(record,retainedBytes,bytes.byteLength);const raw=decodeBlendOutput(record,bytes),input=await blendInputs(record,read,raw,bytes.byteLength,retainedBytes);
+    const behavior=editBehavior('blend',input.params,record.backend??'comfyui');
+    return {snapshot:input.snapshot,image:prepareEditModel(raw,input.source,{preserveAlpha:behavior.preserveAlpha,align:false,matchColor:false,mask:input.mask}),preserveAlpha:behavior.preserveAlpha};
+  }
   const input=await editAnalysisInputs(record,bytes,read,retainedBytes,true),mode=(record.params as any).mode;
   if(input.assetContext){
     const warning=assetTransparencyWarning(input.raw);if(warning)throw new DiagnosticError('invalid-output','output',warning);
@@ -179,6 +190,88 @@ export async function prepareEditAnalysisApplication(record:JobRecord,bytes:Uint
   }
   const image=prepareEditModel(input.raw,input.source,{preserveAlpha:input.behavior.preserveAlpha,align:input.behavior.alignSubject,matchColor:input.behavior.matchColor,mask:input.mask});
   return {snapshot:input.snapshot,image,preserveAlpha:input.behavior.preserveAlpha};
+}
+function decodeBlendOutput(record:JobRecord,bytes:Uint8Array):Raster {
+  const model=(record.params as any)?.modelSize;
+  if(bytes.length<33||!model)throw lightingHistoryError();const header=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+  if(header.getUint32(16)!==model.width||header.getUint32(20)!==model.height||bytes[24]!==(record.template==='qwen21-local-v3-rgba16'?16:8))throw lightingHistoryError();
+  return decodeModelPng(bytes,String(record.template??''));
+}
+
+function blendGeometry(record:JobRecord,retainedBytes=0,outputBytes=0){
+  assertTaskNames(record);const metadata=validateBlendTaskMetadata(record.blend,record.id),snapshot=record.snapshot as Snapshot|undefined,params=record.params as any;
+  if(!snapshot||record.relight!==undefined||params?.mode!=='blend'||params.outputKind!=='edit')throw lightingHistoryError();
+  assertBlendSnapshot(metadata,{...snapshot,mask:new Uint8Array()});checkDocumentSize(snapshot.width,snapshot.height);
+  const geometry=snapshot.captureGeometry!,b=snapshot.bounds,width=b.right-b.left,height=b.bottom-b.top;checkDocumentSize(width,height);
+  if(!Number.isSafeInteger(geometry.width)||!Number.isSafeInteger(geometry.height)||geometry.width<1||geometry.height<1||geometry.width>width||geometry.height>height||geometry.width*geometry.height>IMAGE_BUDGETS.analysisPixels||Math.max(geometry.width,geometry.height)>IMAGE_BUDGETS.analysisSide)throw lightingHistoryError();
+  const model=params.modelSize;if(!model||!Number.isSafeInteger(model.width)||!Number.isSafeInteger(model.height)||model.width<1||model.height<1||model.width*model.height>16_000_000)throw lightingHistoryError();
+  const sourceBytes=geometry.width*geometry.height*(snapshot.nativeDepth===16?8:4),modelBytes=model.width*model.height*(record.template==='qwen21-local-v3-rgba16'?8:4);
+  planEditApplyMemory(width,height,snapshot.nativeDepth!,sourceBytes*2+modelBytes*3+outputBytes+geometry.width*geometry.height*64,width*height*3,retainedBytes);
+  return {metadata,snapshot,params,geometry,width,height};
+}
+/** New blend records retain exact raw/effective/protection planes; never infer native geometry from PNG. */
+async function blendInputs(record:JobRecord,read:ReadBinary,raw?:Raster,outputBytes=0,retainedBytes=0){
+  const expected=blendGeometry(record,retainedBytes,outputBytes),{geometry,metadata,params,width,height}=expected;
+  if(raw&&(raw.width!==params.modelSize.width||raw.height!==params.modelSize.height))throw lightingHistoryError();
+  const snapshot=await restoreSnapshot(record,read);if(!snapshot)throw lightingHistoryError();assertBlendSnapshot(metadata,snapshot);
+  if(snapshot.mask.length!==width*height||!snapshot.mask.some(v=>v>0))throw lightingHistoryError();
+  let selection:Uint8Array,protection:Uint8Array;
+  try{selection=await read(`${record.id}-subject-mask.bin`);protection=await read(`${record.id}-protection-mask.bin`);}catch{throw lightingHistoryError();}
+  if(!(selection instanceof Uint8Array)||!(protection instanceof Uint8Array)||selection.length!==width*height||protection.length!==width*height)throw lightingHistoryError();
+  for(let p=0;p<snapshot.mask.length;p++)if(snapshot.mask[p]!==Math.round(selection[p]*(255-protection[p])/255))throw lightingHistoryError();
+  const bytes=await read(`${record.id}-source.png`);if(bytes.length<33)throw lightingHistoryError();
+  const header=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+  if(header.getUint32(16)!==geometry.width||header.getUint32(20)!==geometry.height||bytes[24]!==snapshot.nativeDepth)throw lightingHistoryError();
+  const source=decodePng(bytes);let hash=2166136261;for(const v of source.rgba)hash=Math.imul(hash^v,16777619);
+  if((hash>>>0).toString(16)!==snapshot.sourceHash||rasterDepth(source)!==snapshot.nativeDepth)throw lightingHistoryError();
+  const mask=downsampleSnapshotMask(snapshot,source.width,source.height);
+  return {snapshot,source,mask,metadata,params};
+}
+/** Display-only source loading verifies the saved task; it never renews Photoshop authority. */
+export async function loadCandidateSource(record:JobRecord,read:ReadBinary,retainedBytes=0):Promise<Raster>{
+  if(record.blend!==undefined)return (await blendInputs(record,read,undefined,0,retainedBytes)).source;
+  assertTaskNames(record);return decodePng(await read(`${record.id}-source.png`));
+}
+async function deriveBlendApplication(input:Awaited<ReturnType<typeof blendInputs>>,raw:Raster,signal?:AbortSignal){
+  assertBlendLightingCapture({snapshot:input.snapshot,image:input.source,selectionMask:new Uint8Array(),protectionMask:new Uint8Array()});
+  const {deriveBlendLayers}=await import('../features/blend/blend-layers');
+  return deriveBlendLayers(input.source,raw,input.metadata.source,{signal,editMask:input.mask,extraction:input.metadata.localExtraction});
+}
+async function prepareBlendCandidate(record:JobRecord,bytes:Uint8Array,read:ReadBinary,retainedBytes:number):Promise<PreparedCandidate>{
+  blendGeometry(record,retainedBytes,bytes.byteLength);
+  const raw=decodeBlendOutput(record,bytes),input=await blendInputs(record,read,raw,bytes.byteLength,retainedBytes),outputKind=input.metadata.outputKind;
+  if(outputKind==='full-result'){
+    const behavior=editBehavior('blend',input.params,record.backend??'comfyui'),image={...input.source,rgba:input.source.rgba.slice()},max=rasterMax(image),depth=rasterDepth(image),clip=behavior.preserveAlpha&&input.snapshot.requiresClipping;
+    const bounds={left:0,top:0,right:image.width,bottom:image.height};
+    // Mirror the native writer at the bounded preview grid: sample at native
+    // depth, reconstruct missing AI coverage, then apply one effective mask.
+    // A clipped opaque patch changes base RGB while retaining the base alpha.
+    for(const strip of imageStrips(bounds)){
+      const start=strip.top*image.width,pixels=(strip.bottom-strip.top)*image.width;
+      let patch=sampleEditStrip(raw,bounds,strip,depth);
+      if(behavior.preserveAlpha)patch=retainSourceAlpha(patch,{width:image.width,height:strip.bottom-strip.top,rgba:input.source.rgba.subarray(start*4,(start+pixels)*4)});
+      for(let p=0;p<pixels;p++){
+        const at=(start+p)*4,local=p*4,amount=input.mask[start+p]/255;
+        if(clip){
+          if(image.rgba[at+3])for(let c=0;c<3;c++)image.rgba[at+c]=Math.round(image.rgba[at+c]+(patch.rgba[local+c]-image.rgba[at+c])*amount);
+          continue;
+        }
+        const a=patch.rgba[local+3]/max*amount;if(!a)continue;
+        const b=image.rgba[at+3]/max,alpha=a+b*(1-a);
+        for(let c=0;c<3;c++)image.rgba[at+c]=alpha?Math.round((patch.rgba[local+c]*a+image.rgba[at+c]*b*(1-a))/alpha):0;
+        image.rgba[at+3]=Math.round(alpha*max);
+      }
+    }
+    return {image,snapshot:input.snapshot,outputKind};
+  }
+  try{
+    const fields=await deriveBlendApplication(input,raw),{previewRelightLayers}=await import('../features/relight/relight-layers'),image=previewRelightLayers(input.source,fields);
+    for(let p=0;p<input.mask.length;p++){const amount=input.mask[p]/255;for(let c=0;c<3;c++){const i=p*4+c;image.rgba[i]=Math.round(input.source.rgba[i]+(image.rgba[i]-input.source.rgba[i])*amount);}image.rgba[p*4+3]=input.source.rgba[p*4+3];}
+    return {image,snapshot:input.snapshot,outputKind,lightingState:'composite',lightingSummary:fields.summary};
+  }catch(error){
+    const lightingFailure=error instanceof Error?error:new Error(String(error)),warning=t('无法提取可靠的光影层，当前显示 AI 参考图；可另存检查，不能回填：{0}',lightingFailure.message);
+    return {image:raw,snapshot:input.snapshot,outputKind,lightingState:'reference-only',lightingFailure,warning};
+  }
 }
 
 async function prepareEditAnalysisCandidate(record:JobRecord,bytes:Uint8Array,read:ReadBinary,retainedBytes:number):Promise<PreparedCandidate>{
@@ -224,6 +317,10 @@ async function lightingInputs(record:JobRecord,raw:Raster,snapshot:Snapshot,read
 /** Re-derive on demand rather than retain full channel buffers for every candidate. No network IO. */
 export async function prepareLightingLayerApplication(record:JobRecord,bytes:Uint8Array,read:ReadBinary,signal?:AbortSignal){
   if(candidateOutputKind(record)!=='lighting-layers')throw lightingHistoryError();
+  if(record.blend!==undefined){
+    blendGeometry(record,0,bytes.byteLength);const raw=decodeBlendOutput(record,bytes),input=await blendInputs(record,read,raw,bytes.byteLength);
+    const fields=await deriveBlendApplication(input,raw,signal);return {snapshot:input.snapshot,fields,source:input.source,mask:input.mask};
+  }
   const snapshot=await restoreSnapshot(record,read);if(!snapshot)throw lightingHistoryError();
   const raw=decodeModelPng(bytes,String(record.template??'')),inputs=await lightingInputs(record,raw,snapshot,read);
   const {deriveRelightLayers}=await import('../features/relight/relight-layers');
@@ -243,6 +340,7 @@ export async function prepareSelectionAssetApplication(record:JobRecord,bytes:Ui
 }
 /** One read-only restoration/composition path for Results and the independent history preview. */
 export async function prepareCandidate(record:JobRecord,bytes:Uint8Array,read:ReadBinary,retainedBytes=0):Promise<PreparedCandidate> {
+  if(record.blend!==undefined)return prepareBlendCandidate(record,bytes,read,retainedBytes);
   const assetContext=selectionAssetContext(record);
   const geometry=(record.snapshot as Snapshot|undefined)?.captureGeometry;
   if(geometry?.kind==='edit-analysis')return prepareEditAnalysisCandidate(record,bytes,read,retainedBytes);
