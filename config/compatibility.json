@@ -37,11 +37,17 @@
       },
       "limitations": "Original matrix covers sRGB8 exchange. Model inputs clip wide gamut and quantize precision; optional16 output acceptance recorded separately. No calibrated-display acceptance or long-term stability claim."
     },
-    "untaggedSource": "Version 0.5.0: RGB static WebP with a bound original file without ICC (format-default sRGB) or PNG with an explicit sRGB chunk can use a tagged working copy after source-entry validation. Preserve a loaded document ICC after edits/conversion. Unknown/custom untagged sources or documents without a bound file remain blocked. Unsaved layers survive on the copy, interpreted using original-file semantics. Published v0.4.0 retains the earlier blanket rejection.",
+    "untaggedSource": "Version 0.5.2: loaded document ICC wins, including imported-layer composites. No original-file picker is opened. Already authorized exact files may establish WebP-default or explicit PNG sRGB. Otherwise untagged RGB8/16 source capture uses an unmerged sRGB working duplicate with explicit assumed-srgb approximation provenance, preserving original documents/layers and frozen selection/protection. Unknown-profile Grayscale and unsupported modes/depths remain blocked. References retain current-ICC or selected-file proof. Version 0.5.1 packages predate this policy.",
+    "automaticSourceColor": {
+      "date": "2026-10-30",
+      "reason": "assumed-srgb",
+      "policy": "Approximate source capture only; no claim of recovering original color. Existing document ICC and verified file semantics retain priority. Repeated capture of the same session-proven sRGB working copy keeps the reason.",
+      "validation": "Version 0.5.2 implementation has offline regression and integration coverage. Native Photoshop acceptance and real inference for this policy have not been completed."
+    },
     "savedColorResolution": {
       "status": "Offline parser/mock tests and PS27 WebP8 capture/apply/undo passed; public PNG8 selection/document capture passed native API checks, installed b3548bd4 passed bounded recovery, and hash-verified installed 291c1d40 passed missing-selection rejection/real picker/selection capture. Reference import, persistent access and broader controls remain separate checks.",
       "sourceFileByteLimit": 64000000,
-      "identity": "Same full path, dimensions and native depth; recheck source state after file selection",
+      "identity": "Same full path, dimensions and native depth; recheck source state after noninteractive access. No second original-file picker.",
       "workingCopy": "Unmerged sRGB duplicate, preserved original, capture/apply frozen to the copy",
       "undoRecapture": "Profile assignment is a separate history baseline. Only exact session-proven preassignment working copies offer explicit recovery into a NEW tagged copy; preserve the old document/redo history and recapture current pixels/protection. PS27 RGB8/16 synthetic API recovery and apply/undo/recapture passed; installed b3548bd4 additionally passed public PNG8 document-scope recovery after three native Undo operations reached NONE, retaining the old document/lights/candidates. Arbitrary pathless, earlier-session or modified origins still require verified manual assignment; recovery on other sources/scopes and broader controls remain separate checks.",
       "nativeAcceptance": {

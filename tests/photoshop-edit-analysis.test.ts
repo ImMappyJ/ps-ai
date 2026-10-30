@@ -251,13 +251,13 @@ test('selection-asset purpose itself freezes native depth while old visibility a
 });
 
 test('selection-asset capture retains selection, protection, ICC, history and cancellation guards',async()=>{
-  for(const failure of ['selection','protection','ICC','history','cancel']){
+  for(const failure of ['selection','protection','unknown-gray','ICC','history','cancel']){
     const h=host(8,4,16);h.alpha(()=>0);let protection:any;
     if(failure==='selection')h.doc.selection.bounds=null;
     if(failure==='protection')protection={documentId:7,sessionId:'s',width:8,height:4,bounds:{left:0,top:0,right:8,bottom:4},mask:new Uint8Array(32).fill(255)};
-    if(failure==='ICC')h.doc.colorProfileName='';
-    if(failure==='history'||failure==='cancel'){const read=h.ps.imaging.getPixels;h.ps.imaging.getPixels=async(o:any)=>{const result=await read(o);if(failure==='history')h.doc.activeHistoryState.id++;else h.context.isCancelled=true;return result;};}
-    await assert.rejects(h.adapter.capture(0,protection,7,8,{purpose:'selection-asset',preserveNativeDepth:true}),failure==='selection'?/选区/:failure==='protection'?/保护/:failure==='ICC'?/色彩|配置文件|来源/:failure==='history'?/改变/:/取消/);
+    if(failure==='unknown-gray'){h.doc.mode='gray';h.doc.colorProfileName='';}
+    if(['ICC','history','cancel'].includes(failure)){const read=h.ps.imaging.getPixels;h.ps.imaging.getPixels=async(o:any)=>{const result=await read(o);if(failure==='history')h.doc.activeHistoryState.id++;else if(failure==='ICC')h.doc.colorProfileName='Adobe RGB (1998)';else h.context.isCancelled=true;return result;};}
+    await assert.rejects(h.adapter.capture(0,protection,7,8,{purpose:'selection-asset',preserveNativeDepth:true}),failure==='selection'?/选区/:failure==='protection'?/保护/:failure==='unknown-gray'?/色彩|配置文件|来源/:['ICC','history'].includes(failure)?/改变/:/取消/);
     assert.deepEqual(h.doc.layers,[h.original]);assert.ok(h.resources.every(r=>r.disposed));
   }
 });

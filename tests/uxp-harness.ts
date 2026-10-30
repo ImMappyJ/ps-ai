@@ -1,7 +1,7 @@
 import {relayProof} from '../src/infrastructure/backends/relay-auth';
 import fs from 'node:fs/promises';import vm from 'node:vm';import {parseHTML} from 'linkedom';import {build} from 'esbuild';
 import {encodePng,decodePng,Raster,Bounds,expandPixels,maskRaster} from '../src/imaging/image';import type {JobRecord} from '../src/generation/jobs';
-export async function panelHarness(options:{showPanel?:boolean;panelWidth?:number;clipboardError?:string;uxpSelect?:boolean;delayHistory?:boolean;delayCheck?:boolean;settings?:unknown;history?:JobRecord[];files?:Record<string,Uint8Array|string>;pollDelayMs?:number;buildId?:string;models?:{unet:string;clip:string;vae:string};noDocuments?:boolean;delaySettings?:boolean;nativePreviewUnavailable?:boolean;dialogUnsupported?:boolean;source?:Raster;selection?:{bounds:Bounds;mask:Uint8Array};output?:Raster;save16Node?:boolean;untaggedSource?:{bytes:Uint8Array;wrongPath?:boolean;unsaved?:boolean;tokenUnavailable?:boolean};gateway?:{configured?:boolean;provider?:'bailian'|'gemini'|'openai';assetContexts?:('selection-v1')[]}}={}) {
+export async function panelHarness(options:{showPanel?:boolean;panelWidth?:number;clipboardError?:string;uxpSelect?:boolean;delayHistory?:boolean;delayCheck?:boolean;settings?:unknown;history?:JobRecord[];files?:Record<string,Uint8Array|string>;pollDelayMs?:number;buildId?:string;models?:{unet:string;clip:string;vae:string};modelInventory?:Record<'unet'|'clip'|'vae',string[]>;noDocuments?:boolean;delaySettings?:boolean;nativePreviewUnavailable?:boolean;dialogUnsupported?:boolean;source?:Raster;selection?:{bounds:Bounds;mask:Uint8Array};output?:Raster;save16Node?:boolean;untaggedSource?:{bytes:Uint8Array;wrongPath?:boolean;unsaved?:boolean;tokenUnavailable?:boolean};gateway?:{configured?:boolean;provider?:'bailian'|'gemini'|'openai';assetContexts?:('selection-v1')[]}}={}) {
   const html=await fs.readFile('plugin/index.html','utf8');const {document,window}=parseHTML(html);
   for(const select of Array.from(document.querySelectorAll('select'))) {
     const hasInitialSelection=!!select.querySelector('option[selected]');
@@ -53,6 +53,7 @@ export async function panelHarness(options:{showPanel?:boolean;panelWidth?:numbe
   Object.assign(modelInfo,JSON.parse(await fs.readFile('tests/fixtures/comfy-nodes.json','utf8')));
   if(options.save16Node)modelInfo.PS_AISavePNG16={input:{required:{images:['IMAGE',{}],filename_prefix:['STRING',{}]}},output:[]};
   if(options.models)for(const [cls,field,key] of [['UnetLoaderGGUF','unet_name','unet'],['CLIPLoader','clip_name','clip'],['VAELoader','vae_name','vae']] as const)modelInfo[cls].input.required[field][0].push(options.models[key]);
+  if(options.modelInventory)for(const [cls,field,key] of [['UnetLoaderGGUF','unet_name','unet'],['CLIPLoader','clip_name','clip'],['VAELoader','vae_name','vae']] as const)modelInfo[cls].input.required[field][0]=options.modelInventory[key];
   const fetcher=async(url:string,init:any)=>{
     requests.push({url,method:init?.method??'GET'});
     if(url.startsWith('http://offline.invalid:9999'))throw new TypeError('fetch failed');

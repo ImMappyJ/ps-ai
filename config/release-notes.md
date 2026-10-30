@@ -4,15 +4,16 @@
 
 本版本通道：**{{CHANNEL}}**。标签对应源码：[{{SOURCE_SHA}}]({{SOURCE_URL}})。[该版本提交记录]({{COMMITS_URL}})；实际变更与贡献者由下方 GitHub 生成信息和比较链接补充。
 
-### 0.5.1 的主要变化
+### 0.5.2 的主要变化
 
-- **更完整的冷暖布光**：移除相似度拦截，使用多尺度 RGB 光照估计，在原图上保留更多明暗和光色变化。
-- **两个本地调节参数**：光效还原控制强度，细节保护柔化细碎变化；调整已保存候选无需重新生成。
-- **精简光影分组**：只创建光影层，以穿透模式作用于下方原图，不再复制冻结底图。保留组蒙版、保护区和一次撤销。
-- **修复大照片工作台**：使用受限捕获尺寸计算模型几何，避免打开时出现内容超出画布的错误。
-- **更清楚的图文指南**：更新真实冷暖布光对比，统一中英文文档图片尺寸与居中排版。
+- **更清楚的创作流程**：按选择任务、来源与范围、生成与输出整理面板，按当前状态给出下一步；参考图和高级选项按需展开。
+- **读取来源不再要求另选原图**：优先采用 Photoshop 当前文档 ICC，导入图层不会被当作另一个原文件。未标记 RGB8/16 无可靠色彩证明时，在保留原图层与选区的独立“假定 sRGB”副本中继续，并明确提示近似色彩；未知灰度与不支持模式仍阻止。
+- **从零配置 ComfyUI**：双语指南覆盖官方下载与解压、指定 leejet GGUF 节点、便携版 Python 安装依赖、三个模型的固定来源与准确目录、启动连接、首张生成及应用撤销。不是只下载后端和模型就能保证运行。
+- **减少部署猜测**：模型扫描只按精确预设名或唯一同名相对路径补全；环境工具复用已有安装，检查节点、文件大小和 SHA256，不自动安装或覆盖后端。
+- **溶图保留更多原图细节**：光影方式提取局部 RGB 明暗与光色，保留 AI 重绘选择；本地光效与细节调节复用已保存结果，不重新提交生成。
+- **精简公开文档**：更新中英文首页、使用指南和真实面板预览，保留云端模型配置入口及各功能的验证边界。
 
-验证：911 项离线测试通过；Photoshop 27 临时 RGB8/16 文档通过灰阶保护、组不透明度、下方图像编辑跟随、一次撤销和取消回滚检查。样图为真实 AI 参考与本地合成预览，不代表真人视觉质量验收。
+验证：发行准备的 987 项离线测试、类型检查、生产构建与归档检查通过；自动发行还会针对该标签再次执行完整门禁。新面板截图来自 Photoshop 27 独立 Preview 的草稿／只读模型扫描，没有提交新生成。0.5.2 的 CCX／Portable 安装、完整面板交互、自动近似色彩副本和新版溶图光影仍缺少独立原生验收；历史宿主记录不转化为本版本的新验收结论。
 
 ### 已知限制
 
@@ -33,15 +34,16 @@ manifest 的最低宿主为 Photoshop **{{HOST_MINIMUM}}**。现有人工记录�
 
 Release channel: **{{CHANNEL}}**. Tagged source: [{{SOURCE_SHA}}]({{SOURCE_URL}}). [Commits at this source]({{COMMITS_URL}}); GitHub-generated changes, contributors and the actual comparison link follow below.
 
-### Main changes in 0.5.1
+### Main changes in 0.5.2
 
-- **Richer lighting color**: replaces the similarity gate with multiscale RGB lighting estimates over the original image.
-- **Local candidate controls**: Light fidelity adjusts strength; Detail protection smooths fine changes. Saved candidates update without another generation request.
-- **Lighting-only groups**: Pass Through groups act on the image below without a frozen source copy, retaining group masks, protection and one-step undo.
-- **Large-photo workbench fix**: model geometry uses bounded capture dimensions to avoid the content-outside-canvas error.
-- **Clearer illustrated guides**: refreshed real warm/cool lighting comparisons and consistent image sizing and alignment in both languages.
+- **Guided creation flow**: task, source/range and output sections show a state-aware next action, with references and advanced controls collapsed until needed.
+- **No original-file picker during source capture**: Photoshop's current document ICC takes priority, including imported-layer composites. Unresolved untagged RGB8/16 continues in a separate, explicitly approximate Assumed sRGB copy preserving original layers and selections. Unknown-profile Grayscale and unsupported modes still reject.
+- **ComfyUI from zero**: bilingual instructions cover official download/extraction, the designated leejet GGUF node, dependencies installed with Portable's Python, pinned model sources and exact directories, startup, connection and first generation/apply/undo. Downloading a backend and three models alone does not guarantee readiness.
+- **Less deployment guesswork**: model suggestions require exact preset names or unique relative matches. Environment tools reuse an existing installation and check nodes, file sizes and SHA256 without automatically installing or replacing the backend.
+- **Detail-preserving Blend lighting**: local RGB fields transfer lighting over the original, with explicit AI redraw still available. Saved lighting/detail adjustments do not submit another generation.
+- **Simpler public guides**: refreshed bilingual homepages, usage instructions and actual panel previews, retaining cloud setup and honest validation boundaries.
 
-Validation: 911 offline tests passed. Photoshop 27 temporary RGB8/16 documents passed grayscale protection, group opacity, underlying-image edits, single undo and cancellation rollback checks. The example uses a real AI reference and local composite preview; it is not photographic visual acceptance.
+Validation: release preparation passed 987 offline tests, type checking, production builds and archive checks; release automation repeats the full gates on the tag. New panel screenshots use a separate Photoshop 27 Preview identity for drafts and read-only scanning, without new generation. Separate 0.5.2 CCX/Portable installation, full panel interaction, approximate color copies and new Blend lighting native acceptance remain pending. Historical host evidence does not establish new acceptance for this version.
 
 ### Known limits
 

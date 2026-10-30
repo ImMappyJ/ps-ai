@@ -2,7 +2,7 @@
   "manifestVersion": 5,
   "id": "local.ps-ai",
   "name": "PS-AI",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "main": "index.html",
   "host": [
     {

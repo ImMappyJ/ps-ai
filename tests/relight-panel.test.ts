@@ -80,24 +80,24 @@ test('reopening reads the current scope and retains edited lighting without subm
   }finally{await h.close();}
 });
 
-test('private access controls remember an already approved original, label its working copy, and clear stored grants',async()=>{
+test('private access controls never invent a grant when an untagged source uses an approximate copy',async()=>{
   const h=await panelHarness({untaggedSource:{bytes:encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)})}});try{
     await open(h);assert.match(h.el('relight-source').textContent,/sRGB 工作副本.*11/);assert.equal(!!h.el('remember-source-access')?.checked,false);
     h.click('relight-close');await new Promise(r=>setTimeout(r,20));assert.ok(h.el('remember-source-access'));assert.equal(h.el('advanced-body').style.display,'none');
     h.el('remember-source-access').checked=true;h.change('remember-source-access');await new Promise(r=>setTimeout(r,30));
-    const saved=JSON.parse(String(h.files['source-file-access.json']));assert.equal(saved.remember,true);assert.equal(saved.entries[0].path,'c:/mock/source.webp');assert.equal(saved.entries.length,1);
-    assert.equal(h.sourceAccessEvents.filter(v=>v==='picker').length,1);assert.equal(h.sourceAccessEvents.filter(v=>v==='token').length,1);
+    const saved=JSON.parse(String(h.files['source-file-access.json']));assert.equal(saved.remember,true);assert.deepEqual(saved.entries,[]);
+    assert.equal(h.sourceAccessEvents.filter(v=>v==='picker').length,0);assert.equal(h.sourceAccessEvents.filter(v=>v==='token').length,0);
     assert.doesNotMatch(String(h.files['settings.json']??''),/source-token|remember|source.webp/);
     h.click('forget-source-access');await new Promise(r=>setTimeout(r,30));assert.deepEqual(JSON.parse(String(h.files['source-file-access.json'])).entries,[]);assert.match(h.el('source-access-status').textContent,/已清除/);
     h.el('remember-source-access').checked=false;h.change('remember-source-access');await new Promise(r=>setTimeout(r,30));assert.equal(JSON.parse(String(h.files['source-file-access.json'])).remember,false);
   }finally{await h.close();}
 });
 
-test('unavailable token persistence keeps actionable status and translated scope/access controls without losing the scene',async()=>{
+test('unavailable token APIs do not interrupt approximate capture or translated scope/access controls',async()=>{
   const h=await panelHarness({settings:{...defaultSettings(),language:'en-US'},untaggedSource:{bytes:encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)}),tokenUnavailable:true}});try{
     await open(h);h.el('relight-intensity').value='2.5';h.change('relight-intensity');h.click('relight-close');await new Promise(r=>setTimeout(r,20));
     h.el('remember-source-access').checked=true;h.change('remember-source-access');await new Promise(r=>setTimeout(r,30));
-    assert.match(h.el('source-access-status').textContent,/could not be saved.*session.*continue/i);assert.doesNotMatch(h.el('source-access-status').textContent,/[一-龥]/);
+    assert.deepEqual(JSON.parse(String(h.files['source-file-access.json'])).entries,[]);assert.equal(h.sourceAccessEvents.length,0);assert.doesNotMatch(h.el('source-access-status').textContent,/[一-龥]/);
     assert.match(h.el('remember-source-access').textContent,/Remember/);assert.equal(h.el('relight-scope').displayedCaption,'Current selection');
     h.el('relight-scope').value='document';h.change('relight-scope');h.click('open-relight');await new Promise(r=>setTimeout(r,35));assert.match(h.el('relight-source').textContent,/Document 22.*Entire image/);assert.equal(h.el('relight-intensity').value,'2.5');
     assert.doesNotMatch(h.el('relight-status').textContent,/[一-龥]/);assert.equal(h.posts.length,0);

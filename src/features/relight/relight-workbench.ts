@@ -391,6 +391,8 @@ export class RelightWorkbench {
     if(this.parameterStatus&&!this.invalid.size)this.message(t('编辑布光不会发起 AI 请求；主动点击生成'));
     const defaults=createRelightScene(scene.source,'color-default');
     const captured=this.session.sourceCapture;
+    this.el('color-warning').style.display=captured.snapshot.colorReason==='assumed-srgb'?'block':'none';
+    this.el('color-warning').textContent=captured.snapshot.colorReason==='assumed-srgb'?t('无法确认原色彩空间，已在独立 sRGB 副本中继续；颜色可能有偏差，原文档未修改。'):'';
     this.el('source').textContent=t('可见合成 · 文档 {0} · {1}×{2} · {3} · {4} 位',scene.source.documentId,scene.source.bounds.right-scene.source.bounds.left,scene.source.bounds.bottom-scene.source.bounds.top,scene.source.profile,scene.source.documentDepth)+(captured.documentName?` · ${captured.documentName}`:'')+t(this.session.scope==='document'?' · 整张图像（减去保护区）':' · 当前选区（减去保护区）')+(captured.workingCopyOf===undefined?'':t(' · sRGB 工作副本，原文档 {0}',captured.workingCopyOf))+(this.sourceInvalid?t(' · 来源已过期'):'');
     this.el('scope-info').textContent=t(this.session.scope==='document'?'作用范围：捕获时的整张图像减去保护区。位置与 Z 为图像相对意图，并非已恢复的三维结构。':'作用范围：捕获时的选区减去保护区。位置与 Z 为图像相对意图，并非已恢复的三维结构。');
     const lightListKey=JSON.stringify([scene.lights.map(l=>[l.id,l.name,l.color,l.enabled]),light?.id]);

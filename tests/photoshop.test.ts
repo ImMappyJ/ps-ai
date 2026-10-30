@@ -86,6 +86,7 @@ function colorHistoryHost() {
     colorProfileType:{get:()=>type,set:(value:string)=>{type=value;},configurable:true}
   });
   copy.createLayer=async()=>{const layer={id:56,isClippingMask:false,move:async()=>{}};copy.layers.unshift(layer);return layer;};
+  h.ps.imaging.putSelection=async(options:any)=>{h.calls.push(['putSelection',options]);copy.selection={bounds:{...h.doc.selection.bounds}};};
   const state=()=>({id:copy.activeHistoryState.id,profile,type,layers:[...copy.layers]});
   const history=[state()],suspensions=new Map<number,any>();let serial=0;
   h.doc.duplicate=async(_name:string,merge:boolean)=>{assert.equal(merge,false);h.ps.app.documents.push(copy);h.ps.app.activeDocument=copy;return copy;};
@@ -103,6 +104,24 @@ function colorHistoryHost() {
   return {...h,copy,adapter,undo,reads:()=>reads};
 }
 
+test('unprofiled imported composites capture an approximate isolated copy without reading a layer file',async()=>{
+  for(const depth of [8,16] as const){
+    const h=colorHistoryHost();h.doc.path=undefined;h.doc.bitsPerChannel=depth;h.copy.bitsPerChannel=depth;
+    const adapter=new PhotoshopAdapter(h.ps,'session-a');
+    const originalHistory=h.doc.activeHistoryState.id,originalSelection=JSON.stringify(h.doc.selection.bounds);
+    const protection={documentId:11,width:100,height:80,bounds:{left:40,top:30,right:42,bottom:32},mask:new Uint8Array([0,64,0,0]),sessionId:'session-a'};
+    const captured=await adapter.capture(0,protection,11,8,{preserveNativeDepth:true});
+    assert.equal(captured.snapshot.colorReason,'assumed-srgb');assert.equal(captured.snapshot.documentId,22);assert.equal(captured.workingCopyOf,11);
+    assert.equal(captured.snapshot.nativeDepth,depth);assert.equal(h.doc.colorProfileName,'None');assert.equal(h.doc.activeHistoryState.id,originalHistory);
+    assert.equal(JSON.stringify(h.doc.selection.bounds),originalSelection);assert.equal(captured.protectionMask.some(value=>value===64),true);
+    const again=await adapter.capture(0,undefined,22);
+    assert.equal(again.snapshot.documentId,22);assert.equal(again.snapshot.colorReason,'assumed-srgb');
+    h.copy.colorProfileName='Adobe RGB (1998)';
+    const converted=await adapter.capture(0,undefined,22);assert.equal(converted.snapshot.profile,'Adobe RGB (1998)');assert.equal(converted.snapshot.colorReason,undefined);
+    await assert.rejects(adapter.apply(captured.snapshot,captured.image,'old candidate'),/改变|配置文件|色彩/);
+  }
+});
+
 test('working-copy color is a committed baseline: apply then native undo can capture the pathless copy again',async()=>{
   const h=colorHistoryHost(),captured=await h.adapter.capture(0,undefined,11);
   await h.adapter.apply(captured.snapshot,captured.image,'AI');h.undo();
@@ -119,12 +138,12 @@ test('verified color-copy capture keeps the original frozen mask when native dup
     assert.equal(captured.snapshot.documentId,22);assert.equal(captured.workingCopyOf,11);assert.equal(captured.snapshot.profile,'sRGB IEC61966-2.1');
     const width=captured.snapshot.bounds.right-captured.snapshot.bounds.left,at=(30-captured.snapshot.bounds.top)*width+40-captured.snapshot.bounds.left;
     assert.deepEqual([...captured.selectionMask.slice(at,at+2)],[255,128]);assert.equal(captured.selectionMask[at+width],0);assert.equal(captured.selectionMask[at+width+1],255);
-    assert.equal(JSON.stringify(h.doc.selection.bounds),originalSelection);assert.equal(h.copy.selection.bounds,null);assert.equal(h.doc.activeHistoryState.id,91);assert.equal(h.reads(),1);
+    assert.equal(JSON.stringify(h.doc.selection.bounds),originalSelection);assert.deepEqual(h.copy.selection.bounds,h.doc.selection.bounds);assert.equal(h.calls.filter(call=>call[0]==='putSelection').length,1);assert.equal(h.doc.activeHistoryState.id,91);assert.equal(h.reads(),1);
   }
 });
 
 test('copy capture still rejects original source or either document selection changes during pixel reads',async()=>{
-  const changes=[(h:any)=>h.doc.activeHistoryState.id++,(h:any)=>h.doc.selection.bounds=null,(h:any)=>h.copy.activeHistoryState.id++,(h:any)=>h.copy.selection.bounds={left:40,top:30,right:42,bottom:32}];
+  const changes=[(h:any)=>h.doc.activeHistoryState.id++,(h:any)=>h.doc.selection.bounds=null,(h:any)=>h.copy.activeHistoryState.id++,(h:any)=>h.copy.selection.bounds={left:40,top:30,right:41,bottom:32}];
   for(const change of changes){
     const h=colorHistoryHost();h.copy.selection={bounds:null};const getPixels=h.ps.imaging.getPixels;
     h.ps.imaging.getPixels=async(options:any)=>{const result=await getPixels(options),getData=result.imageData.getData;result.imageData.getData=async()=>{const values=await getData();change(h);return values;};return result;};
@@ -133,15 +152,16 @@ test('copy capture still rejects original source or either document selection ch
   }
 });
 
-test('a lost or inconsistent profile is never inferred from a pathless copy or a previous adapter session',async()=>{
+test('a lost or inconsistent profile never authorizes an old candidate or unproven recovery',async()=>{
   const h=colorHistoryHost(),captured=await h.adapter.capture(0,undefined,11);
   h.copy.colorProfileType='none';
   await assert.rejects(h.adapter.apply(captured.snapshot,captured.image,'stale type'),/状态已改变|色彩|配置文件/);
   h.copy.colorProfileName='None';
   await assert.rejects(h.adapter.capture(0,undefined,22),/原文件|配置文件/);
-  const fresh=new PhotoshopAdapter(h.ps,'session-b');await assert.rejects(fresh.capture(0,undefined,22),/色彩|配置文件/);
+  const fresh=new PhotoshopAdapter(h.ps,'session-b');assert.equal(fresh.colorRecoveryAvailability(22),'unavailable');
   const arbitrary={...h.copy,id:33,colorProfileName:'None',colorProfileType:'none'};h.ps.app.documents.push(arbitrary);h.ps.app.activeDocument=arbitrary;
-  await assert.rejects(h.adapter.capture(0,undefined,33),/原文件|配置文件/);
+  assert.equal(h.adapter.colorRecoveryAvailability(33),'unavailable');
+  await assert.rejects(h.adapter.apply(captured.snapshot,captured.image,'different source'),/改变|色彩|配置文件/);
 });
 
 test('working-copy assignment failure rolls back its own history and closes it without reading pixels',async()=>{
@@ -218,17 +238,17 @@ test('failed copy capture closes the copy and restores the original; selecting a
   await assert.rejects(adapter.capture(),/pixel read failed/);assert.equal(h.calls.includes('close-copy'),true);assert.equal(h.ps.app.activeDocument.id,11);assert.equal(h.doc.colorProfileName,'');
 });
 
-test('untagged saved declarations cannot override mode, depth or dimension mismatch',async()=>{
+test('unusable saved declarations create an approximate copy without claiming verified color',async()=>{
   for(const change of [{depth:16},{width:101},{kind:'icc' as const}]){
-    const h=host();h.doc.colorProfileName='';
+    const h=colorHistoryHost();
     const adapter=new PhotoshopAdapter(h.ps,'session-a',async()=>{},async()=>({kind:'srgb',format:'webp',width:100,height:80,depth:8,...change}));
-    await assert.rejects(adapter.capture(),/色彩空间/);assert.equal(h.calls.some(c=>c[0]==='getPixels'),false);
+    const captured=await adapter.capture();assert.equal(captured.snapshot.colorReason,'assumed-srgb');assert.equal(captured.snapshot.documentId,22);assert.equal(h.doc.colorProfileName,'None');
   }
 });
 
-test('未标记来源和参考图在像素读取前停止，不猜测工作色域且关闭自己的参考文档',async()=>{
+test('unknown grayscale sources and unknown reference profiles still stop before pixel reading',async()=>{
   for(const profile of ['', 'Untagged RGB', '未标记的 RGB']){
-    const h=host();h.doc.colorProfileName=profile;
+    const h=host();h.doc.colorProfileName=profile;h.doc.mode='gray';
     await assert.rejects(h.adapter.capture(),/配置文件|profile/);
     assert.equal(h.calls.some(c=>c[0]==='getPixels'),false);
   }

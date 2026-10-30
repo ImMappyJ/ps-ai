@@ -2,7 +2,7 @@
 <h1 align="center">接入 OpenAI Images</h1>
 <p align="center"><strong>简体中文</strong> · <a href="OPENAI.en.md">English</a></p>
 
-**PS-AI 0.5.0** 已包含 GPT Image 适配。真实 API 出图与 Photoshop 应用仍待使用真实 Key 实测，下方模型列表表示代码已实现的适配范围。
+**当前 PS-AI 源码**已包含 GPT Image 适配。真实 API 出图与 Photoshop 应用仍待使用真实 Key 实测，下方模型列表表示代码已实现的适配范围。
 
 ## 从面板连接
 

@@ -77,19 +77,19 @@ test('old background history cannot restore conflicting settings or hide a trans
   }finally{await h.close();}
 });
 
-test('saved PNG sRGB declaration creates a working copy and permits a second capture',async()=>{
+test('ungranted source creates an explicitly approximate copy without picking and permits a second capture',async()=>{
   const {encodePng}=await import('../src/imaging/image');
   const h=await panelHarness({untaggedSource:{bytes:encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)})}});try{
     await h.wait();h.click('capture');await h.wait();
-    assert.match(h.el('source-info').textContent,/22.*PNG sRGB.*工作副本/);
+    assert.match(h.el('source-info').textContent,/22.*sRGB.*工作副本/);assert.doesNotMatch(h.el('source-info').textContent,/PNG sRGB/);assert.equal(h.sourceAccessEvents.filter(event=>event==='picker').length,0);
     h.el('language').value='en-US';h.change('language');await h.wait();h.click('capture');await h.wait();assert.match(h.el('source-info').textContent,/sRGB/);assert.equal(h.posts.length,0);
   }finally{await h.close();}
 });
 
-test('a different source file fails color resolution before any upload or inference',async()=>{
+test('an imported file path never prompts or blocks automatic capture of an untagged composite',async()=>{
   const {encodePng}=await import('../src/imaging/image');
   const h=await panelHarness({untaggedSource:{bytes:encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)}),wrongPath:true}});try{
-    await h.wait();h.click('generate');await h.wait();assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);assert.match(h.el('diagnostic-box').textContent,/色彩空间|原文件/);
+    await h.wait();h.click('capture');await h.wait();assert.equal(h.ps.app.activeDocument.id,22);assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);assert.equal(h.sourceAccessEvents.filter(event=>event==='picker').length,0);assert.match(h.el('source-info').textContent,/sRGB/);assert.equal(h.ps.app.documents.find((doc:any)=>doc.id===11).colorProfileName,'');
   }finally{await h.close();}
 });
 

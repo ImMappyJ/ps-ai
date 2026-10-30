@@ -77,9 +77,9 @@ test('ordinary generation offers explicit recovery for a proven undone copy with
   }finally{await h.close();}
 });
 
-test('unproven pathless sources and a new panel session never offer color recovery',async()=>{
+test('unproven pathless sources continue in a separate approximate copy without file access',async()=>{
   const {h,native}=await harness();try{
-    const doc=native.docs[0];doc.path=undefined;h.click('capture');await h.wait();assert.equal(details(h).code,'source-profile');assert.equal(h.el('diagnostic-primary').style.display,'none');assert.equal(native.duplicates.length,0);assert.equal(h.sourceAccessEvents.length,0);
+    const doc=native.docs[0];doc.path=undefined;h.click('capture');await h.wait();assert.notEqual(h.ps.app.activeDocument.id,doc.id);assert.equal(doc.colorProfileName,'');assert.equal(h.el('diagnostic-box').style.display,'none');assert.equal(native.duplicates.length,1);assert.equal(h.sourceAccessEvents.length,0);assert.match(h.el('source-info').textContent,/sRGB/);
   }finally{await h.close();}
 });
 
@@ -112,7 +112,7 @@ test('workbench color recovery closes its dialog, binds the known source and pre
     native.undo(old);h.click('relight-reread');await pause();h.ps.app.activeDocument=native.docs[0];
     assert.notEqual(h.el('relight-recover-color')?.style.display,'none');h.click('relight-recover-color');await pause();
     assert.equal(h.el('relight-dialog').hasAttribute('open'),true);const after=await draft(h);
-    assert.notEqual(after.source.documentId,old.id);assert.notEqual(after.source.snapshotId,before.source.snapshotId);assert.equal(after.lights[0].intensity,2.6);assert.match(h.el('relight-source').textContent,/整张图像/);assert.match(h.el('relight-source').textContent,new RegExp(`工作副本，原文档 ${old.id}`));assert.equal(h.el('relight-generate').disabled,false);assert.equal(old.colorProfileType,'none');assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);assert.equal(h.sourceAccessEvents.filter(v=>v==='picker').length,1);
+    assert.notEqual(after.source.documentId,old.id);assert.notEqual(after.source.snapshotId,before.source.snapshotId);assert.equal(after.lights[0].intensity,2.6);assert.match(h.el('relight-source').textContent,/整张图像/);assert.match(h.el('relight-source').textContent,new RegExp(`工作副本，原文档 ${old.id}`));assert.equal(h.el('relight-generate').disabled,false);assert.equal(old.colorProfileType,'none');assert.equal(h.posts.length,0);assert.equal(h.uploads.length,0);assert.equal(h.sourceAccessEvents.filter(v=>v==='picker').length,0);
   }finally{await h.close();}
 });
 
