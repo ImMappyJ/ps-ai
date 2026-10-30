@@ -10,7 +10,7 @@ type RecoveryAdapter=PhotoshopAdapter&{
 
 // A native-history boundary double: setters change live state, while committed
 // transactions add undoable states and duplication starts a separate history.
-function recoveryHost(depth:8|16=8) {
+function recoveryHost(depth:8|16=8,unverified=false) {
   let nextDocument=10,nextHistory=100,nextLayer=1000,nextSuspension=0,inside=false,reads=0;
   const documents:any[]=[],timelines=new Map<number,{states:any[];cursor:number}>(),suspensions=new Map<number,{doc:any;state:any}>(),registered=new Set<number>();
   const calls:any[]=[];
@@ -43,7 +43,7 @@ function recoveryHost(depth:8|16=8) {
       getPixels:async(o:any)=>{if(failRead)throw Error('pixels failed');const doc=documents.find(d=>d.id===o.documentID),max=doc.bitsPerChannel===16?65535:255;const bytes=doc.bitsPerChannel===16?new Uint16Array([12345,23456,34567,max,11111,22222,33333,max]):new Uint8Array([20,30,40,max,50,60,70,max]);return {imageData:data(bytes,4),sourceBounds:{left:0,top:0,right:2,bottom:1}};},
       createImageDataFromBuffer:async(bytes:any,o:any)=>data(bytes,o.components),putPixels:async()=>{},putLayerMask:async()=>{}
     }};
-  const reader=async(doc:any)=>{reads++;if(doc.path!==source.path)throw Error('no bound original');return {kind:'srgb' as const,format:'png' as const,width:2,height:1,depth,reason:'png-srgb' as const};};
+  const reader=async(doc:any)=>{reads++;if(unverified)return;if(doc.path!==source.path)throw Error('no bound original');return {kind:'srgb' as const,format:'png' as const,width:2,height:1,depth,reason:'png-srgb' as const};};
   const adapter=new PhotoshopAdapter(ps,'session-a',async()=>{},reader) as RecoveryAdapter;
   const undo=(doc:any)=>{const t=timelines.get(doc.id)!;assert.ok(t.cursor>0);restore(doc,t.states[--t.cursor]);};
   const redo=(doc:any)=>{const t=timelines.get(doc.id)!;assert.ok(t.cursor<t.states.length-1);restore(doc,t.states[++t.cursor]);};
@@ -52,6 +52,85 @@ function recoveryHost(depth:8|16=8) {
   return {ps,source,adapter,capture,documents,calls,registered,state,timelines,undo,redo,commit,makeDoc,fourRounds,reads:()=>reads,
     cancel:()=>{cancelled=true;},beforeModal:(fn:()=>void)=>{beforeModal=fn;},onRegister:(fn:(doc:any)=>void)=>{onRegister=fn;},onUnregister:(fn:()=>void)=>{onUnregister=fn;},failAssignment:()=>{failAssignment=true;},failRead:()=>{failRead=true;},failUnregister:()=>{failUnregister=true;}};
 }
+
+test('approximate capture retains layers, exact feathers/protection, native samples and its reason through undo/recovery',async()=>{
+  for(const depth of [8,16] as const){
+    const h=recoveryHost(depth,true);h.source.path=undefined;const original=h.state(h.source);
+    const protection={documentId:h.source.id,width:2,height:1,bounds:{left:0,top:0,right:2,bottom:1},mask:new Uint8Array([0,64]),sessionId:'session-a'};
+    const captured=await h.adapter.capture(0,protection,h.source.id,depth,{preserveNativeDepth:true}),copy=h.ps.app.activeDocument;
+    assert.equal(captured.snapshot.colorReason,'assumed-srgb');assert.deepEqual([...captured.selectionMask],[255,128]);assert.deepEqual([...captured.snapshot.mask],[255,96]);
+    assert.equal(copy.layers[0].layers.length,1);assert.equal(copy.layers[0].layers[0].visible,false);assert.deepEqual(h.state(h.source),original);
+    await h.adapter.apply(captured.snapshot,captured.image,'AI');h.undo(copy);
+    const again=await h.capture(copy.id);assert.equal(again.snapshot.colorReason,'assumed-srgb');assert.deepEqual(again.image.rgba,captured.image.rgba);
+    h.undo(copy);const undone=h.state(copy),redo=h.timelines.get(copy.id)!.states.map(state=>state.historyId);
+    const recovered=await h.adapter.createRecoveredColorCopy(copy.id);assert.equal(recovered.colorReason,'assumed-srgb');
+    const fresh=await h.capture(recovered.documentId);assert.equal(fresh.snapshot.colorReason,'assumed-srgb');assert.notEqual(fresh.snapshot.documentId,captured.snapshot.documentId);
+    assert.deepEqual(h.state(copy),undone);assert.deepEqual(h.timelines.get(copy.id)!.states.map(state=>state.historyId),redo);assert.deepEqual(h.state(h.source),original);
+    assert.equal(h.adapter.applicationMode(captured.snapshot),'unavailable');assert.equal(h.registered.size,0);
+  }
+});
+
+test('dropped copy selections restore raw native feathers before snapshot and fresh capture, without baking protection',async()=>{
+  for(const depth of [8,16] as const){
+    const h=recoveryHost(depth,true),original=h.state(h.source),selection=JSON.stringify(h.source.selection),writes:any[]=[],buffers:any[]=[];
+    h.onRegister(copy=>{copy.selection={bounds:null};});
+    h.ps.imaging.createImageDataFromBuffer=async(values:any,options:any)=>{const data={values:values.slice(),...options,disposed:false,dispose(){this.disposed=true;}};buffers.push(data);return data;};
+    h.ps.imaging.putSelection=async(options:any)=>{writes.push(options);h.ps.app.activeDocument.selection={bounds:{left:0,top:0,right:2,bottom:1}};};
+    const protection={documentId:h.source.id,width:2,height:1,bounds:{left:0,top:0,right:2,bottom:1},mask:new Uint8Array([0,64]),sessionId:'session-a'};
+    const captured=await h.adapter.capture(0,protection,h.source.id,depth,{preserveNativeDepth:true}),copy=h.ps.app.activeDocument;
+    assert.equal(writes.length,1);assert.equal(writes[0].documentID,copy.id);assert.deepEqual(writes[0].targetBounds,{left:0,top:0});assert.equal(writes[0].replace,true);
+    assert.deepEqual([...buffers[0].values],depth===16?[65535,32896]:[255,128]);assert.equal(buffers[0].disposed,true);assert.equal(buffers[0].fullRange,depth===16?true:undefined);
+    assert.deepEqual([...captured.selectionMask],[255,128]);assert.deepEqual([...captured.snapshot.mask],[255,96]);assert.equal(captured.snapshot.historyId,copy.activeHistoryState.id);
+    await h.adapter.apply(captured.snapshot,captured.image,'AI');h.undo(copy);assert.equal(copy.activeHistoryState.id,captured.snapshot.historyId);
+    const again=await h.capture(copy.id);assert.equal(again.snapshot.documentId,copy.id);assert.equal(again.snapshot.colorReason,'assumed-srgb');assert.deepEqual([...again.snapshot.mask],[255,128]);assert.equal(writes.length,1);
+    assert.deepEqual(h.state(h.source),original);assert.equal(JSON.stringify(h.source.selection),selection);
+  }
+});
+
+test('full document capture never restores or modifies a dropped duplicate selection',async()=>{
+  const h=recoveryHost(8,true),selection=JSON.stringify(h.source.selection);let writes=0;
+  h.onRegister(copy=>{copy.selection={bounds:null};});h.ps.imaging.putSelection=async()=>{writes++;};
+  const captured=await h.adapter.capture(0,undefined,h.source.id,8,{selection:'document'});
+  assert.deepEqual([...captured.snapshot.mask],[255,255]);assert.equal(h.ps.app.activeDocument.selection.bounds,null);assert.equal(JSON.stringify(h.source.selection),selection);assert.equal(writes,0);
+});
+
+test('failed or cancelled copy-selection writes roll back before pixels and close the new copy',async()=>{
+  for(const failure of ['write','cancel','source-change','copy-profile']){
+    const h=recoveryHost(8,true),original=h.state(h.source),selection=JSON.stringify(h.source.selection);let pixels=0;
+    h.onRegister(copy=>{copy.selection={bounds:null};});h.ps.imaging.createImageDataFromBuffer=async(values:any,options:any)=>({values,...options,dispose(){}});
+    h.ps.imaging.putSelection=async()=>{h.ps.app.activeDocument.selection={bounds:{left:0,top:0,right:2,bottom:1}};if(failure==='write')throw Error('selection write failed');if(failure==='cancel')h.cancel();if(failure==='source-change')h.source.activeHistoryState.id++;if(failure==='copy-profile')h.ps.app.activeDocument.colorProfileName='Adobe RGB (1998)';};
+    h.ps.imaging.getPixels=async()=>{pixels++;throw Error('must not read pixels');};
+    await assert.rejects(h.capture(),/selection write failed|取消|来源.*改变/);assert.equal(pixels,0);assert.equal(h.documents.length,1);assert.equal(h.ps.app.activeDocument.id,h.source.id);assert.equal(h.registered.size,0);
+    assert.ok(h.calls.some(call=>call[0]==='resume'&&call[1]!==h.source.id&&call[2]===false));assert.equal(JSON.stringify(h.source.selection),selection);
+    if(failure!=='source-change')assert.deepEqual(h.state(h.source),original);
+  }
+});
+
+test('approximate capture cancellation, profile assignment failure and pixel failures close only the new copy',async()=>{
+  for(const failure of ['cancel','assignment','pixels']){
+    const h=recoveryHost(8,true),original=h.state(h.source);
+    if(failure==='cancel')h.onRegister(()=>h.cancel());if(failure==='assignment')h.failAssignment();if(failure==='pixels')h.failRead();
+    await assert.rejects(h.capture(),/取消|assignment failed|pixels failed/);
+    assert.equal(h.documents.length,1);assert.deepEqual(h.state(h.source),original);assert.equal(h.ps.app.activeDocument.id,h.source.id);assert.equal(h.registered.size,0);
+  }
+});
+
+test('unknown source reads still reject changed history before creating an approximate copy',async()=>{
+  const h=recoveryHost(8,true),adapter=new PhotoshopAdapter(h.ps,'session-a',async()=>{},async()=>{h.source.activeHistoryState.id++;return undefined;});
+  await assert.rejects(adapter.capture(0,undefined,h.source.id),/状态已改变/);assert.equal(h.documents.length,1);assert.equal(h.calls.some(call=>call[0]==='duplicate'),false);
+});
+
+test('approximate capture cancelled after unregister cannot retain its newly assigned copy',async()=>{
+  const h=recoveryHost(8,true),original=h.state(h.source);h.onUnregister(()=>h.cancel());
+  await assert.rejects(h.capture(),/取消/);assert.equal(h.documents.length,1);assert.deepEqual(h.state(h.source),original);assert.equal(h.ps.app.activeDocument.id,h.source.id);assert.equal(h.registered.size,0);
+});
+
+test('failed close after late capture cancellation restores native auto-close protection',async()=>{
+  const h=recoveryHost(8,true),original=h.state(h.source);
+  h.onUnregister(()=>{h.cancel();h.ps.app.activeDocument.closeWithoutSaving=async()=>{throw Error('cancelled close');};});
+  await assert.rejects(h.capture(),/cancelled close/);const copy=h.documents.find(doc=>doc.id!==h.source.id)!;
+  assert.ok(copy);assert.deepEqual([...h.registered],[copy.id]);assert.deepEqual(h.state(h.source),original);assert.equal(h.ps.app.activeDocument.id,h.source.id);h.undo(copy);assert.equal(h.adapter.colorRecoveryAvailability(copy.id),'unavailable');
+});
 
 test('four apply/delete rounds recover only the exact preassignment state into a new RGB8/16 copy, retaining old redo',async()=>{
   for(const depth of [8,16] as const){
@@ -98,13 +177,13 @@ test('proven NONE origins remain recoverable after tagged recapture and an Undo 
     h.undo(doc);doc._profile='sRGB IEC61966-2.1';
     const before=h.state(doc),timeline=h.timelines.get(doc.id)!,redo=timeline.states.map(s=>s.historyId);
     assert.equal(doc.colorProfileType,'none');assert.equal(h.adapter.colorRecoveryAvailability(doc.id),'available');
-    await assert.rejects(h.capture(),/no bound original/);assert.equal(h.documents.length,2);
+    await assert.rejects(h.capture(),/色彩空间|配置文件/);assert.equal(h.documents.length,2);
     const result=await h.adapter.createRecoveredColorCopy(doc.id),fresh=h.ps.app.activeDocument;
     assert.notEqual(result.documentId,doc.id);assert.equal(fresh.colorProfileType,'custom');
     assert.deepEqual(h.state(doc),before);assert.deepEqual(timeline.states.map(s=>s.historyId),redo);
     assert.equal(h.adapter.applicationMode(oldCandidate.snapshot),'unavailable');
     const captured=await h.capture();assert.equal(captured.snapshot.documentId,fresh.id);assert.equal(captured.snapshot.nativeDepth,depth);
-    assert.equal(h.reads(),2);assert.equal(h.documents.length,3);
+    assert.equal(h.reads(),1);assert.equal(h.documents.length,3);
   }
 });
 

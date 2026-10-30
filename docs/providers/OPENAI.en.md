@@ -2,7 +2,7 @@
 <h1 align="center">OpenAI Images setup</h1>
 <p align="center"><a href="OPENAI.md">简体中文</a> · <strong>English</strong></p>
 
-**PS-AI 0.5.0** includes the GPT Image adapter. Real API output and Photoshop application still need testing with a real key. The model list below describes the implemented adapter.
+**Current PS-AI source** includes the GPT Image adapter. Real API output and Photoshop application still need testing with a real key. The model list below describes the implemented adapter.
 
 ## Connect from the panel
 

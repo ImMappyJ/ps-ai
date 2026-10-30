@@ -77,6 +77,12 @@ if ($settings) {
                     if ($names -contains 'image_1' -and $names -contains 'image_3') { Add-Check 'multi-reference' 'pass' 'Required image_1/image_3 fields present.' } else { Add-Check 'multi-reference' 'fail' 'Node schema differs from preset.' }
                 }
             }
+            $probeId=[Guid]::NewGuid().ToString()
+            $queue=Invoke-RestMethod -Uri ($settings.baseUrl + '/queue') -TimeoutSec 15
+            $history=Invoke-RestMethod -Uri ($settings.baseUrl + '/history/' + $probeId) -TimeoutSec 15
+            if ($queue.queue_running -isnot [array] -or $queue.queue_pending -isnot [array] -or $null -eq $history -or ($history -isnot [PSCustomObject] -and $history -isnot [System.Collections.IDictionary])) { Add-Check 'task-status-api' 'fail' 'Queue/history response format differs from the task protocol.' }
+            else { Add-Check 'task-status-api' 'pass' 'Queue and a fresh UUID history were read; no jobs submitted, cancelled or interrupted.' }
+            Add-Check 'task-write-contract' 'warn' 'Read-only checks cannot verify caller-assigned UUIDs or atomic cancellation; validate the tested backend source and explicit test-task lifecycle separately.'
         } catch { Add-Check 'service' 'fail' $_.Exception.Message }
     }
 }

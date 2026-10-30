@@ -14,7 +14,7 @@ export interface EditAnalysisApplyOptions {preserveAlpha:boolean;assetContext?:'
 export interface Protection {documentId:number;width:number;height:number;bounds:Bounds;mask:Uint8Array;sessionId:string}
 /** Geometry only: restoring it grants no permission to apply an old candidate. */
 export interface SelectionRange {documentId:number;sessionId:string;width:number;height:number;mode:string;depth:unknown;bounds:Bounds;mask:Uint8Array}
-interface ColorCopyProvenance {sessionId:string;workingCopyOf:number;origin:string;colorReason:SourceColorReason}
+interface ColorCopyProvenance {sessionId:string;workingCopyOf:number;origin:string;colorReason:SourceColorReason;colorState:string}
 export class PhotoshopAdapter {
   private applications=new Map<string,{documentId:number;historyId:number;layerId:number;sourceIdentity:string}>();
   private maskKeys=new WeakMap<Uint8Array,number>();
@@ -23,14 +23,25 @@ export class PhotoshopAdapter {
   private activeDocument():any {return this.ps.app.documents.length?this.ps.app.activeDocument:undefined;}
   private profiled(doc:any):boolean {return hasSourceProfile(doc,this.ps.constants.ColorProfileType?.NONE);}
   private sourceState(doc:any,profileName=doc.colorProfileName):string {return JSON.stringify([doc.id,doc.width,doc.height,doc.mode,doc.bitsPerChannel,profileName,doc.colorProfileType,doc.activeHistoryState.id,doc.path,doc.saved,doc.quickMaskMode]);}
-  private async savedColor(doc:any,file?:any):Promise<SavedSourceColor|undefined> {
+  private async savedColor(doc:any,file?:any,allowAssumed=false):Promise<Pick<SavedSourceColor,'reason'>|undefined> {
     // Photoshop has already applied any opening policy/conversion to a tagged
     // document. A stale disk declaration must never reinterpret those pixels.
     if(this.profiled(doc))return;
+    if(allowAssumed&&this.colorRecoveryAvailability(doc.id)==='available')requireSourceProfile(doc,this.ps.constants.ColorProfileType?.NONE);
     const color=await this.readSourceColor(doc,file);
     const depth=doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8;
-    if(color?.kind!=='srgb'||color.width!==doc.width||color.height!==doc.height||color.depth!==depth||doc.mode!==this.ps.constants.DocumentMode.RGB)requireSourceProfile(doc,this.ps.constants.ColorProfileType?.NONE);
+    if(color?.kind!=='srgb'||color.width!==doc.width||color.height!==doc.height||color.depth!==depth||doc.mode!==this.ps.constants.DocumentMode.RGB){
+      if(allowAssumed&&doc.mode===this.ps.constants.DocumentMode.RGB&&[this.ps.constants.BitsPerChannelType.EIGHT,this.ps.constants.BitsPerChannelType.SIXTEEN].includes(doc.bitsPerChannel))return {reason:'assumed-srgb'};
+      requireSourceProfile(doc,this.ps.constants.ColorProfileType?.NONE);
+    }
     return color;
+  }
+  private capturedColorReason(doc:any):SourceColorReason|undefined {
+    this.pruneColorCopies();
+    const proof=this.colorCopies.get(doc.id);
+    if(!proof||!this.profiled(doc)||doc.colorProfileName!=='sRGB IEC61966-2.1'||doc.mode!==this.ps.constants.DocumentMode.RGB||![this.ps.constants.BitsPerChannelType.EIGHT,this.ps.constants.BitsPerChannelType.SIXTEEN].includes(doc.bitsPerChannel))return;
+    if(proof.colorState!==JSON.stringify([doc.width,doc.height,doc.mode,doc.bitsPerChannel,doc.colorProfileName,doc.colorProfileType])||!Number.isSafeInteger(doc.activeHistoryState?.id)||doc.activeHistoryState.id<=0)return;
+    return proof.colorReason;
   }
   private colorOrigin(doc:any):string|undefined {
     // Use scalar native identities, never DOM wrapper identity or historyStates
@@ -56,8 +67,8 @@ export class PhotoshopAdapter {
   }
   private rememberColorCopy(doc:any,workingCopyOf:number,origin:string|undefined,colorReason:SourceColorReason|undefined):void {
     this.pruneColorCopies();
-    if(!origin||!['webp-default','png-srgb'].includes(colorReason??''))return;
-    this.colorCopies.set(doc.id,{sessionId:this.sessionId,workingCopyOf,origin,colorReason:colorReason!});
+    if(!origin||!['webp-default','png-srgb','assumed-srgb'].includes(colorReason??''))return;
+    this.colorCopies.set(doc.id,{sessionId:this.sessionId,workingCopyOf,origin,colorReason:colorReason!,colorState:JSON.stringify([doc.width,doc.height,doc.mode,doc.bitsPerChannel,doc.colorProfileName,doc.colorProfileType])});
     while(this.colorCopies.size>32)this.colorCopies.delete(this.colorCopies.keys().next().value!);
   }
   /** Session proof only; this observation grants no candidate apply permission. */
@@ -296,7 +307,7 @@ export class PhotoshopAdapter {
     if(!analysis)try{planNativeCaptureMemory(initialBounds.right-initialBounds.left,initialBounds.bottom-initialBounds.top,nativeDepth,options.retainedBytes);}catch(error){if(!(error instanceof ImageBudgetError))throw error;memory=planEditAnalysisMemory(initialBounds.right-initialBounds.left,initialBounds.bottom-initialBounds.top,nativeDepth,options.analysisResolution,options.retainedBytes);editAnalysis=true;}
     const bounded=!!memory;
     const selectionState=whole?undefined:JSON.stringify(expected.selection.bounds);
-    const state=this.sourceState(expected),color=await this.savedColor(expected);
+    const state=this.sourceState(expected),color=await this.savedColor(expected,undefined,true);
     return this.ps.core.executeAsModal(async(context:any)=>{
       let doc=this.document();const original=doc;
       if(doc.id!==expectedDocumentId)throw new Error('活动文档已切换，请在来源文档重新生成');
@@ -322,7 +333,14 @@ export class PhotoshopAdapter {
       let copy:any,colorOrigin:string|undefined,keepCopy=false,copyUnregistered=false;
       try {
         guard();
-        if(color){copy=await this.colorCopy(doc,context,value=>{colorOrigin=value;});doc=copy;}
+        if(color){
+          copy=await this.colorCopy(doc,context,value=>{colorOrigin=value;});doc=copy;
+          if(!whole&&!doc.selection.bounds){
+            const copyState=JSON.stringify([doc.id,doc.width,doc.height,doc.mode,doc.bitsPerChannel,doc.colorProfileName,doc.colorProfileType]);
+            const copyGuard=()=>{guard();if(copyState!==JSON.stringify([doc.id,doc.width,doc.height,doc.mode,doc.bitsPerChannel,doc.colorProfileName,doc.colorProfileType]))throw new Error('来源副本尺寸或颜色状态已改变，请重新捕获');};
+            await this.writeSelection(doc,bounds,selectionMask,context,copyGuard);copyGuard();
+          }
+        }
         // Native duplication may leave the new document without a selection.
         // The mask is already frozen from the original; guard each document's
         // own selection baseline rather than comparing unrelated DOM states.
@@ -360,13 +378,20 @@ export class PhotoshopAdapter {
         const sourceLayerIds:number[]=[];
         const visible=(layers:any[])=>{for(const layer of Array.from(layers)){if(layer.visible===false||layer.opacity===0)continue;if(Number.isSafeInteger(layer.id)&&layer.id>0)sourceLayerIds.push(layer.id);if(layer.layers)visible(layer.layers);}};
         visible(doc.layers);
-        const snapshot:Snapshot={documentId:doc.id,width:doc.width,height:doc.height,profile:doc.colorProfileName,mode:doc.mode,depth:doc.bitsPerChannel,nativeDepth:doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,historyId:doc.activeHistoryState.id,sessionId:this.sessionId,bounds,mask,sourceHash:(hash>>>0).toString(16),sourceLayerIds,...(memory?{captureGeometry:{kind:blend?'blend-analysis' as const:editAnalysis?'edit-analysis' as const:'relight-analysis' as const,width:memory.width,height:memory.height}}:{}),...(editAnalysis||blend?{requiresClipping:nativeScan!.requiresClipping}:{}),...(blend?{blendOpaqueScope:nativeScan!.opaqueScope}:{}),...(clipBaseLayerId===undefined?{}:{clipBaseLayerId}),...(color?.reason?{colorReason:color.reason}:{}),...(background?{backgroundComposite:'subject-background-v1' as const}:{})};
+        const colorReason=color?.reason??this.capturedColorReason(doc);
+        const snapshot:Snapshot={documentId:doc.id,width:doc.width,height:doc.height,profile:doc.colorProfileName,mode:doc.mode,depth:doc.bitsPerChannel,nativeDepth:doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,historyId:doc.activeHistoryState.id,sessionId:this.sessionId,bounds,mask,sourceHash:(hash>>>0).toString(16),sourceLayerIds,...(memory?{captureGeometry:{kind:blend?'blend-analysis' as const:editAnalysis?'edit-analysis' as const:'relight-analysis' as const,width:memory.width,height:memory.height}}:{}),...(editAnalysis||blend?{requiresClipping:nativeScan!.requiresClipping}:{}),...(blend?{blendOpaqueScope:nativeScan!.opaqueScope}:{}),...(clipBaseLayerId===undefined?{}:{clipBaseLayerId}),...(colorReason?{colorReason}:{}),...(background?{backgroundComposite:'subject-background-v1' as const}:{})};
         const captured:Capture={snapshot,image,selectionMask,protectionMask,...(typeof doc.name==='string'?{documentName:doc.name}:{}),...(subjectMask?{subjectMask}:{}),...(copy?{workingCopyOf:original.id}:{})};
         beforeCommit?.(captured);pixelGuard();
         if(copy){await context.hostControl.unregisterAutoCloseDocument(copy.id);copyUnregistered=true;}
+        pixelGuard();
         if(copy){this.rememberColorCopy(copy,original.id,colorOrigin,color?.reason);keepCopy=true;}
         return captured;
-      }finally{if(copy&&!keepCopy){await copy.closeWithoutSaving();if(!copyUnregistered)await context.hostControl.unregisterAutoCloseDocument(copy.id);this.ps.app.activeDocument=original;}}
+      }finally{if(copy&&!keepCopy){
+        try{
+          try{await copy.closeWithoutSaving();}catch(error){if(copyUnregistered)await context.hostControl.registerAutoCloseDocument(copy.id);throw error;}
+          if(!copyUnregistered)await context.hostControl.unregisterAutoCloseDocument(copy.id);
+        }finally{if(Array.from(this.ps.app.documents as any[]).some(doc=>doc.id===original.id))this.ps.app.activeDocument=original;}
+      }}
     },{commandName:'ps-ai 捕获选区'});
   }
   async protection():Promise<Protection> {
@@ -391,22 +416,26 @@ export class PhotoshopAdapter {
     };
     source();
     await this.ps.core.executeAsModal(async(context:any)=>{
-      const doc=source(),sixteen=doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN;
-      const suspension=await context.hostControl.suspendHistory({documentID:doc.id,name:'ps-ai 恢复选区'});
-      let data:any,pending=true,first=true;
-      try{
-        for(const strip of imageStrips(saved.bounds)){
-          if(context.isCancelled)throw new DiagnosticError('cancelled','capture','选区恢复已取消');source();
-          const gray=nativeMaskStrip(saved.mask,saved.bounds,strip);
-          try{data=await this.ps.imaging.createImageDataFromBuffer(sixteen?Uint16Array.from(gray,v=>v*257):gray,{width:strip.right-strip.left,height:strip.bottom-strip.top,components:1,colorSpace:'Grayscale',colorProfile:'Gray Gamma 2.2',...(sixteen?{fullRange:true}:{})});
-            await this.ps.imaging.putSelection({documentID:doc.id,imageData:data,replace:first,targetBounds:{left:strip.left,top:strip.top}});first=false;
-          }finally{data?.dispose();data=undefined;}
-        }
-        if(context.isCancelled)throw new DiagnosticError('cancelled','capture','选区恢复已取消');source();
-        await context.hostControl.resumeHistory(suspension,true);pending=false;
-      }catch(error){if(pending)await context.hostControl.resumeHistory(suspension,false);throw error;}
-      finally{data?.dispose();}
+      await this.writeSelection(source(),saved.bounds,saved.mask,context,()=>{source();});
     },{commandName:'ps-ai 恢复选区'});
+  }
+  private async writeSelection(doc:any,bounds:Bounds,mask:Uint8Array,context:any,guard:()=>void):Promise<void> {
+    const sixteen=doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN;
+    const suspension=await context.hostControl.suspendHistory({documentID:doc.id,name:'ps-ai 恢复选区'});
+    let data:any,pending=true,first=true;
+    try{
+      for(const strip of imageStrips(bounds)){
+        if(context.isCancelled)throw new DiagnosticError('cancelled','capture','选区恢复已取消');guard();
+        const gray=nativeMaskStrip(mask,bounds,strip);
+        try{data=await this.ps.imaging.createImageDataFromBuffer(sixteen?Uint16Array.from(gray,v=>v*257):gray,{width:strip.right-strip.left,height:strip.bottom-strip.top,components:1,colorSpace:'Grayscale',colorProfile:'Gray Gamma 2.2',...(sixteen?{fullRange:true}:{})});
+          if(context.isCancelled)throw new DiagnosticError('cancelled','capture','选区恢复已取消');guard();
+          await this.ps.imaging.putSelection({documentID:doc.id,imageData:data,replace:first,targetBounds:{left:strip.left,top:strip.top}});first=false;
+        }finally{data?.dispose();data=undefined;}
+      }
+      if(context.isCancelled)throw new DiagnosticError('cancelled','capture','选区恢复已取消');guard();
+      await context.hostControl.resumeHistory(suspension,true);pending=false;
+    }catch(error){if(pending)await context.hostControl.resumeHistory(suspension,false);throw error;}
+    finally{data?.dispose();}
   }
   private key(s:Snapshot,refresh=false):string {
     let hash=this.maskKeys.get(s.mask);

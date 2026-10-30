@@ -43,7 +43,7 @@ test('an asynchronous preview keeps its original workspace/mode binding after th
 
 test('saved selections belong to the tagged working copy rather than its untagged original',async()=>{
   const h=await panelHarness({untaggedSource:{bytes:encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)})}});try{
-    await h.wait();h.click('capture');await h.wait();assert.equal(h.ps.app.activeDocument.id,22);missing(h);restoreButton(h);h.click('restore-selection');await h.wait();assert.equal(h.selectionWrites[0].documentID,22);assert.equal(h.pixelRequests.slice(-1)[0].documentID,22);assert.equal(h.ps.app.documents.find((d:any)=>d.id===11).colorProfileName,'');assert.equal(h.sourceAccessEvents.filter(e=>e==='picker').length,1);
+    await h.wait();h.click('capture');await h.wait();assert.equal(h.ps.app.activeDocument.id,22);missing(h);restoreButton(h);h.click('restore-selection');await h.wait();assert.equal(h.selectionWrites[0].documentID,22);assert.equal(h.pixelRequests.slice(-1)[0].documentID,22);assert.equal(h.ps.app.documents.find((d:any)=>d.id===11).colorProfileName,'');assert.equal(h.sourceAccessEvents.filter(e=>e==='picker').length,0);
   }finally{await h.close();}
 });
 

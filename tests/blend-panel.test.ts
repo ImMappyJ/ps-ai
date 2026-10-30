@@ -25,7 +25,8 @@ test('blend create defaults to lighting with source first, folded settings and u
     h.el('language').value='en-US';h.change('language');await h.wait();
     assert.equal(h.el('blend-output-kind').displayedCaption,'Preserve detail · lighting only');
     assert.equal(h.el('generate').textContent,'Generate environment lighting reference');
-    h.el('mode').value='costume';h.change('mode');assert.equal(h.el('generation-body').style.display,'block');assert.notEqual(h.el('margin-field').style.display,'none');
+    h.el('mode').value='costume';h.change('mode');assert.equal(h.el('generation-body').style.display,'none');assert.notEqual(h.el('margin-field').style.display,'none');
+    h.click('toggle-generation');assert.equal(h.el('generation-body').style.display,'block');
   }finally{await h.close();}
 });
 

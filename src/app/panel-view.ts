@@ -48,12 +48,14 @@ interface SourceCaptionDetails {documentId:number;width:number;height:number;pro
 /** Only presentation metadata is retained; no document, raster or persisted state. */
 export class SourceCaption {
   private current:string|SourceCaptionDetails='先圈选编辑范围。保护区可保留人物与重要细节。';
-  constructor(private node:HTMLElement){}
+  constructor(private node:HTMLElement,private warning?:HTMLElement){}
   show(value:string|SourceCaptionDetails):void {this.current=value;this.render();}
   render():void {
     const info=this.current;
+    const assumed=typeof info!=='string'&&info.colorReason==='assumed-srgb';
+    if(this.warning){this.warning.style.display=assumed?'block':'none';this.warning.textContent=assumed?t('无法确认原色彩空间，已在独立 sRGB 副本中继续；颜色可能有偏差，原文档未修改。'):'';}
     if(typeof info==='string'){this.node.textContent=t(info);return;}
-    const color=info.colorReason?t(info.colorReason==='webp-default'?' · WebP 默认 sRGB · 已创建工作副本':' · PNG sRGB 标记 · 已创建工作副本'):` · ${info.profile}`;
+    const color=info.colorReason?t(assumed?' · 假定 sRGB · 独立工作副本':info.colorReason==='webp-default'?' · WebP 默认 sRGB · 已创建工作副本':' · PNG sRGB 标记 · 已创建工作副本'):` · ${info.profile}`;
     this.node.textContent=t('文档 {0} · 区域 {1}×{2} · {3}{4}',info.documentId,info.width,info.height,t(info.protectedArea?'已扣除保护区':'未指定保护区'),color);
     if(info.sizes)this.node.textContent+='\n'+captureSizeSummary(info.sizes);
   }

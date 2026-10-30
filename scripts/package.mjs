@@ -5,7 +5,7 @@ export const INSTALL_GUIDE=`# PS-AI — 安装 / Installation
 
 ## 中文
 
-0.5.1 实验版，现有宿主证据来自 Windows Photoshop 27.0；不代表所有安装形式、控件和模式均已验收。先保存文档并退出 Photoshop。
+本包为实验版，版本以 manifest.json 为准。现有宿主证据来自 Windows Photoshop 27.0；不代表所有安装形式、控件和模式均已验收。先保存文档并退出 Photoshop。
 
 CCX：用 Adobe Creative Cloud 桌面应用安装包；安装位置由 Adobe 管理，不要手动复制到 Photoshop 的 Plug-ins。关联到 UPIA 后双击没有反应时，用环境工具中的 scripts/install-ccx.ps1 -PackagePath 指定完整包路径；不要用 Photoshop 的“打开”导入。更新时退出 Photoshop 后安装新版 CCX；卸载使用 Creative Cloud 的插件管理。
 
@@ -19,13 +19,13 @@ Portable：解压后把整个 PS-AI-FOR-ME 文件夹放入你实际安装的 Pho
 
 退出 Photoshop 或切回 ComfyUI 不会停止已运行的独立中转。需要关闭时，在“设置 → 模型与连接”的云端平台配置下使用“停止本地服务”，停止三个平台监听并等待工作收尾；这不保证取消已经提交的云端请求或停止计费。
 
-支持已解析色彩空间的 RGB／灰度 8/16 位来源；模型输入为 sRGB8，平台输出当前为 sRGB8。ComfyUI 的可选 16-bit SDR 输出需按同版本环境工具 docs/setup/COMFYUI.md 安装 comfyui/ps_ai_sdr16 节点并重启后端；它不等于模型原生 16 位或 HDR。4500 万像素是文档处理上限，不是模型原生生成分辨率承诺。完整模式、色彩、透明度及验收边界见同版本环境工具的 docs/usage/USER_GUIDE.md。
+支持 RGB／已解析色彩的灰度 8/16 位来源，优先使用当前文档 ICC，读取不再打开原文件选择器；未标记 RGB8/16 无法确认时在独立“假定 sRGB”近似副本中继续，保留原文档，未知灰度仍拒绝。模型输入为 sRGB8，平台输出当前为 sRGB8。ComfyUI 的可选 16-bit SDR 输出需按同版本环境工具 docs/setup/COMFYUI.md 安装 comfyui/ps_ai_sdr16 节点并重启后端；它不等于模型原生 16 位或 HDR。4500 万像素是文档处理上限，不是模型原生生成分辨率承诺。完整模式、色彩、透明度及验收边界见同版本环境工具的 docs/usage/USER_GUIDE.md。
 
 请在已保存的副本中使用并检查生成结果的结构、颜色、边缘和透明度。宿主崩溃需要结合日志及 GPU／网络设置分别排查，换安装形式不保证解决。代码采用 GPL-3.0-only，完整许可见 LICENSE；第三方代码声明见 THIRD_PARTY_NOTICES.txt，模型权重和云端服务有各自许可、费用及使用限制。源码和同版本说明从 https://github.com/ImMappyJ/ps-ai 的对应版本标签进入。
 
 ## English
 
-0.5.1 experimental. Existing host evidence comes from Windows Photoshop 27.0; it does not establish acceptance of every installation method, control or mode. Save your work and quit Photoshop first.
+This is an experimental package; manifest.json identifies its version. Existing host evidence comes from Windows Photoshop 27.0; it does not establish acceptance of every installation method, control or mode. Save your work and quit Photoshop first.
 
 CCX: install using Adobe Creative Cloud desktop. Adobe manages its installation location; do not copy it into Photoshop Plug-ins manually. If double-clicking a CCX associated with UPIA does nothing, run scripts/install-ccx.ps1 -PackagePath with the full package path from the environment tools. Photoshop File → Open does not install plugins. For updates, quit Photoshop and install the newer CCX; uninstall through Creative Cloud plugin management.
 
@@ -39,7 +39,7 @@ Use one installation method to avoid confusing the panels. Upgrades with the sam
 
 Quitting Photoshop or switching to ComfyUI leaves an already running relay process alive. To close it, use Stop local relay in a cloud platform's Settings → Backend and models to stop all three platform listeners and drain work. This does not guarantee cancellation of an upstream cloud request or stopped billing.
 
-Sources support RGB / Grayscale 8/16-bit with a resolved color space. Model inputs are sRGB8; current platform outputs are sRGB8. Optional ComfyUI 16-bit SDR output requires installing comfyui/ps_ai_sdr16 and restarting the backend as described in docs/setup/COMFYUI.en.md in the matching environment tools; it is not native 16-bit model generation or HDR. The 45-million-pixel limit concerns document processing, not promised native model generation size. See docs/usage/USER_GUIDE.en.md in the matching environment tools for mode, color, alpha and acceptance limits.
+Sources support RGB and resolved-profile Grayscale 8/16-bit, prioritizing the current document ICC without an original-file picker. Unresolved untagged RGB8/16 uses an independent approximate Assumed sRGB copy while preserving the original; unknown-profile Grayscale still rejects. Model inputs are sRGB8; current platform outputs are sRGB8. Optional ComfyUI 16-bit SDR output requires installing comfyui/ps_ai_sdr16 and restarting the backend as described in docs/setup/COMFYUI.en.md in the matching environment tools; it is not native 16-bit model generation or HDR. The 45-million-pixel limit concerns document processing, not promised native model generation size. See docs/usage/USER_GUIDE.en.md in the matching environment tools for mode, color, alpha and acceptance limits.
 
 Use saved copies and inspect generated structure, colors, edges and transparency. Investigate host crashes using logs and separate GPU/network controls; changing installation methods is not a guaranteed fix. Code: GPL-3.0-only, see LICENSE. Third-party code notices are in THIRD_PARTY_NOTICES.txt; model weights and cloud services have separate licenses, charges and usage restrictions. Open the matching version tag at https://github.com/ImMappyJ/ps-ai for source and versioned guides.
 `;
@@ -48,6 +48,7 @@ Use saved copies and inspect generated structure, colors, edges and transparency
 export function environmentSourceNames(){
   const names=['LICENSE','scripts/check-environment.ps1','scripts/prepare-environment.ps1','scripts/install-ccx.ps1','config/settings.example.json','config/compatibility.json','README.md','docs/README.en.md','docs/setup/COMFYUI.md','docs/setup/COMFYUI.en.md','docs/setup/PLATFORMS.md','docs/setup/PLATFORMS.en.md','src/generation/workflow.ts','src/infrastructure/config/profile.ts','comfyui/ps_ai_sdr16/__init__.py'];
   const guide=[
+    'workflow-create-zh.png','workflow-settings-zh.png','workflow-results-zh.png','workflow-overview.png',
     '050-create-zh.png','050-results-zh.png','050-history-zh.png','050-settings-zh.png','050-settings-en.png','050-relight-zh.png','050-layers-zh.png','050-selection-error-zh.png',
     ...['edit','remove','background','costume','reference','scene','effect','atmosphere','generate','blend'].map(mode=>'050-mode-'+mode+'-zh.png'),
     ...['edit','remove','background','costume','reference','scene','effect','atmosphere','generate','relight','blend'].map(mode=>'050-result-'+mode+'.png'),

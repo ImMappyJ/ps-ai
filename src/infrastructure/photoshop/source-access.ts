@@ -78,7 +78,7 @@ export class SourceFileAccess {
     });
   }
   private matches(entry:any,path:string):boolean{return !!entry?.isFile&&sourcePath(entry.nativePath)===path;}
-  async read<T>(nativePath:string,file:any,read:(entry:any)=>Promise<T>):Promise<T>{
+  async read<T>(nativePath:string,file:any,read:(entry:any)=>Promise<T>,allowPicker=true):Promise<T|undefined>{
     const path=sourcePath(nativePath);if(!path)throw invalid();
     await this.loaded;const revision=this.revision;
     const readExact=async(entry:any):Promise<T>=>{const result=await read(entry);if(!this.matches(entry,path))throw invalid();return result;};
@@ -96,6 +96,7 @@ export class SourceFileAccess {
     }
     this.session.delete(path);
     if(this.tokens.delete(path))await this.queue(()=>this.save().catch(()=>{}));
+    if(!allowPicker)return;
     this.options.onPicker?.();
     entry=await this.uxp.storage.localFileSystem.getFileForOpening({types:['webp','png','jpg','jpeg','psd','psb','tif','tiff']});
     if(!entry)throw new ColorContractError('source-profile','未选择来源文件；请重试并选择当前文档对应的原图');
