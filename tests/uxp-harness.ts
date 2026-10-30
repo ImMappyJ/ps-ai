@@ -51,9 +51,10 @@ export async function panelHarness(options:{showPanel?:boolean;panelWidth?:numbe
   const png=encodePng({width:2,height:2,rgba:new Uint8Array(16).fill(255)});
   const modelInfo:any={UnetLoaderGGUF:{input:{required:{unet_name:[['qwen-image-2.1-Q4_K_M.gguf']]}}},CLIPLoader:{input:{required:{clip_name:[['qwen3vl_8b_int8_convrot.safetensors']]}}},VAELoader:{input:{required:{vae_name:[['qwen_image_2.1_vae_bf16.safetensors']]}}},TextEncodeQwenImage21:{input:{required:{images:['COMFY_AUTOGROW_V3',{template:{names:['image_1','image_2','image_3']}}]}}}};
   Object.assign(modelInfo,JSON.parse(await fs.readFile('tests/fixtures/comfy-nodes.json','utf8')));
+  if(options.models?.unet.toLowerCase().endsWith('.safetensors')||options.modelInventory?.unet.some(filename=>filename.toLowerCase().endsWith('.safetensors')))modelInfo.UNETLoader={input:{required:{unet_name:[[]],weight_dtype:[['default','fp8_e4m3fn']]}},output:['MODEL']};
   if(options.save16Node)modelInfo.PS_AISavePNG16={input:{required:{images:['IMAGE',{}],filename_prefix:['STRING',{}]}},output:[]};
-  if(options.models)for(const [cls,field,key] of [['UnetLoaderGGUF','unet_name','unet'],['CLIPLoader','clip_name','clip'],['VAELoader','vae_name','vae']] as const)modelInfo[cls].input.required[field][0].push(options.models[key]);
-  if(options.modelInventory)for(const [cls,field,key] of [['UnetLoaderGGUF','unet_name','unet'],['CLIPLoader','clip_name','clip'],['VAELoader','vae_name','vae']] as const)modelInfo[cls].input.required[field][0]=options.modelInventory[key];
+  if(options.models)for(const [cls,field,key] of [[options.models.unet.toLowerCase().endsWith('.gguf')?'UnetLoaderGGUF':'UNETLoader','unet_name','unet'],['CLIPLoader','clip_name','clip'],['VAELoader','vae_name','vae']] as const)modelInfo[cls].input.required[field][0].push(options.models[key]);
+  if(options.modelInventory)for(const [cls,field,key] of [['UnetLoaderGGUF','unet_name','unet'],['UNETLoader','unet_name','unet'],['CLIPLoader','clip_name','clip'],['VAELoader','vae_name','vae']] as const)if(modelInfo[cls])modelInfo[cls].input.required[field][0]=options.modelInventory[key];
   const fetcher=async(url:string,init:any)=>{
     requests.push({url,method:init?.method??'GET'});
     if(url.startsWith('http://offline.invalid:9999'))throw new TypeError('fetch failed');
@@ -73,7 +74,7 @@ export async function panelHarness(options:{showPanel?:boolean;panelWidth?:numbe
       const id=url.split('/').pop()!,state=stateFor(id,true);return Response.json(state==='ready'?{state:'ready',images:[{filename:id+'.png',subfolder:'',type:'output'}]}:{state});
     }
     if(url.endsWith('/system_stats')){if(holdCheck)await checkBarrier;return Response.json({system:{comfyui_version:'0.37.4'}});}
-    if(url.includes('/object_info/')){const c=url.split('/').pop()!;return Response.json({[c]:modelInfo[c]??{}});}
+    if(url.includes('/object_info/')){const c=url.split('/').pop()!;return Response.json(modelInfo[c]?{[c]:modelInfo[c]}:{});}
     if(url.endsWith('/prompt')){const post=JSON.parse(init.body);posts.push(post);return Response.json({prompt_id:post.prompt_id});}
     if(url.includes('/history/')){const id=url.split('/').pop()!,state=stateFor(id,true);return Response.json(state==='ready'?{[id]:{status:{completed:true,status_str:'success'},outputs:{'8':{images:[{filename:'own.png',subfolder:'ps-ai',type:'output'}]}}}}:state==='failed'?{[id]:{status:{status_str:'error'}}}:state==='cancelled'?{[id]:{status:{messages:[['execution_interrupted',{}]]}}}:{});}
     if(url.endsWith('/queue')){const ids=[...new Set([...posts.map(p=>p.prompt_id),...JSON.parse(String(files['history.json']??'[]')).map((r:JobRecord)=>r.id)])],inState=(id:string,state:TestState)=>{try{return stateFor(id)===state;}catch{return false;}};return Response.json({queue_running:ids.filter(id=>inState(id,'running')).map(id=>[0,id]),queue_pending:ids.filter(id=>inState(id,'queued')).map(id=>[0,id])});}

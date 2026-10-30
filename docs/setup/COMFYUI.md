@@ -4,17 +4,28 @@
 <h1 align="center">从零配置 ComfyUI</h1>
 <p align="center"><strong>简体中文</strong> · <a href="COMFYUI.en.md">English</a> · <a href="../../README.md">返回首页</a></p>
 
-PS-AI 直接连接你的 ComfyUI，插件不附带后端或模型。本页从 Windows + NVIDIA 的全新准备讲到第一张结果；已有兼容安装可直接跳到[模型文件](#model-files)或[连接](#connection)。云端 API 请看[平台配置](PLATFORMS.md)。
+PS-AI 直接连接你的 ComfyUI，插件不附带后端或模型。本页从 Windows + NVIDIA 的环境选择讲到第一张结果。云端 API 请看[平台配置](PLATFORMS.md)。
 
-起步顺序：安装插件 → 解压后端 → 安装 GGUF 节点及依赖 → 配齐生成模型、编码器和 VAE → 启动并连接 → 真实生成、检查新图层并撤销。
+> **先核对版本：**已发布的 [0.5.2 实验版](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.2)仅支持 GGUF 主模型。**0.6.0 是未发布源码候选**，新增 `.safetensors` 原生路线；指定 INT8 组合已有真实推理／PNG 及小型 Photoshop API 证据，见[实测示例](#native-tested)。已安装面板、CCX／Portable 与完整宿主验收仍待完成，旧包不会因修改设置获得新路线。
+
+起步顺序：选已有环境或新装环境 → 按版本选 GGUF 或原生路线 → 准备对应节点与三个模型角色 → 启动并连接 → 真实生成、检查新图层并撤销。
 
 <a id="beginner"></a>
 
 ## 开始前：确认要准备什么
 
+先作两个选择，再下载：
+
+| 选择 | 接下来做什么 |
+| --- | --- |
+| 已有兼容 ComfyUI | 保留现有安装和权重，先看[模型兼容条件](#model-compatibility)，再[扫描并连接](#connection)；运行中的后端也可使用[配置工具](#environment-tools) |
+| 新装 ComfyUI | 按[后端准备](#backend)下载适合硬件的官方 Portable，再补所选路线真正缺少的节点与模型 |
+| GGUF 主模型 | 0.5.2 与本分支源码均有此路线；需要能识别 Qwen 2.1 的 `UnetLoaderGGUF`，见[GGUF 节点基线](#gguf-nodes) |
+| 原生 Safetensors 主模型 | 0.6.0 未发布源码候选提供；使用内置 `UNETLoader`，不需要安装 GGUF 扩展包，仍需共享 Qwen 节点、匹配编码器和 RGBA VAE；先看[已测组合](#native-tested) |
+
 1. **Photoshop 27.0 或更高版本。** 本项目记录的宿主是 Windows Photoshop 27.0。先按[首页安装说明](../../README.md#安装发行包)安装 PS-AI 的 CCX 或 Portable 包，在 Photoshop“增效工具”中打开 PS-AI。两种 Portable 是不同东西：PS-AI Portable 是插件，下面的 ComfyUI Portable 是推理后端。
-2. **一块兼容的 NVIDIA 显卡、可用驱动及足够空间。** 本项目参考机器为 RTX 5080 16 GiB 显存、约 48 GB 内存；这不是最低配置。下方已测试预设的三个文件合计约 14.63 GB，自选组合的磁盘和显存需求另行核对；另留 Portable、解压副本、Python 依赖、下载缓存与生成图片的空间。其他显卡、CPU、macOS 路径请看官方说明，本项目没有完成相同验证。
-3. **匹配插件版本与教程。** 本页对应 [0.5.2 实验版](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.2)，包含引导界面。核对下载包、“设置”中的版本／构建标识及包附带说明；旧包的界面与行为可能不同。[源码构建](../../README.md#从源码构建)也需使用对应版本。版本匹配不代表已通过全新机器安装或完整宿主验收。
+2. **一块兼容的 NVIDIA 显卡、可用驱动及足够空间。** 本项目参考机器为 RTX 5080 16 GiB 显存、约 48 GB 内存；这不是最低配置。已测 GGUF 示例合计约 14.63 GB，原生 INT8 示例约 17.28 GB，可复用相同编码器与 VAE；其他组合另核对磁盘、显存和算子支持。另留 Portable、解压副本、Python 依赖、下载缓存与生成图片的空间。其他显卡、CPU、macOS 未完成相同验证。
+3. **匹配插件版本与教程。** 公开下载为 0.5.2，新增路线属于 0.6.0 未发布源码候选。核对“设置”中的版本／构建标识及包附带说明；原生路线需[构建包含此变更的源码](../../README.md#从源码构建)，没有已验收的 0.6.0 安装包。版本匹配不代表全新机器安装或完整宿主验收通过。
 
 本地已打包插件 + ComfyUI 的默认 8 位路径不需要 Node.js、全局 Python、Git、ComfyUI-Manager 或手动导入工作流。Node.js 24+ 只在[云平台本机适配服务](PLATFORMS.md)或源码构建时需要。环境工具包是可选检查／配置工具，不会替你安装后端、依赖或下载模型。本页是操作说明，不是一次全新机器安装或新版本宿主验收记录。
 
@@ -50,9 +61,15 @@ Get-Content .\ComfyUI\comfyui_version.py
 
 记录输出中的版本号。若不是 `0.37.4`，继续以下节点、模型及连接检查时，将它视为待验证组合，不能宣称与记录基线完全一致。新手主路径使用官方匹配 GPU 的完整 Portable，不需要替换其核心。固定核心源码也不等于固定整套 Python／PyTorch／CUDA；本项目尚未完成全新 Portable 的安装及运行时组合验收。使用 venv 的已有后端应以自己的 Python 执行依赖命令，见[手动安装指南](https://docs.comfy.org/installation/manual_install)。开发者若要隔离复现固定核心，可看末尾的[可选附录](#pinned-core)。
 
-### 1.2 安装指定的 GGUF 节点与依赖
+### 1.2 按路线准备节点与依赖
 
-本预设需要 **[leejet/ComfyUI-GGUF](https://github.com/leejet/ComfyUI-GGUF)** 的提交 `373048b8403a7820620065210a691263d4da0a61`；不要根据别的教程换成同名的通用 city96 节点包。无需 Git 或 Manager，直接下载该仓库的[固定节点 ZIP](https://github.com/leejet/ComfyUI-GGUF/archive/373048b8403a7820620065210a691263d4da0a61.zip)。
+两条路线都需要核心提供 `CLIPLoader`、`VAELoader`、`TextEncodeQwenImage21`、`QwenImage21Cache`、采样与图像节点，具体字段见[适配约定](#model-adaptation)。**原生 Safetensors 路线**使用内置 `UNETLoader(unet_name, weight_dtype=default)`，跳过下面的 GGUF 扩展安装；缺少共享 Qwen 节点时仍不能连接。
+
+<a id="gguf-nodes"></a>
+
+**GGUF 路线的已验证基线：**记录中的组合使用 **[leejet/ComfyUI-GGUF](https://github.com/leejet/ComfyUI-GGUF)** 提交 `373048b8403a7820620065210a691263d4da0a61`。它是可复现的推荐基线，不是作者白名单；其他实现需具备同样的架构识别、节点字段和连接类型。该提交的[检测代码](https://github.com/leejet/ComfyUI-GGUF/blob/373048b8403a7820620065210a691263d4da0a61/tools/convert.py#L163)包含相关识别能力。**截至 2026-10-31**，city96 上游尚缺相应 Qwen-Image 2.1 检测，[PR #483](https://github.com/city96/ComfyUI-GGUF/pull/483)仍开放；同名节点并不证明可加载这些权重。已有满足条件的实现无需替换。
+
+全新环境若选择此 GGUF 基线，无需 Git 或 Manager，可直接下载[固定节点 ZIP](https://github.com/leejet/ComfyUI-GGUF/archive/373048b8403a7820620065210a691263d4da0a61.zip)：
 
 1. 解压 ZIP，把解出的 `ComfyUI-GGUF-373048…` 文件夹改名为 `ComfyUI-GGUF`。
 2. 将它放到 `ComfyUI_windows_portable/ComfyUI/custom_nodes/`，确认下列文件直接存在，避免多套一层目录；不要同时保留多个同名 GGUF 实现。
@@ -82,7 +99,7 @@ ComfyUI/custom_nodes/ComfyUI-GGUF/
 
 ## 2. 模型放在哪里
 
-需要配齐 **生成模型、视觉／文本编码器、VAE** 三个角色；下方文件是已测试示例，不是只允许这三个文件名。可以使用 ComfyUI 自己的 `models` 目录，也可以在 `extra_model_paths.yaml` 配置已有目录。插件只保存加载器返回的相对文件名，不读取权重的绝对路径。
+需要配齐 **生成模型、视觉／文本编码器、VAE 编解码器** 三个角色；这是组件角色，不是固定三个文件或任意三份权重。下方三个文件是已测试 GGUF 示例。可以使用 ComfyUI 自己的 `models` 目录，也可以在 `extra_model_paths.yaml` 配置已有目录。插件只保存加载器返回的相对文件名，不读取权重的绝对路径。
 
 <a id="model-compatibility"></a>
 
@@ -92,17 +109,17 @@ ComfyUI/custom_nodes/ComfyUI-GGUF/
 
 | 组件 | 替换时必须保持的条件 |
 | --- | --- |
-| 生成模型 | Qwen-Image 2.1 兼容架构的 `.gguf`，能由上述 leejet `UnetLoaderGGUF` 加载，并适配固定的 `QwenImage21Cache` 与 `KSampler`（`cfg=1`、`euler`／`simple`、`denoise=1`）语义。主模型 `.safetensors`、需要其他采样设置的 Turbo／LoRA 不能只凭“2.1”名称直接替换。 |
+| 生成模型 | Qwen-Image 2.1 兼容架构，并适配固定的 `QwenImage21Cache` 与 `KSampler`（`cfg=1`、`euler`／`simple`、`denoise=1`）语义。`.gguf` 由兼容的 `UnetLoaderGGUF` 加载；本分支源码新增 `.safetensors` → `UNETLoader(weight_dtype=default)`。格式只决定加载器，不证明架构；需要其他采样设置的 Turbo／LoRA 不能只凭“2.1”名称直接替换。 |
 | 视觉／文本编码器 | Qwen3-VL **8B** 的兼容 `.safetensors`，满足 `CLIPLoader(type=qwen_image, device=default)` 和 `TextEncodeQwenImage21` 的文字、多图及条件输出约定。当前分支不能以 4B、Qwen2.5-VL 或编码器 GGUF 替代，见[固定核心的编码器分支](https://github.com/Comfy-Org/ComfyUI/blob/8ff6dc384ba5c410266b40e137799e049459d4f2/comfy/sd.py#L1955)。 |
 | VAE | `VAELoader` 可加载的兼容 `.safetensors`，匹配 Qwen 2.1 的 latent 格式、缩放与归一化；[官方配置](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/vae/config.json)为 64 latent 通道、16 倍空间缩放、RGBA 四通道输入／输出。编辑时同一 VAE 由 `TextEncodeQwenImage21` 编码来源图，再由 `VAEDecode` 解码结果；不能换成任意图像 VAE。 |
 
-可评估的上游选项包括 [leejet 的 Qwen-Image 2.1 GGUF 量化](https://huggingface.co/leejet/Qwen-Image-2.1-GGUF/tree/main)和 [Comfy-Org 的 Qwen3-VL 8B 编码器](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/tree/main/text_encoders)（BF16、INT8 convrot、W4A8）。这些是上游提供的候选，不代表本项目已逐一实测；当前官方 2.1 VAE 文件为下方 BF16 版本。
+可评估的上游选项包括 [leejet 的 Qwen-Image 2.1 GGUF 量化](https://huggingface.co/leejet/Qwen-Image-2.1-GGUF/tree/main)和 [Comfy-Org 的 Qwen3-VL 8B 编码器](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/tree/main/text_encoders)（BF16、INT8 convrot、W4A8）。下方实测组合使用 INT8 convrot 编码器和 BF16 RGBA VAE，不能由此推导 BF16／W4A8 编码器或其他精度也已通过。
 
 在“模型与连接”点击“扫描模型”，为每个角色手动选择加载器返回的完整相对名（含子目录），再连接。插件接受符合路径／扩展名规则的自选名称；扫描只证明文件可见，连接只检查所选名称和节点 schema／接口，不读取权重内部结构。之后按[首次真实生成](#first-generation)分别检查文字生图、局部编辑、实际图层／蒙版和一步撤销，才能验证自己的组合；同时核对显存、效果和许可。不要通过修改扩展名冒充另一种模型格式。
 
-### 已测试预设示例
+### 已测试 GGUF 预设示例
 
-以下目录、下载表与哈希对应记录中的测试组合。自选组件保留自己的实际名称和搜索类别。如果直接放在 ComfyUI 目录中，示例结构如下；不要把三个文件都放进 `checkpoints`：
+以下目录、下载表与哈希对应 GGUF 测试组合；原生 INT8 例子见[下一节](#native-tested)，同样使用 `diffusion_models` 搜索类别并复用下方编码器／VAE。三个角色不要求下载三份固定文件。自选组件保留实际名称和搜索类别，单独核对兼容性；不要把所有组件都放进 `checkpoints`：
 
 ```text
 ComfyUI/
@@ -147,6 +164,26 @@ Get-FileHash .\ComfyUI\models\text_encoders\qwen3vl_8b_int8_convrot.safetensors 
 Get-FileHash .\ComfyUI\models\vae\qwen_image_2.1_vae_bf16.safetensors -Algorithm SHA256
 ```
 
+<a id="native-tested"></a>
+
+### 原生 INT8 实测示例：0.6.0 未发布源码
+
+2026-10-31 的指定组合以内置 `UNETLoader(weight_dtype=default)` 加载下列主模型，复用上表的 `qwen3vl_8b_int8_convrot.safetensors` 编码器与 `qwen_image_2.1_vae_bf16.safetensors` RGBA VAE；三项合计约 **17.28 GB**，GGUF 示例约 **14.63 GB**。已有相同编码器／VAE 无需重下；不要求改用 BF16 主模型，也不据此推荐其他 INT8／FP8／BF16 变体。
+
+| 搜索类别 | 主模型及固定来源 | 字节数 | SHA256 |
+| --- | --- | ---: | --- |
+| `diffusion_models` | [qwen_image_2.1_int8_convrot.safetensors](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/aacf31a6d48e707f352ecba714cee0680da3479b/diffusion_models/qwen_image_2.1_int8_convrot.safetensors) | 7,256,783,064 | `cb74113cb03faecd79611b01fd7fd642f0aa60d6f0b95086abee214d75eaa57d` |
+
+来源为 Comfy-Org/Qwen-Image-2.1 固定修订 `aacf31a6d48e707f352ecba714cee0680da3479b`，许可为 **qwen-research**；仍须遵守[上游研究许可](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE)。实测后端基于 ComfyUI 0.37.4，包含本机既有修改；运行时为 Python 3.13.15、PyTorch 2.14.0+cu130、comfy-kitchen 0.2.35、comfy-aimdo 0.5.5，显卡 RTX 5080 16 GiB。这是实测环境记录，不是可凭上游版本号复现的干净安装，也不是最低硬件或性能承诺。固定组件与完整边界见[兼容清单](../../config/compatibility.json)。
+
+| 已有证据 | 边界 |
+| --- | --- |
+| 真实后端任务及 PNG | 文字生图、来源／参考编辑与素材任务完成 PNG 检查，另有 GGUF 对照及显式配置 P0 8/16 位任务；完整案例列表见兼容清单。NASA 公开宇航员照片两条路线虽完成推理，原始输出却把整件宇航服改色，未达到严格局部指令验收；Photoshop 最终蒙版限制另验，任务完成不等于效果／身份保证 |
+| Photoshop 27.0.0 API | 使用真实原生输出和自建 128×96 sRGB8/16 来源，通过灰度选区 64/128/255、保护区、独立图层可编辑蒙版、原始／选区外／保护像素不变、一次撤销、写入像素后注入取消的回滚及来源改变拒绝检查 |
+| 来源色彩与大图 API | 已标记及未标记无路径多图层 RGB8/16 来源通过当前复合图捕获、零文件选择器、原始状态保留、假定 sRGB 副本及同会话标记、错误活动文档隔离、撤销／配置基线与已关闭来源拒绝。另有一例 4096×3072 RGB16 的 `edit-analysis` 原生蒙版／条带应用，全图与来源哈希及一次撤销检查通过 |
+| 任务恢复与取消 | 一例真实原生任务在服务端接受后注入丢失提交回包，按原 UUID 恢复到运行状态，再以该 ID 原子取消；只有一次推理 POST，无全局 interrupt |
+| 仍需验收 | 已安装面板交互、CCX／Portable、照片回填／广泛视觉质量、其他大图／宽色域及完整升级历史流程；独立 API 探针不代表这些流程通过 |
+
 <a id="connection"></a>
 
 ## 3. 插件地址与配置格式
@@ -155,8 +192,8 @@ Get-FileHash .\ComfyUI\models\vae\qwen_image_2.1_vae_bf16.safetensors -Algorithm
 
 1. 打开“设置 → 模型与连接”，选择 **ComfyUI**。
 2. 本机 Portable 填 `http://127.0.0.1:8188`，与浏览器测试一致；已有安装也可使用它实际监听的 HTTP(S) 源地址，例如 `http://192.168.1.20:8188` 或 `https://comfy.example.com`。
-3. 点“扫描模型”。仍可见的当前选择会保留；缺失的映射仅按预设完整文件名或子目录内唯一同名文件补全。检查未解决的类别，再手动选择自定义文件；不会猜测另一个量化版本。
-4. 点“连接”，检查所选文件名可见性和节点模板后保存配置；显示“已连接”后再试真实生成。连接不会加载权重或证明架构兼容。
+3. 点“扫描模型”。本分支源码读取 GGUF 与原生主模型加载器的可用列表，保留明确选择；不会把已选原生路线自动换成 GGUF 预设。未选角色仅按预设完整文件名或子目录内唯一同名文件提示，未解决时手动选择；不会猜测另一个量化版本。0.5.2 仅扫描 GGUF 主模型路线。
+4. 查看只读的当前加载路线，再点“连接”，检查所选路线的文件名、共享节点及字段／连接类型后保存配置。源码候选显示“节点已检查”，并提示“所选权重的真实推理尚未验证”；不会把外部验收记录自动绑定到当前文件。改动地址、模型或位深需重新检查；不用的加载器缺失可接受，网络失败或损坏 schema 仍是错误。之后再做自己的真实生成检查。
 
 地址不能带账号密码、路径或查询参数。反向代理需在根路径转发 HTTP 和 WebSocket；HTTPS 需有效证书。插件没有集成 API Key 认证。远端后端会收到图片、参考图和提示词，请勿公开无认证的服务。
 
@@ -172,7 +209,7 @@ Get-FileHash .\ComfyUI\models\vae\qwen_image_2.1_vae_bf16.safetensors -Algorithm
 
 先确认生成模型／编码器／VAE 三个角色满足[兼容条件](#model-compatibility)，可以使用上表预设或自己的待验证组合；若放在子目录，保留扫描返回的完整相对名。保持输出位深 **8 位**、一次一个候选。先在“配置”中完成检查，再点“运行生成示例”；这是实际推理，会加载模型、占用显存并写入后端输入／输出，不是连接演示。等待本任务完成，检查独立测试文档中的结果新图层和可编辑蒙版，再按一次 `Ctrl+Z`，确认应用可撤回。另在“文字生图”生成一张，检查输出和后端错误；一种模式成功不能替代另一种模式的验证。
 
-随后用一张自己有权使用、已保存的 RGB8 图片做普通编辑：画一个小选区，选“局部物体／材质修改”，读取来源，输入明确提示（例如“把选中的杯子改成蓝色陶瓷，保持形状和构图”），生成一个候选。等待期间保留来源文档且不要修改它；在结果里检查预览，再点“应用到图层”。确认原图层仍在、选区外未被改动、边缘和透明度合理，然后撤销一次。公开旧版若没有向导，直接按[使用指南](../usage/USER_GUIDE.md)完成这次小选区测试。成功标准是实际候选与新图层／蒙版／撤销，不只是“已连接”；本说明不宣称你的硬件、模型输出或安装已通过验收。
+随后用一张自己有权使用、已保存的 RGB8 图片做普通编辑：画一个小选区，选“局部物体／材质修改”，读取来源，输入明确提示（例如“把选中的杯子改成蓝色陶瓷，保持形状和构图”），生成一个候选。等待期间保留来源文档且不要修改它；在结果里检查预览，再点“应用到图层”。确认原图层仍在、选区外未被改动、边缘和透明度合理，然后撤销一次。公开旧版若没有向导，直接按[使用指南](../usage/USER_GUIDE.md)完成这次小选区测试。成功标准是实际候选与新图层／蒙版／撤销，不只是状态标签；本说明不宣称你的硬件、模型输出或安装已通过验收。
 
 ### 色彩与安全编辑
 
@@ -196,13 +233,16 @@ Get-FileHash .\ComfyUI\models\vae\qwen_image_2.1_vae_bf16.safetensors -Algorithm
 
 配置 JSON 的可选字段 `"outputDepth": 16` 可随地址和模型映射一起导入、导出。旧配置不含此字段时使用 8 位。旧任务按各自原模板恢复。
 
+<a id="model-adaptation"></a>
+
 ## 4. 自己的模型怎样适配
 
 这版开放的是 **当前工作流内的模型映射**。模型必须属于兼容的 Qwen-Image 2.1 架构，并能被这些加载器以这些选项正确加载：
 
 | 角色 | 节点与参数 | 约定 |
 | --- | --- | --- |
-| 生成模型 | `UnetLoaderGGUF.unet_name` | `.gguf`，兼容 Qwen 2.1 的模型结构和采样链 |
+| 生成模型：GGUF | `UnetLoaderGGUF.unet_name` | `.gguf`，兼容 Qwen 2.1 的模型结构和固定采样链；0.5.2 的既有路线 |
+| 生成模型：原生 | `UNETLoader.unet_name`、`weight_dtype=default` | `.safetensors`，0.6.0 未发布源码新增；仍须兼容同一 Qwen 2.1 结构和采样链，只有[指定 INT8 组合](#native-tested)具备所述实测证据 |
 | 编码器 | `CLIPLoader.clip_name` | `.safetensors`，`type=qwen_image`，`device=default` |
 | VAE | `VAELoader.vae_name` | `.safetensors`，与 Qwen 2.1 latent 格式、缩放和归一化匹配；编辑输入编码与输出解码使用同一 VAE |
 | 编码／参考 | `TextEncodeQwenImage21` | `prompt`、`negative_prompt`、`resolution`；多图字段 `images.image_1` 至 `images.image_3`，有图时接受 `vae` |
@@ -219,7 +259,7 @@ Get-FileHash .\ComfyUI\models\vae\qwen_image_2.1_vae_bf16.safetensors -Algorithm
 - 范围辅助是视觉提示，不是 latent inpaint 遮罩。最终选区和保护区由 Photoshop 回填蒙版约束。
 - 输出读取节点 `8` 的 `images`。编辑后插件还会按所选设置处理透明轮廓、对齐和颜色，浏览器里直接跑图的原始输出可能不同。
 
-SD、SDXL、Flux、其他 Qwen 架构和任意工作流导入不在当前支持范围。适配这些模型需要独立模板、节点校验、尺寸／蒙版约定及真机回填验证，不能只修改下拉框文件名。
+SD、SDXL、Flux、其他 Qwen 架构、需要其他采样链的 Turbo／LoRA 和任意工作流导入不在当前支持范围。适配这些模型需要独立模板、节点校验、尺寸／蒙版约定及真机回填验证，不能只修改下拉框文件名。配置仍用 `schemaVersion: 1` 和 `models.unet`／`models.clip`／`models.vae`，不新增加载器选择字段；扩展名确定路线，不自动切换、重试或转换文件。
 
 背景／场景和融合省略 ComfyUI 灰度辅助图，最终仍由 Photoshop 应用保存的蒙版。重打光复用已有模型，无需另下模型。带图素材在已有测试中未通过视觉验收，请检查原图残留、辅助边界、透明度和边缘。详见[使用指南](../usage/USER_GUIDE.md)。
 
@@ -232,7 +272,7 @@ SD、SDXL、Flux、其他 Qwen 架构和任意工作流导入不在当前支持�
 | 接口 | 要求 |
 | --- | --- |
 | `GET /system_stats` | 返回系统信息 |
-| `GET /object_info/{class}` | 返回节点 schema 和三个加载器的模型列表 |
+| `GET /object_info/{class}` | 返回节点 schema 和对应加载器的模型列表；本分支扫描两个主模型路线，连接校验所选路线及共享节点 |
 | `POST /upload/image` | multipart PNG，返回 `name`、`subfolder` |
 | `POST /prompt` | 接受客户端指定 UUID `prompt_id`、`client_id` 和 `prompt`，响应同一 `prompt_id` |
 | `GET /history/{id}`、`GET /queue` | 只查询该 ID 的终态、节点 `8` 输出及排队状态 |
@@ -293,7 +333,7 @@ Get-Content .\ComfyUI\comfyui_version.py
 .\python_embeded\python.exe -s -m pip install -r .\ComfyUI\requirements.txt
 ```
 
-版本应为 `0.37.4`，完整提交以 ZIP 链接为准；然后安装本页固定 leejet 节点及其 requirements。运行时／依赖组合、节点 schema、任务协议及真实出图仍需逐项验证。失败时保留错误和原安装，不通过盲目升级或替换系统 Python 绕过。
+版本应为 `0.37.4`，完整提交以 ZIP 链接为准；选择 GGUF 基线时再安装本页固定 leejet 节点及其 requirements，原生路线跳过 GGUF 扩展。运行时／依赖组合、节点 schema、任务协议及真实出图仍需逐项验证。失败时保留错误和原安装，不通过盲目升级或替换系统 Python 绕过。
 
 </details>
 
@@ -305,7 +345,8 @@ Get-Content .\ComfyUI\comfyui_version.py
 | --- | --- |
 | `python.exe` 找不到／找不到 requirements | PowerShell 是否在 Portable 外层；检查 `python_embeded/python.exe` 和内层 `ComfyUI`。实际包若使用另一目录名，按真实路径调整，不要改用系统 pip。 |
 | `No module named gguf`／`sentencepiece`／`protobuf`、`IMPORT FAILED` | 用同一后端 Python 重跑 GGUF requirements 命令，查看第一条安装／导入错误；检查节点文件夹有无嵌套，正常重启后再试。 |
-| `UnetLoaderGGUF`／`TextEncodeQwenImage21`／`QwenImage21Cache` 缺失 | 对照核心与 leejet 固定提交；仅安装通用同名 GGUF 包或仅复制文件夹不足以满足本预设。 |
+| 所选加载器／共享 Qwen 节点缺失 | GGUF 路线检查兼容 `UnetLoaderGGUF`；原生路线检查内置 `UNETLoader` 及 `weight_dtype=default`，无需补装 GGUF 包。两者都检查 `TextEncodeQwenImage21`／`QwenImage21Cache` 等共享节点。 |
+| `Unknown model architecture!` | 核对实际权重与加载器的 Qwen 2.1 检测能力；见有日期的[GGUF 基线说明](#gguf-nodes)。换扩展名、自动换路线或重新提交不是兼容性修复。 |
 | 窗口退出／端口被占用／浏览器没有自动打开 | 先手动访问 `http://127.0.0.1:8188`，复用健康服务；否则在 PowerShell 启动并保留错误，不要多开实例。 |
 | CUDA／驱动错误或显存不足 | 核对官方 Portable GPU 构建与驱动，查看后端日志；减少候选／尺寸并关闭其他显存占用。16 GiB 是参考机器，不是保证。不要随意升级全部依赖来碰运气。 |
 | 选择 16 位后缺少 `PS_AISavePNG16` | 首次测试改回默认 8 位，或按[可选 16 位](#output-depth)单独安装；该节点不属于默认路径。 |

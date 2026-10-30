@@ -116,7 +116,7 @@ test('复用16位历史后切换语言保留本次输出位深，不用旧偏好
 test('连接失败直接复制技术详情；成功检查后清除对应旧错误',async()=>{
   const h=await panelHarness();try{await h.wait();h.el('backend-url').value='http://offline.invalid:9999';h.click('connect');await h.wait();assert.equal(h.el('diagnostic-box').style.display,'block');
     h.click('toggle-error-details');await h.wait();assert.equal(h.el('diagnostic-details').style.display,'none');assert.equal(h.clipboardWrites.length,1);assert.equal(JSON.parse(h.clipboardWrites[0]).code,'unreachable');assert.equal(h.el('diagnostic-box').style.display,'block');
-    h.el('backend-url').value='http://localhost:8188';h.click('connect');await h.wait();assert.equal(h.el('connection').textContent,'已连接');assert.equal(h.el('diagnostic-box').style.display,'none');
+    h.el('backend-url').value='http://localhost:8188';h.click('connect');await h.wait();assert.equal(h.el('connection').textContent,'节点已检查');assert.equal(h.el('diagnostic-box').style.display,'none');
   }finally{await h.close();}
 });
 
@@ -188,10 +188,10 @@ test('英文界面翻译进度与宿主错误，保留用户提示词和参考�
     h.click('tab-t2i');h.el('count').value='0';h.click('generate');await h.wait();assert.match(h.el('status').textContent,/1–4/);assert.doesNotMatch(h.el('progress-label').textContent,/[一-龥]/);
   }finally{await h.close();}
 });
-test('单独切换语言保留已连接状态和未保存的地址草稿',async()=>{
+test('语言切换保留未保存地址并使旧节点检查失效',async()=>{
   const h=await panelHarness();try{
-    h.click('connect');await h.wait();assert.equal(h.el('connection').textContent,'已连接');h.el('backend-url').value='http://localhost:8199';h.el('language').value='en-US';h.change('language');await h.wait();
-    assert.equal(h.el('connection').textContent,'Connected');assert.equal(h.el('backend-url').value,'http://localhost:8199');assert.equal(JSON.parse(String(h.files['settings.json'])).baseUrl,'http://localhost:8188');
+    h.click('connect');await h.wait();assert.equal(h.el('connection').textContent,'节点已检查');h.el('backend-url').value='http://localhost:8199';h.el('language').value='en-US';h.change('language');await h.wait();
+    assert.equal(h.el('connection').textContent,'Unchecked');assert.equal(h.el('backend-url').value,'http://localhost:8199');assert.equal(JSON.parse(String(h.files['settings.json'])).baseUrl,'http://localhost:8188');
   }finally{await h.close();}
 });
 

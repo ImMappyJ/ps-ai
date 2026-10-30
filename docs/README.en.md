@@ -12,9 +12,9 @@ Change a material, remove distractions, replace backgrounds or clothing, and arr
 
 This composed overview pairs a native Photoshop Create panel captured during release preparation under a separate Preview demonstration identity with existing real Qwen-Image 2.1 outputs and local composite previews; it is not one host screenshot. The new interface was used for preview and a draft prompt, without submitting new generation. Relighting uses `3F3F3F.webp` and a generated room, fidelity 1 / detail protection 0.65. The output comparison is not a Photoshop apply screenshot. See [relighting](usage/USER_GUIDE.en.md#relight).
 
-> **Version note:** This page covers **0.5.2 experimental**, including the guided interface, automatic color working copies and Blend lighting mode. Match the downloaded package with the version/build identity in Settings; older packages may differ. Full host regression and clean-machine installation for this version remain unvalidated. Cloud adapters have offline coverage; generation with real API keys remains unvalidated.
+> **Version note:** This page describes the **unreleased 0.6.0 source candidate**. The currently downloadable **0.5.2 experimental remains GGUF-only**. Match the package with the version/build identity in Settings. CCX/Portable installation, complete panel regression and clean-machine installation for 0.6.0 remain unvalidated. Cloud adapters have offline coverage; generation with real API keys remains unvalidated. Screenshots retain their historical version captions.
 
-First local setup: install the plugin → extract ComfyUI Portable → install the specified GGUF nodes and dependencies → prepare a diffusion model, encoder and VAE → start and connect → generate one image, inspect its layer and undo. Follow [Configure ComfyUI from zero](setup/COMFYUI.en.md#beginner).
+First choose an existing or new environment, select the GGUF or native Safetensors route supported by your build, and reuse matching components for the three roles. Follow [Configure ComfyUI from zero](setup/COMFYUI.en.md#beginner). One native INT8 combination has completed real inference and PNG checks. Its real outputs also passed bounded Photoshop API checks on small RGB8/16 fixtures and one large source. Installed panels, photographic application and other combinations require separate acceptance; see the [tested scope](setup/COMFYUI.en.md#native-tested).
 
 ## Your first edit in three steps
 
@@ -29,11 +29,11 @@ Create follows **Choose a task → Source and range → Generate and output**; e
 | Item | Requirement |
 | --- | --- |
 | Photoshop | Windows Photoshop 2026 / 27.0+; tested on 27.0, macOS untested |
-| Local generation | Separately installed compatible ComfyUI, Qwen-Image 2.1 GGUF and nodes; the three preset models total about 14.63 GB, plus dependencies and caches |
+| Local generation | Separately installed compatible ComfyUI, Qwen-Image 2.1 components and route-specific nodes; tested examples total about 14.63 GB for GGUF or 17.28 GB for native INT8. Reuse compatible encoders/VAE; assess other combinations separately |
 | Test hardware | RTX 5080 with 16 GiB VRAM and about 48 GB RAM; minimum requirements are not established |
 | Cloud generation | Your key and model access for Nano Banana (Gemini), GPT Image (OpenAI Images) or BaiLian; automatic relay startup needs Windows, Node.js 24+ and host permission |
 
-The local workflow is specific to Qwen 2.1. Diffusion model, encoder and VAE are three component roles; the example filenames are not an allowlist. Other quantizations or precision variants within the same architecture must meet the [model compatibility requirements](setup/COMFYUI.en.md#model-compatibility) and be validated separately. SD, SDXL and Flux are not interchangeable replacements. See the [compatibility manifest](../config/compatibility.json) for versions, tested files and validation scope.
+The local workflow is specific to Qwen 2.1. Diffusion model, vision/text encoder and VAE are three component roles, not three fixed files; neither example filenames nor node authors form an allowlist. This source branch selects `UnetLoaderGGUF` for `.gguf` diffusion weights or built-in `UNETLoader` (`weight_dtype=default`) for `.safetensors`. The native route does not need the GGUF extension package. Format does not prove architecture compatibility: other quantizations or precision variants must meet the [model compatibility requirements](setup/COMFYUI.en.md#model-compatibility) and be validated separately. SD, SDXL, Flux and Turbo variants requiring another sampling chain are not interchangeable replacements. See the [compatibility manifest](../config/compatibility.json) for versions, tested files and validation scope.
 
 ## Install a release package
 

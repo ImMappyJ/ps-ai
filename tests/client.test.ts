@@ -4,7 +4,7 @@ import {buildGraph} from '../src/generation/workflow';
 test('检查使用所选模型映射，发现模型时允许当前映射暂缺',async()=>{
   const models={unet:'preset/model.gguf',clip:'preset/clip.safetensors',vae:'preset/vae.safetensors'};
   const infos:any={UnetLoaderGGUF:{input:{required:{unet_name:[[models.unet]]}}},CLIPLoader:{input:{required:{clip_name:[[models.clip]]}}},VAELoader:{input:{required:{vae_name:[[models.vae]]}}},TextEncodeQwenImage21:{input:{required:{images:['COMFY_AUTOGROW_V3',{template:{names:['image_1','image_3']}}]}}}};
-  const s=await server((req,res)=>{const cls=req.url?.split('/').pop()!;res.end(JSON.stringify(req.url==='/system_stats'?{}:{[cls]:infos[cls]??{}}));});
+  const s=await server((req,res)=>{const cls=req.url?.split('/').pop()!;res.end(JSON.stringify(req.url==='/system_stats'||cls==='UNETLoader'?{}:{[cls]:infos[cls]??{}}));});
   try{await new ComfyClient(s.client.base,fetch,30000,models).check();const inventory=await s.client.inspect();assert.deepEqual(inventory.models, {unet:[models.unet],clip:[models.clip],vae:[models.vae]});await assert.rejects(s.client.check(),/缺少模型/);}finally{await s.close();}
 });
 async function server(handler:(req:http.IncomingMessage,res:http.ServerResponse,body:Buffer)=>void) {

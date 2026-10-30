@@ -1,6 +1,6 @@
 import {RelayController} from '../infrastructure/backends/relay-controller';import {isPlatform,PLATFORMS} from '../infrastructure/backends/platforms';import type {PlatformId} from '../infrastructure/backends/platforms';import {connectionId,rememberConnection,switchConnection} from '../infrastructure/config/profile';import type {ConnectionId} from '../infrastructure/config/profile';
 import {ComfyClient,uuid,OutputFile} from '../infrastructure/backends/client';import {JobCoordinator,JobRecord,blocksGeneration} from '../generation/jobs';
-import {buildGraph,TEMPLATE_VERSION,templateForDepth} from '../generation/workflow';import {intent,Workspace,isBackgroundMode} from '../generation/intent';import {BackendSettings,defaultSettings,validateSettings} from '../infrastructure/config/profile';
+import {buildGraph,TEMPLATE_VERSION,templateForDepth} from '../generation/workflow';import {intent,Workspace,isBackgroundMode} from '../generation/intent';import {BackendSettings,defaultSettings,validateSettings,diffusionLoader} from '../infrastructure/config/profile';
 import {Raster,encodePng,decodePng,decodeModelPng,resize,maskRaster,makeMapping,rasterDepth} from '../imaging/image';
 import {PhotoshopAdapter,Capture,Protection,Snapshot,SelectionRange} from '../infrastructure/photoshop/photoshop';import {Storage,type HistoryCleanupStatus} from '../infrastructure/storage/storage';import {runHostProbe} from '../diagnostics/p0-host';
 import {createSourceColorReader} from '../infrastructure/photoshop/source-color';
@@ -115,11 +115,14 @@ function renderSetup(){
   el('setup-check').disabled=busy||setupStep<2;el('setup-example').disabled=busy||setupStep!==3;
 }
 function showSetup(step=1){setupStep=step;views.show('settings');el('setup-body').style.display='block';renderSetup();}
-function connection(value:string){connectionState=value;el('connection').textContent=t(value);workflowUi();}
+function renderConnection(dirty=false){el('connection').textContent=t(connectionState==='已连接'?(dirty?'待检查':el('backend-kind').value==='comfyui'?'节点已检查':'已连接'):connectionState);}
+function renderModelRoute(){try{el('model-route').textContent=t(diffusionLoader(el('model-unet').value)==='UNETLoader'?'原生 Safetensors · ComfyUI 内置加载器 UNETLoader':'GGUF · UnetLoaderGGUF');}catch{el('model-route').textContent=t('模型映射无效');}}
+function connection(value:string){connectionState=value;renderConnection();workflowUi();}
 function workflowUi():void {
   const mode=el('mode').value,pending=historyRecords.some(blocksGeneration);
   let dirty=!settingsReady;
   try{dirty=dirty||connectionSignature(draftSettings())!==connectionSignature(settings);}catch{dirty=true;}
+  renderConnection(dirty);
   let sourceReady=!!capture;
   if(capture)try{sourceReady=activeDocumentId()===capture.snapshot.documentId&&adapter.sourceAvailability(capture.snapshot,true)==='current';}catch{sourceReady=false;}
   const needsSource=el('selection-tools').style.display!=='none';
@@ -190,7 +193,7 @@ function inputUi(){
   el('mode-help').style.display=background||blend||mode==='remove'?'block':'none';
   const kind=workspace==='t2i'?'t2i':['effect','atmosphere'].includes(el('mode').value)?'asset':'edit';
   el('gateway-key-settings').style.display=platform?'block':'none';el('backend-url').disabled=busy||platform;
-  el('local-model-settings').style.display=cloud?'none':'block';el('gateway-model-settings').style.display=cloud?'block':'none';
+  el('local-model-settings').style.display=cloud?'none':'block';el('gateway-model-settings').style.display=cloud?'block':'none';renderModelRoute();
   el('steps').disabled=busy||cloud;el('output-depth').disabled=busy||cloud;
   el('seed').disabled=busy||!!(cloud&&model?.seedMax===0);el('lock-seed').disabled=el('seed').disabled;
   el('generate').disabled=busy||!!(cloud&&model&&!model.operations.includes(kind));
@@ -1013,7 +1016,8 @@ showSettings();
 el('output-depth').addEventListener('change',()=>void guarded(()=>configure(async()=>{const next=validateSettings({...settings,outputDepth:outputDepth()});await store.json('settings.json',next);settings=next;checkedSetup='';})));
 el('language').addEventListener('change',()=>void guarded(()=>configure(async()=>{const next=validateSettings({...settings,language:el('language').value});await store.json('settings.json',next);settings=next;renderLanguage();})));
 el('backend-kind').addEventListener('change',()=>void guarded(async()=>{const target=el('backend-kind').value as ConnectionId;try{const next=switchConnection(draftSettings(displayedConnection),target);checkedSetup='';showSettings(undefined,next);status(t('后端配置已改变，请先保存并检查连接'));}catch(error){el('backend-kind').value=displayedConnection;throw error;}}));
-el('gateway-model').addEventListener('change',()=>{checkedSetup='';inputUi();});
+el('gateway-model').addEventListener('change',()=>{checkedSetup='';connection('待检查');inputUi();});
+for(const id of ['model-unet','model-clip','model-vae'])el(id).addEventListener('change',()=>{checkedSetup='';connection('待检查');inputUi();});
 on('scan-models',()=>configure(async()=>{
   if(el('backend-kind').value!=='comfyui'){
     const selected=el('gateway-model').value,probe=await connectDraft(draftSettings()),catalog=await (probe as GatewayClient).connect();gatewayCatalog=catalog;gatewayCatalogBase=normalizeBaseUrl(el('backend-url').value,isPlatform(el('backend-kind').value));showGatewayModels(selected);inputUi();status(t('已读取平台模型能力；账户权限和生成效果仍需 API Key 验证'));
@@ -1031,7 +1035,7 @@ on('stop-relay',()=>configure(async()=>{const id=el('backend-kind').value;if(isP
 on('import-settings',()=>configure(async()=>{const file=await uxp.storage.localFileSystem.getFileForOpening({types:['json']});if(file)await saveSettings(JSON.parse(await file.read()));}));
 on('export-settings',()=>configure(async()=>{if(!settingsReady)throw new Error(t("请先保存有效配置"));const file=await uxp.storage.localFileSystem.getFileForSaving('ps-ai-settings.json',{types:['json']});if(file)await file.write(JSON.stringify(settings,null,2));}));
 for(const w of ['local','cosplay','t2i'] as Workspace[])on(`tab-${w}`,async()=>{if(!busy)setWorkspace(w);});
-on('connect',()=>configure(async()=>{const next=draftSettings();await checkBackend(backendClient(next),next);await saveSettings(next);connection('已连接');status(t(next.backend==='gateway'?'平台服务配置检查通过；真实生成效果仍需验收':'ComfyUI 与模型已连接'));el('diagnostic-box').style.display='none';}));
+on('connect',()=>configure(async()=>{connection('待检查');const next=draftSettings();await checkBackend(backendClient(next),next);await saveSettings(next);connection('已连接');status(t(next.backend==='gateway'?'平台服务配置检查通过；真实生成效果仍需验收':'ComfyUI 节点和模型文件名已检查；所选权重的真实推理尚未验证。'));el('diagnostic-box').style.display='none';}));
 on('open-setup',async()=>{showSetup();fold('settings',true);});
 on('workflow-next',async()=>{
   const step=el('workflow-guide').getAttribute('data-step');if(busy)return;
@@ -1049,11 +1053,12 @@ on('setup-connect',()=>configure(async()=>{
   await saveSettings(next);checkedSetup='';showSetup(2);connection('待检查');el('diagnostic-box').style.display='none';
 }));
 on('setup-check',()=>configure(async()=>{
+  connection('待检查');
   const next=draftSettings(),result=await checkBackend(backendClient(next),next);
   await saveSettings(next);checkedSetup=setupSignature(next);
   const report={date:new Date().toISOString(),host:String(uxp.host?.version??''),backend:next.backend==='gateway'?`${gatewayCatalog?.provider??'unknown'} / ps-ai/1`:(result.stats as any)?.system?.comfyui_version??'unknown',template:next.backend==='gateway'?GATEWAY_TEMPLATE:templateForDepth(next.outputDepth),models:next.backend==='gateway'?next.gatewayModel:next.models,checked:next.backend==='gateway'?'Local protocol / server key presence; platform authorization and output require live acceptance':'API / nodes / model filenames; model architecture requires example generation'};
   await store.json('setup-check.json',report);el('setup-report').textContent=`Photoshop ${report.host} · ComfyUI ${report.backend} · ${report.template}`;
-  showSetup(3);connection('已连接');el('diagnostic-box').style.display='none';
+  showSetup(3);connection('已连接');if(next.backend!=='gateway')status(t('ComfyUI 节点和模型文件名已检查；所选权重的真实推理尚未验证。'));el('diagnostic-box').style.display='none';
 }));
 on('setup-example',async()=>{
   if(busy)return;

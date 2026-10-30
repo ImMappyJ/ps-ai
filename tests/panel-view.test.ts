@@ -178,7 +178,7 @@ test('local configuration and bounded model validation produce translated displa
     {value:{...defaultSettings(),connections:[]},zh:'平台配置无效',en:'Invalid platform profile.'}
   ];
   const modelFixtures=[
-    {field:'unet',extension:'.gguf',en:'Model unet needs a relative .gguf filename from the backend search paths'},
+    {field:'unet',extension:'.gguf / .safetensors',en:'Model unet needs a relative .gguf / .safetensors filename from the backend search paths'},
     {field:'clip',extension:'.safetensors',en:'Model clip needs a relative .safetensors filename from the backend search paths'},
     {field:'vae',extension:'.safetensors',en:'Model vae needs a relative .safetensors filename from the backend search paths'}
   ];

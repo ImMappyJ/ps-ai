@@ -4,9 +4,11 @@
 
 Start with a small edit: **connect → read the range → describe and generate → inspect and apply**. [Install the plugin](../README.en.md#install-a-release-package), then [configure ComfyUI from zero](../setup/COMFYUI.en.md#beginner) for a local backend, or connect a [cloud service](../setup/PLATFORMS.en.md).
 
-> This guide covers **0.5.2 experimental**, including the guided interface, automatic color working copies and Blend lighting mode. Match the downloaded package with the version/build identity in Settings; older packages may differ. Real outputs and local composite previews are labeled separately below and do not establish complete regression for this version, acceptance for every mode or clean-machine installation.
+> This guide describes the **unreleased 0.6.0 source candidate**. The public download remains **0.5.2 experimental, with GGUF diffusion weights only**. Match the package with the version/build identity in Settings. Historical interfaces, real outputs and local composite previews are labeled separately. Installed panels, CCX/Portable, complete mode regression and clean-machine installation for 0.6.0 remain unvalidated.
 
 Create, Settings and Results are native PS27 screenshots captured during release preparation under a separate Preview demonstration identity: source preview, read-only model scanning and existing historical candidate loading were performed, without new generation. The Relighting interface screenshot remains historical 0.5.0. Screenshots use the Chinese interface.
+
+Local models fill three roles: diffusion model, vision/text encoder and VAE, without fixed filenames or authors. The 0.6.0 source selects GGUF or native Safetensors loading by extension, restricted to compatible Qwen 2.1 architecture and the fixed sampling chain. Native loading needs no GGUF extension package. One INT8 combination has real inference, PNG and small RGB8/16 Photoshop API evidence; see the [tested example and limits](../setup/COMFYUI.en.md#native-tested). The read-only route label follows the selected filename. **Nodes checked** means node/file-name checks passed and still warns that the selected weights are unverified. Scanning/connecting neither inspects weight internals nor generates automatically.
 
 <a id="current-ui"></a>
 

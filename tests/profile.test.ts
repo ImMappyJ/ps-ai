@@ -25,7 +25,7 @@ test('语言选择随可迁移配置保存，旧配置仍可读取',()=>{
 });
 test('模型映射拒绝绝对路径、遍历与不匹配格式，保留后端返回的相对分隔符',()=>{
   assert.equal(validateModels({...models,unet:'qwen\\model.gguf'}).unet,'qwen\\model.gguf');
-  for(const unet of ['D:\\models\\x.gguf','/models/x.gguf','../x.gguf','qwen/../../x.gguf','x.safetensors'])assert.throws(()=>validateModels({...models,unet}));
+  for(const unet of ['D:\\models\\x.gguf','/models/x.gguf','../x.gguf','qwen/../../x.gguf','x.ckpt'])assert.throws(()=>validateModels({...models,unet}));
 });
 test('配置的三个模型字段进入固定图，不覆盖参考图或工作流结构',()=>{
   const g=buildGraph({requestId:'test',prompt:'repair prop',seed:42,steps:25,resolution:992,source:'original.png',models});

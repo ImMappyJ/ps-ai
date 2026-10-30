@@ -4,16 +4,15 @@
 
 本版本通道：**{{CHANNEL}}**。标签对应源码：[{{SOURCE_SHA}}]({{SOURCE_URL}})。[该版本提交记录]({{COMMITS_URL}})；实际变更与贡献者由下方 GitHub 生成信息和比较链接补充。
 
-### 0.5.2 的主要变化
+### 0.6.0 的主要变化
 
-- **更清楚的创作流程**：按选择任务、来源与范围、生成与输出整理面板，按当前状态给出下一步；参考图和高级选项按需展开。
-- **读取来源不再要求另选原图**：优先采用 Photoshop 当前文档 ICC，导入图层不会被当作另一个原文件。未标记 RGB8/16 无可靠色彩证明时，在保留原图层与选区的独立“假定 sRGB”副本中继续，并明确提示近似色彩；未知灰度与不支持模式仍阻止。
-- **从零配置 ComfyUI**：双语指南覆盖官方下载与解压、指定 leejet GGUF 节点、便携版 Python 安装依赖、三个模型的固定来源与准确目录、启动连接、首张生成及应用撤销。不是只下载后端和模型就能保证运行。
-- **减少部署猜测**：模型扫描只按精确预设名或唯一同名相对路径补全；环境工具复用已有安装，检查节点、文件大小和 SHA256，不自动安装或覆盖后端。
-- **溶图保留更多原图细节**：光影方式提取局部 RGB 明暗与光色，保留 AI 重绘选择；本地光效与细节调节复用已保存结果，不重新提交生成。
-- **精简公开文档**：更新中英文首页、使用指南和真实面板预览，保留云端模型配置入口及各功能的验证边界。
+- **Qwen 2.1 双加载路线**：兼容的 `.gguf` 主模型使用 `UnetLoaderGGUF`，兼容的 `.safetensors` 独立扩散权重使用 ComfyUI 内置 `UNETLoader(weight_dtype=default)`；原生路线不需要 GGUF 扩展。
+- **按能力而不是固定文件选模型**：主模型、视觉／文本编码器、VAE 是三个组件角色，可以复用已有兼容文件；扫描保留明确选择，不自动换回 GGUF。扩展名、作者或列表可见性都不是兼容证明。
+- **连接提示不再夸大**：显示所选加载路线和“节点已检查”，明确未验证当前权重；改变模型会使旧检查失效。检查不上传图片、不触发生成。
+- **安全、可复现的验收工具**：P0 必须指定配置与新输出目录，只有 `--run` 才提交；配置、图、8/16 位解码一致，先检查完整节点契约，保存原 UUID 后提交，失联不重复生成。
+- **双语从零教程同步**：区分已有／新装环境、GGUF／原生路线、示例组合／必需能力；保留云端 API 入口与未测范围。既有无原图选择器的色彩副本策略、历史、选区和撤销契约不变。
 
-验证：发行准备的 987 项离线测试、类型检查、生产构建与归档检查通过；自动发行还会针对该标签再次执行完整门禁。新面板截图来自 Photoshop 27 独立 Preview 的草稿／只读模型扫描，没有提交新生成。0.5.2 的 CCX／Portable 安装、完整面板交互、自动近似色彩副本和新版溶图光影仍缺少独立原生验收；历史宿主记录不转化为本版本的新验收结论。
+开发验收：固定 `qwen_image_2.1_int8_convrot.safetensors` 配现有 Qwen3-VL INT8 编码器及 Qwen 2.1 RGBA VAE 已完成真实推理；精确哈希、运行时与范围见兼容清单。后端含既有本地修改，不等于全新官方 Portable 复现。Photoshop 27 独立 API 检查通过小型 RGB8/16 的真实输出、可编辑蒙版、原始／范围外像素保护、单次撤销及注入取消回滚。源码／API 验收不等于已安装面板；当前候选的 CCX／Portable 安装、完整面板交互与升级验收仍是发布前门槛。
 
 ### 已知限制
 
@@ -34,16 +33,15 @@ manifest 的最低宿主为 Photoshop **{{HOST_MINIMUM}}**。现有人工记录�
 
 Release channel: **{{CHANNEL}}**. Tagged source: [{{SOURCE_SHA}}]({{SOURCE_URL}}). [Commits at this source]({{COMMITS_URL}}); GitHub-generated changes, contributors and the actual comparison link follow below.
 
-### Main changes in 0.5.2
+### Main changes in 0.6.0
 
-- **Guided creation flow**: task, source/range and output sections show a state-aware next action, with references and advanced controls collapsed until needed.
-- **No original-file picker during source capture**: Photoshop's current document ICC takes priority, including imported-layer composites. Unresolved untagged RGB8/16 continues in a separate, explicitly approximate Assumed sRGB copy preserving original layers and selections. Unknown-profile Grayscale and unsupported modes still reject.
-- **ComfyUI from zero**: bilingual instructions cover official download/extraction, the designated leejet GGUF node, dependencies installed with Portable's Python, pinned model sources and exact directories, startup, connection and first generation/apply/undo. Downloading a backend and three models alone does not guarantee readiness.
-- **Less deployment guesswork**: model suggestions require exact preset names or unique relative matches. Environment tools reuse an existing installation and check nodes, file sizes and SHA256 without automatically installing or replacing the backend.
-- **Detail-preserving Blend lighting**: local RGB fields transfer lighting over the original, with explicit AI redraw still available. Saved lighting/detail adjustments do not submit another generation.
-- **Simpler public guides**: refreshed bilingual homepages, usage instructions and actual panel previews, retaining cloud setup and honest validation boundaries.
+- **Two Qwen 2.1 loader routes**: compatible `.gguf` diffusion weights use `UnetLoaderGGUF`; compatible standalone `.safetensors` diffusion weights use built-in `UNETLoader(weight_dtype=default)`, without the GGUF extension.
+- **Capability-based model choice**: diffusion, vision/text encoder and VAE are three component roles, not three mandatory filenames. Reuse compatible existing files; scanning preserves explicit choices without silently switching back to GGUF. Format, author and inventory visibility do not prove compatibility.
+- **Honest connection evidence**: the panel shows the selected route and Nodes checked, explicitly excluding weight validation. Model changes invalidate previous checks. Checking uploads no images and starts no inference.
+- **Explicit, safe P0 validation**: settings and a new output directory are required; only `--run` submits. Configuration, graph and 8/16-bit decoding agree, complete node contracts are checked first, and persisted original UUIDs prevent automatic resubmission after a lost response.
+- **Updated beginner guides**: bilingual existing/new-environment and GGUF/native choices separate example combinations from required capabilities. Cloud API setup and acceptance limits remain explicit. Existing no-picker color copies, history, selections and Undo contracts are preserved.
 
-Validation: release preparation passed 987 offline tests, type checking, production builds and archive checks; release automation repeats the full gates on the tag. New panel screenshots use a separate Photoshop 27 Preview identity for drafts and read-only scanning, without new generation. Separate 0.5.2 CCX/Portable installation, full panel interaction, approximate color copies and new Blend lighting native acceptance remain pending. Historical host evidence does not establish new acceptance for this version.
+Development validation: the pinned `qwen_image_2.1_int8_convrot.safetensors` with the existing Qwen3-VL INT8 encoder and Qwen 2.1 RGBA VAE completed real inference; see the compatibility manifest for exact hashes, runtime and scope. The backend has preexisting local modifications, not a clean official Portable reproduction. Standalone Photoshop 27 API checks passed real output on small RGB8/16 sources, editable masks, original/outside-pixel preservation, one Undo and injected cancellation rollback. Source/API checks are not installed-panel acceptance. Candidate CCX/Portable installation, complete panel interaction and upgrade acceptance remain pre-release gates.
 
 ### Known limits
 

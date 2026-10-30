@@ -12,9 +12,9 @@
 
 上图是组合概览：左为发行准备时在 Photoshop 中使用独立 Preview 演示标识的创作面板实拍，右为已有真实 Qwen-Image 2.1 输出与本地合成预览，非单张宿主截图。新界面仅预览并填写草稿，没有提交新的生成。布光示例使用 `3F3F3F.webp` 与生成房间，光效还原 1／细节保护 0.65；效果对比非 Photoshop 回填实拍，见[布光教程](docs/usage/USER_GUIDE.md#relight)。
 
-> **版本说明：**本页对应 **0.5.2 实验版**，包含引导界面、自动色彩工作副本与溶图光影方式。请核对下载包与“设置”中的版本／构建标识；旧版界面与行为可能不同。新版本完整宿主回归及全新机器安装仍待验证；云平台适配已有离线测试，真实 Key 出图仍待验证。
+> **版本说明：**本页说明 **0.6.0 未发布源码候选**；当前可下载的 **0.5.2 实验版仍仅支持 GGUF 主模型**。请核对下载包与“设置”中的版本／构建标识。0.6.0 的 CCX／Portable 安装、完整面板回归及全新机器安装仍待验收；云平台适配已有离线测试，真实 Key 出图仍待验证。下方截图保留其各自的历史版本说明。
 
-首次本地使用顺序：安装插件 → 下载并解压 ComfyUI Portable → 安装指定 GGUF 节点及依赖 → 配齐生成模型、编码器和 VAE → 启动并连接 → 生成一张、检查图层并撤销；步骤见[从零配置 ComfyUI](docs/setup/COMFYUI.md#beginner)。
+首次本地使用先选已有环境或新装环境，再按插件构建选择 GGUF 或原生 Safetensors 路线、复用匹配的三个模型角色；步骤见[从零配置 ComfyUI](docs/setup/COMFYUI.md#beginner)。指定原生 INT8 组合已完成真实推理与 PNG 检查，并以真实输出通过小型 RGB8/16 及一例大图的限定 Photoshop API 检查；这不代表已安装面板、照片回填或所有组合验收，见[实测范围](docs/setup/COMFYUI.md#native-tested)。
 
 ## 三步完成一次编辑
 
@@ -29,11 +29,11 @@
 | 项目 | 要求 |
 | --- | --- |
 | Photoshop | Windows Photoshop 2026 / 27.0+；实测 27.0，macOS 未测试 |
-| 本地生成 | 单独安装兼容 ComfyUI、Qwen-Image 2.1 GGUF 与节点；三个预设模型约 14.63 GB，另留依赖与缓存空间 |
+| 本地生成 | 单独安装兼容 ComfyUI、Qwen-Image 2.1 组件与所选路线的节点；已测 GGUF 示例合计约 14.63 GB，原生 INT8 示例约 17.28 GB；可复用已有编码器与 VAE，其他组合的磁盘与显存需求另核对 |
 | 本机参考配置 | RTX 5080 16 GiB、约 48 GB 内存；最低硬件配置尚未确定 |
 | 云端生成 | Nano Banana（Gemini）、GPT Image（OpenAI Images）或百炼的 Key 与模型权限；自动中转需 Windows、Node.js 24+ 与宿主启动授权 |
 
-本地使用固定 Qwen 2.1 工作流。生成模型、编码器和 VAE 是三个组件角色，示例文件不是文件名白名单；同架构的其他量化／精度版本须满足[模型兼容条件](docs/setup/COMFYUI.md#model-compatibility)并单独验证，不能直接替换成 SD、SDXL 或 Flux。版本、已测试文件和测试边界见[兼容清单](config/compatibility.json)。
+本地使用固定 Qwen 2.1 工作流。生成模型、视觉／文本编码器和 VAE 是三个组件角色，不是固定三个文件；示例文件名与节点作者都不是白名单。本分支按主模型扩展名选择 `.gguf` → `UnetLoaderGGUF`，或 `.safetensors` → 内置 `UNETLoader`（`weight_dtype=default`）；原生路线不需要 GGUF 扩展包。格式不证明架构兼容，同架构的其他量化／精度版本仍须满足[模型兼容条件](docs/setup/COMFYUI.md#model-compatibility)并单独验证，不能直接替换成 SD、SDXL、Flux 或需要其他采样链的 Turbo。版本、已测试文件和测试边界见[兼容清单](config/compatibility.json)。
 
 ## 安装发行包
 

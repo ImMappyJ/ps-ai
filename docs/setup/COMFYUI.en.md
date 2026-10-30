@@ -4,17 +4,28 @@
 <h1 align="center">Configure ComfyUI from zero</h1>
 <p align="center"><a href="COMFYUI.md">简体中文</a> · <strong>English</strong> · <a href="../README.en.md">README</a></p>
 
-PS-AI connects directly to your ComfyUI. The plugin includes no backend or weights. This page covers preparation from zero on Windows with NVIDIA through the first result. Existing compatible installations can skip to [models](#model-files) or [connection](#connection). For cloud APIs, see [platform setup](PLATFORMS.en.md).
+PS-AI connects directly to your ComfyUI. The plugin includes no backend or weights. This page covers environment selection on Windows with NVIDIA through the first result. For cloud APIs, see [platform setup](PLATFORMS.en.md).
 
-Setup order: install the plugin → extract the backend → install GGUF nodes and dependencies → prepare a diffusion model, encoder and VAE → start and connect → generate, inspect the new layer and undo.
+> **Check your build first:** Published [0.5.2 experimental](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.2) supports GGUF diffusion weights only. **0.6.0 is an unreleased source candidate** adding native `.safetensors` loading. One INT8 combination has real inference/PNG and small Photoshop API evidence; see the [tested example](#native-tested). Installed panels, CCX/Portable and complete host acceptance remain pending. Changing settings cannot add this route to an older package.
+
+Setup order: choose an existing or new environment → choose a GGUF or native route supported by your build → prepare its nodes and three model roles → start and connect → generate, inspect the new layer and undo.
 
 <a id="beginner"></a>
 
 ## Before starting: what you need
 
+Make two choices before downloading:
+
+| Choice | Next step |
+| --- | --- |
+| Existing compatible ComfyUI | Keep the installation and weights, check [model compatibility](#model-compatibility), then [scan and connect](#connection); a running service can also use the [configuration tools](#environment-tools) |
+| New ComfyUI installation | Follow [backend preparation](#backend) for official Portable matching your hardware, then add only the nodes/models missing for your chosen route |
+| GGUF diffusion weights | Available in 0.5.2 and this source branch; requires `UnetLoaderGGUF` capable of recognizing Qwen 2.1; see the [GGUF node baseline](#gguf-nodes) |
+| Native Safetensors diffusion weights | Available in the unreleased 0.6.0 source candidate; built-in `UNETLoader` needs no GGUF extension package but still requires shared Qwen nodes, a matching encoder and RGBA VAE; see the [tested combination](#native-tested) |
+
 1. **Photoshop 27.0 or later.** The recorded host is Windows Photoshop 27.0. Follow the [README installation steps](../README.en.md#install-a-release-package) for the PS-AI CCX or Portable package, then open PS-AI from Photoshop's Plugins menu. PS-AI Portable is the plugin; ComfyUI Portable below is a separate inference backend.
-2. **A compatible NVIDIA GPU, working driver and enough disk space.** The reference machine has an RTX 5080 with 16 GiB VRAM and about 48 GB RAM; these are not established minimum requirements. The three files in the tested preset below total about 14.63 GB; check disk and VRAM requirements separately for your chosen combination. Also allow space for Portable, extracted copies, Python dependencies, download caches and generated images. See official instructions for other GPUs, CPU and macOS; this project has not completed equivalent validation there.
-3. **Match the plugin build to the tutorial.** This page covers [0.5.2 experimental](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.2), including the guided interface. Match the downloaded package, version/build identity in Settings and package notes; older packages may differ. A [source build](../README.en.md#build-from-source) also needs the corresponding version. A matching version does not establish clean-machine installation or complete host acceptance.
+2. **A compatible NVIDIA GPU, working driver and enough disk space.** The reference machine has an RTX 5080 with 16 GiB VRAM and about 48 GB RAM; these are not established minimum requirements. Tested examples total about 14.63 GB for GGUF or 17.28 GB for native INT8, sharing the same encoder/VAE. Assess disk, VRAM and operator support for other combinations. Allow additional space for Portable, extraction, dependencies, download caches and images. Other GPUs, CPU and macOS lack equivalent validation.
+3. **Match the plugin build to the tutorial.** The public download is 0.5.2; the new route belongs to the unreleased 0.6.0 source candidate. Check the version/build identity in Settings and package notes. Native loading needs a [source build containing this change](../README.en.md#build-from-source); no 0.6.0 installation package has completed acceptance. A matching version does not establish clean-machine or complete host acceptance.
 
 The default 8-bit path with a packaged plugin and local ComfyUI needs no Node.js, global Python, Git, ComfyUI-Manager or manual workflow import. Node.js 24+ is needed only for the [cloud platform relay](PLATFORMS.en.md) or source builds. Optional environment tools check or prepare configuration; they do not install the backend/dependencies or download models. These are instructions, not a record of a clean-machine installation or new host acceptance.
 
@@ -50,9 +61,15 @@ Get-Content .\ComfyUI\comfyui_version.py
 
 Record the version in the output. If it differs from `0.37.4`, treat the following node/model/connection checks as validation of a new combination, not proof of the recorded baseline. The beginner route uses a complete official GPU-matched Portable without replacing its core. A pinned core source does not pin the complete Python/PyTorch/CUDA runtime; clean-machine installation and new runtime combinations still await project acceptance. Existing venv installations must use their own Python, following the [manual installation guide](https://docs.comfy.org/installation/manual_install). Developers seeking an isolated pinned-core reproduction can use the [optional appendix](#pinned-core).
 
-### 1.2 Install the specified GGUF nodes and dependencies
+### 1.2 Prepare nodes and dependencies for your route
 
-This preset needs **[leejet/ComfyUI-GGUF](https://github.com/leejet/ComfyUI-GGUF)** at commit `373048b8403a7820620065210a691263d4da0a61`. Do not substitute the generic city96 package with the same name from another tutorial. Git and Manager are unnecessary: download the repository's [pinned node ZIP](https://github.com/leejet/ComfyUI-GGUF/archive/373048b8403a7820620065210a691263d4da0a61.zip).
+Both routes need core `CLIPLoader`, `VAELoader`, `TextEncodeQwenImage21`, `QwenImage21Cache`, sampling and image nodes; fields are listed under [adaptation contracts](#model-adaptation). **Native Safetensors** uses built-in `UNETLoader(unet_name, weight_dtype=default)`: skip the GGUF extension installation below. Missing shared Qwen nodes still block connection.
+
+<a id="gguf-nodes"></a>
+
+**Recorded GGUF baseline:** The tested combination uses **[leejet/ComfyUI-GGUF](https://github.com/leejet/ComfyUI-GGUF)** commit `373048b8403a7820620065210a691263d4da0a61`. This is a reproducible recommendation, not an author allowlist; other implementations need matching architecture detection, node fields and socket types. Its pinned [detection code](https://github.com/leejet/ComfyUI-GGUF/blob/373048b8403a7820620065210a691263d4da0a61/tools/convert.py#L163) includes the relevant support. **As of 2026-10-31**, upstream city96 lacks the corresponding Qwen-Image 2.1 detection and [PR #483](https://github.com/city96/ComfyUI-GGUF/pull/483) remains open. A matching node name does not prove these weights can load. Keep an existing implementation that meets the contract.
+
+For a new environment choosing this GGUF baseline, Git and Manager are unnecessary: download the [pinned node ZIP](https://github.com/leejet/ComfyUI-GGUF/archive/373048b8403a7820620065210a691263d4da0a61.zip):
 
 1. Extract it and rename `ComfyUI-GGUF-373048…` to `ComfyUI-GGUF`.
 2. Place it inside `ComfyUI_windows_portable/ComfyUI/custom_nodes/`. These files must be directly inside the node folder, without another nested folder. Do not retain multiple competing GGUF implementations.
@@ -82,7 +99,7 @@ If the window closes quickly, try the local address first: another healthy backe
 
 ## 2. Model files
 
-Prepare three roles: **diffusion model, vision/text encoder and VAE**. The files below are tested examples, not an exclusive filename list. Use ComfyUI's `models` directory or point `extra_model_paths.yaml` at existing weights. The plugin stores loader-relative filenames, never absolute weight paths.
+Prepare three roles: **diffusion model, vision/text encoder and VAE encoder/decoder**. These are component roles, not three fixed files or any three weights. The three files below form the tested GGUF example. Use ComfyUI's `models` directory or point `extra_model_paths.yaml` at existing weights. The plugin stores loader-relative filenames, never absolute weight paths.
 
 <a id="model-compatibility"></a>
 
@@ -92,17 +109,17 @@ Reuse existing components that meet these requirements with their actual filenam
 
 | Component | Requirements for replacement |
 | --- | --- |
-| Diffusion model | A `.gguf` with a compatible Qwen-Image 2.1 architecture, loadable by the leejet `UnetLoaderGGUF` above and compatible with the fixed `QwenImage21Cache` and `KSampler` semantics (`cfg=1`, `euler` / `simple`, `denoise=1`). A diffusion `.safetensors`, or Turbo/LoRA requiring other sampling settings, is not a direct replacement merely because its name contains “2.1.” |
+| Diffusion model | Compatible Qwen-Image 2.1 architecture and fixed `QwenImage21Cache` / `KSampler` semantics (`cfg=1`, `euler` / `simple`, `denoise=1`). A compatible `UnetLoaderGGUF` loads `.gguf`; this source branch adds `.safetensors` → `UNETLoader(weight_dtype=default)`. Format selects a loader, not a compatible architecture. Turbo/LoRA requiring other sampling settings is not a direct replacement merely because its name contains “2.1.” |
 | Vision / text encoder | Compatible Qwen3-VL **8B** `.safetensors` meeting `CLIPLoader(type=qwen_image, device=default)` and `TextEncodeQwenImage21` text, multi-image and conditioning contracts. The current branch does not accept 4B, Qwen2.5-VL or encoder GGUF as substitutes; see the [pinned core's encoder branch](https://github.com/Comfy-Org/ComfyUI/blob/8ff6dc384ba5c410266b40e137799e049459d4f2/comfy/sd.py#L1955). |
 | VAE | Compatible `.safetensors` loadable by `VAELoader`, matching Qwen 2.1 latent format, scaling and normalization. The [official configuration](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/vae/config.json) specifies 64 latent channels, 16× spatial scaling and four-channel RGBA input/output. Editing uses this same VAE in `TextEncodeQwenImage21` to encode the source and in `VAEDecode` to decode the result; an arbitrary image VAE is insufficient. |
 
-Upstream options to evaluate include [leejet's Qwen-Image 2.1 GGUF quantizations](https://huggingface.co/leejet/Qwen-Image-2.1-GGUF/tree/main) and [Comfy-Org's Qwen3-VL 8B encoders](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/tree/main/text_encoders) (BF16, INT8 convrot and W4A8). Upstream availability does not mean this project has tested each option. The current official 2.1 VAE file is the BF16 version shown below.
+Upstream options include [leejet's Qwen-Image 2.1 GGUF quantizations](https://huggingface.co/leejet/Qwen-Image-2.1-GGUF/tree/main) and [Comfy-Org's Qwen3-VL 8B encoders](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/tree/main/text_encoders) (BF16, INT8 convrot and W4A8). The tested combinations below use the INT8 convrot encoder and BF16 RGBA VAE. This does not establish BF16/W4A8 encoders or other precision variants as tested.
 
 In **Backend and models**, choose **Scan models**, manually select each role's complete loader-relative name, including subfolders, then connect. Custom names are accepted when they meet the path/extension rules. Scanning proves file visibility; Connect checks the selected names and node schemas/interfaces without inspecting weight internals. Then follow [first real generation](#first-generation) to validate text-to-image, local editing, actual layers/masks and one Undo for your combination. Check memory use, quality and licensing too. Changing an extension does not convert a model format.
 
-### Tested preset example
+### Tested GGUF preset example
 
-The following layout, downloads and hashes identify the recorded test combination. Custom components keep their actual names and search categories. For files placed directly under ComfyUI, the example layout is below. Do not put all three files in `checkpoints`:
+The following layout, downloads and hashes identify the GGUF combination. The [native INT8 example](#native-tested) also uses `diffusion_models` and reuses the encoder/VAE below. Three roles do not require downloading three fixed files. Custom components retain their actual names/search categories and need separate compatibility checks. Do not put every component in `checkpoints`:
 
 ```text
 ComfyUI/
@@ -147,6 +164,26 @@ Get-FileHash .\ComfyUI\models\text_encoders\qwen3vl_8b_int8_convrot.safetensors 
 Get-FileHash .\ComfyUI\models\vae\qwen_image_2.1_vae_bf16.safetensors -Algorithm SHA256
 ```
 
+<a id="native-tested"></a>
+
+### Tested native INT8 example: unreleased 0.6.0 source
+
+The combination tested on 2026-10-31 uses built-in `UNETLoader(weight_dtype=default)` with the diffusion file below and reuses the table's `qwen3vl_8b_int8_convrot.safetensors` encoder and `qwen_image_2.1_vae_bf16.safetensors` RGBA VAE. Total size is about **17.28 GB**, compared with **14.63 GB** for the GGUF example. Reuse identical encoders/VAE. BF16 diffusion weights are not required; this is not a recommendation for other INT8/FP8/BF16 variants.
+
+| Search category | Diffusion file and pinned source | Bytes | SHA256 |
+| --- | --- | ---: | --- |
+| `diffusion_models` | [qwen_image_2.1_int8_convrot.safetensors](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/aacf31a6d48e707f352ecba714cee0680da3479b/diffusion_models/qwen_image_2.1_int8_convrot.safetensors) | 7,256,783,064 | `cb74113cb03faecd79611b01fd7fd642f0aa60d6f0b95086abee214d75eaa57d` |
+
+The source is Comfy-Org/Qwen-Image-2.1 revision `aacf31a6d48e707f352ecba714cee0680da3479b`, licensed **qwen-research**; the [upstream research license](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE) still applies. The tested backend is based on ComfyUI 0.37.4 with preexisting local modifications, Python 3.13.15, PyTorch 2.14.0+cu130, comfy-kitchen 0.2.35 and comfy-aimdo 0.5.5, on an RTX 5080 with 16 GiB VRAM. This records an observed environment, not a clean installation reproducible from the upstream version alone, minimum hardware, or a performance promise. See the [compatibility manifest](../../config/compatibility.json) for pinned components and scope.
+
+| Evidence | Scope |
+| --- | --- |
+| Real backend tasks and PNGs | Text-to-image, source/reference editing and asset tasks completed PNG checks, plus GGUF comparisons and explicitly configured P0 8/16-bit runs; the manifest lists individual cases. Both routes completed inference on a public NASA astronaut photo, but raw results recolored the entire spacesuit and failed strict local instruction acceptance. Photoshop's final mask constraint is checked separately; completion does not guarantee quality or identity |
+| Photoshop 27.0.0 API | Real native outputs on owned 128×96 sRGB8/16 fixtures passed gray selection 64/128/255, protection, an independent editable layer mask, unchanged source/outside/protected pixels, one Undo, rollback after injected post-pixel cancellation, and stale-source rejection |
+| Source color and large-source API | Tagged and untagged pathless multilayer RGB8/16 sources passed current-composite capture with no file picker, original-state preservation, assumed-sRGB copies/session provenance, active-document isolation, Undo/profile baseline and closed-source rejection. One 4096×3072 RGB16 `edit-analysis` source passed native-mask/strip application, full-composite/source hashing and one Undo |
+| Recovery and cancellation | One real native task had its submission response deliberately lost after server acceptance, recovered as running under its original UUID, then cancelled atomically by ID; one inference POST, no global interrupt |
+| Pending | Installed panels, CCX/Portable, photographic application/general visual quality, other large-source/wide-gamut cases and complete upgrade/history flows; standalone API probes do not establish these |
+
 <a id="connection"></a>
 
 ## 3. Address and settings format
@@ -155,8 +192,8 @@ Get-FileHash .\ComfyUI\models\vae\qwen_image_2.1_vae_bf16.safetensors -Algorithm
 
 1. Open **Settings → Backend and models** and choose **ComfyUI**.
 2. For local Portable, enter `http://127.0.0.1:8188`, matching the browser check. Existing installations can use their actual HTTP(S) origin, such as `http://192.168.1.20:8188` or `https://comfy.example.com`.
-3. **Scan models**. Visible current choices are retained. Missing mappings are filled only by the exact preset filename or one unambiguous matching basename in a subdirectory. Review unresolved roles and choose custom files yourself; a different quantization is never guessed.
-4. Choose **Connect** to check selected filename visibility and the node template and save the configuration. After it reports **Connected**, try real generation. Connect does not load weights or prove architecture compatibility.
+3. **Scan models**. This source branch reads available GGUF and native diffusion-loader lists and preserves explicit choices; it never replaces a selected native route with the GGUF preset automatically. Unselected roles receive only exact preset or unique nested-basename suggestions. Choose unresolved custom files yourself; a different quantization is never guessed. Published 0.5.2 scans only the GGUF diffusion route.
+4. Review the read-only loading route, then choose **Connect** to check selected filenames, shared nodes, fields and socket types and save settings. The source candidate reports **Nodes checked**, with a warning that the selected weights' real inference remains unverified; external acceptance records are not automatically assigned to your files. Address/model/depth changes require a new check. An absent unused loader is acceptable; network failures and malformed schemas remain errors. Then validate your own real generation.
 
 Addresses cannot contain credentials, paths or query strings. A reverse proxy must forward HTTP and WebSocket at its root; HTTPS needs a valid certificate. API-key authentication is not integrated. Remote backends receive images, references and prompts; keep unauthenticated services private.
 
@@ -172,7 +209,7 @@ First launch walks through address testing, model scanning and environment check
 
 Check that diffusion model, encoder and VAE meet the [compatibility requirements](#model-compatibility), using the preset above or your own combination awaiting validation. For subfolders, retain the complete relative name returned by scanning. Keep output at **8-bit**, with one candidate at a time. Complete Setup checks and choose **Generate example**. This performs real inference, loads models, uses VRAM and writes backend inputs/outputs. Wait for this task to finish, inspect the new result layer and editable mask in the separate test document, then press `Ctrl+Z` once to check that application can be undone. Also generate one image in **Text-to-image** and inspect its output and backend errors; success in one mode does not validate the other.
 
-Next, try an ordinary edit on a saved RGB8 image you have permission to use. Make a small selection, choose the local object/material edit mode, read the source, enter a specific instruction (for example, “Change the selected cup to blue ceramic, preserving its shape and composition”) and generate one candidate. Keep the source open and unchanged while waiting. Inspect the result preview, then choose **Apply to layer**. Check the original layer remains, pixels outside the selection are unchanged, and edges/transparency look appropriate; undo once. If the public older build has no wizard, follow the [user guide](../usage/USER_GUIDE.en.md) for this small-selection test. Success means an actual candidate, new layer/mask and Undo, beyond a Connected label. These instructions do not certify your hardware, model quality or installation.
+Next, try an ordinary edit on a saved RGB8 image you have permission to use. Make a small selection, choose the local object/material edit mode, read the source, enter a specific instruction (for example, “Change the selected cup to blue ceramic, preserving its shape and composition”) and generate one candidate. Keep the source open and unchanged while waiting. Inspect the result preview, then choose **Apply to layer**. Check the original layer remains, pixels outside the selection are unchanged, and edges/transparency look appropriate; undo once. If the public older build has no wizard, follow the [user guide](../usage/USER_GUIDE.en.md) for this small-selection test. Success means an actual candidate, new layer/mask and Undo, beyond a status label. These instructions do not certify your hardware, model quality or installation.
 
 ### Color and safe editing
 
@@ -196,13 +233,16 @@ The node writes decoded VAE floats directly to tagged 16-bit RGB/RGBA PNG. Resiz
 
 The optional JSON field `"outputDepth": 16` travels with settings. Old settings default to 8-bit; historical jobs retain their own output template.
 
+<a id="model-adaptation"></a>
+
 ## 4. Adapting your own models
 
 This version supports **model mappings within the existing workflow**. Weights must use a compatible Qwen-Image 2.1 architecture and load correctly with these options:
 
 | Role | Node and field | Contract |
 | --- | --- | --- |
-| Diffusion model | `UnetLoaderGGUF.unet_name` | `.gguf`, compatible Qwen 2.1 structure and sampling chain |
+| Diffusion: GGUF | `UnetLoaderGGUF.unet_name` | `.gguf`, compatible Qwen 2.1 structure and fixed sampling chain; existing 0.5.2 route |
+| Diffusion: native | `UNETLoader.unet_name`, `weight_dtype=default` | `.safetensors`, new in unreleased 0.6.0 source; requires the same Qwen 2.1 structure and sampling chain. Only the [specified INT8 combination](#native-tested) has the stated test evidence |
 | Encoder | `CLIPLoader.clip_name` | `.safetensors`, `type=qwen_image`, `device=default` |
 | VAE | `VAELoader.vae_name` | `.safetensors`, matching Qwen 2.1 latent format, scaling and normalization; the same VAE encodes edit inputs and decodes outputs |
 | Encoding / references | `TextEncodeQwenImage21` | `prompt`, `negative_prompt`, `resolution`; `images.image_1` through `images.image_3`; accepts `vae` for image inputs |
@@ -219,7 +259,7 @@ Input / output rules:
 - The selection guide is a visual prompt, not a latent inpaint mask. Photoshop's final mask enforces selection and protection boundaries.
 - Results come from node `8`'s `images`. The plugin then applies optional transparency, alignment and color processing; raw browser workflow output can differ.
 
-SD, SDXL, Flux, other Qwen architectures and arbitrary workflow import are unsupported. They need separate templates, node checks, size / mask contracts and Photoshop round-trip validation. Changing a dropdown filename is insufficient.
+SD, SDXL, Flux, other Qwen architectures, Turbo/LoRA requiring another sampling chain and arbitrary workflow import are unsupported. They need separate templates, node checks, size / mask contracts and Photoshop round-trip validation. Changing a dropdown filename is insufficient. Settings retain `schemaVersion: 1` and `models.unet` / `models.clip` / `models.vae`, with no new loader-selector field. The extension determines the route, without automatic switching, retry or file conversion.
 
 Background/scene and blending omit the ComfyUI grayscale guide; Photoshop still applies the saved mask. Relighting reuses these models with no extra download. Image-context assets have failed visual acceptance in tested samples; inspect source residue, guide marks, transparency and edges. See the [user guide](../usage/USER_GUIDE.en.md).
 
@@ -232,7 +272,7 @@ Proxies and custom servers must preserve these semantics:
 | Endpoint | Requirement |
 | --- | --- |
 | `GET /system_stats` | System information |
-| `GET /object_info/{class}` | Node schemas and model dropdowns |
+| `GET /object_info/{class}` | Node schemas and matching loader inventories; this source branch scans both diffusion routes and validates the selected route plus shared nodes on connection |
 | `POST /upload/image` | Multipart PNG; returns `name`, `subfolder` |
 | `POST /prompt` | Accepts caller UUID `prompt_id`, `client_id`, `prompt`; returns the same `prompt_id` |
 | `GET /history/{id}`, `GET /queue` | Task-specific terminal state, node `8` output and queue state |
@@ -293,7 +333,7 @@ Get-Content .\ComfyUI\comfyui_version.py
 .\python_embeded\python.exe -s -m pip install -r .\ComfyUI\requirements.txt
 ```
 
-The version should be `0.37.4`; the ZIP URL identifies the complete commit. Then install this page's pinned leejet nodes and their requirements. Runtime/dependency combinations, node schemas, task protocol and real generation still require individual checks. Retain errors and the original installation if a check fails; do not bypass them by blindly upgrading or replacing system Python.
+The version should be `0.37.4`; the ZIP URL identifies the complete commit. Install this page's pinned leejet nodes and requirements only when choosing the GGUF baseline; the native route skips the GGUF extension. Runtime/dependency combinations, node schemas, task protocol and real generation still require individual checks. Retain errors and the original installation if a check fails; do not bypass them by blindly upgrading or replacing system Python.
 
 </details>
 
@@ -305,7 +345,8 @@ The version should be `0.37.4`; the ZIP URL identifies the complete commit. Then
 | --- | --- |
 | Cannot find `python.exe` / requirements | PowerShell must be at the Portable outer folder. Check `python_embeded/python.exe` and the inner `ComfyUI`. If your package uses another directory name, use its actual path rather than system pip. |
 | `No module named gguf` / `sentencepiece` / `protobuf`, `IMPORT FAILED` | Rerun the GGUF requirements command with this backend's Python and inspect the first installation/import error. Check for nested node folders, then restart normally. |
-| Missing `UnetLoaderGGUF` / `TextEncodeQwenImage21` / `QwenImage21Cache` | Compare the core and leejet pins. The generic same-name GGUF package, or folder copying without dependencies, is insufficient for this preset. |
+| Missing selected loader / shared Qwen nodes | GGUF needs compatible `UnetLoaderGGUF`; native needs built-in `UNETLoader` and `weight_dtype=default`, without adding the GGUF package. Both need shared `TextEncodeQwenImage21` / `QwenImage21Cache` and other required nodes. |
+| `Unknown model architecture!` | Check the actual weights and loader's Qwen 2.1 detection; see the dated [GGUF baseline](#gguf-nodes). Renaming an extension, automatically switching routes or resubmitting does not fix compatibility. |
 | Window closes / port occupied / browser does not open | Visit `http://127.0.0.1:8188` manually and reuse a healthy service. Otherwise launch from PowerShell and retain the error; avoid duplicate instances. |
 | CUDA / driver errors or out of memory | Compare the official Portable GPU build and driver and inspect backend logs. Reduce candidates/size and close other GPU workloads. The 16 GiB reference machine is not a guarantee; avoid upgrading every dependency blindly. |
 | Missing `PS_AISavePNG16` after selecting 16-bit | Use default 8-bit for the first test, or separately follow [optional 16-bit output](#output-depth). This node is not required by the default path. |

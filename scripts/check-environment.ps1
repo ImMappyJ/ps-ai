@@ -33,9 +33,10 @@ try {
     $settings.baseUrl=$builder.Uri.GetLeftPart([UriPartial]::Authority)
     foreach ($model in $preset.models) {
         $name = $settings.models.($model.key)
-        $extension = if ($model.key -eq 'unet') { '.gguf' } else { '.safetensors' }
-        if ($name -isnot [string] -or $name -ne $name.Trim() -or $name -match '^[\\/]|^[A-Za-z]:|[\x00-\x1f]' -or @($name -split '[\\/]' | Where-Object { $_ -in @('', '.', '..') }).Count -gt 0 -or -not $name.ToLowerInvariant().EndsWith($extension)) { throw "Invalid relative model name: $($model.key)" }
+        $extensions = if ($model.key -eq 'unet') { @('.gguf','.safetensors') } else { @('.safetensors') }
+        if ($name -isnot [string] -or $name -ne $name.Trim() -or $name -match '^[\\/]|[\x00-\x1f:*?"<>|]' -or @($name -split '[\\/]' | Where-Object { $_ -in @('', '.', '..') }).Count -gt 0 -or [IO.Path]::GetExtension($name).ToLowerInvariant() -notin $extensions) { throw "Invalid relative model name: $($model.key)" }
     }
+    $diffusionLoader=if ([IO.Path]::GetExtension($settings.models.unet) -ieq '.gguf') { 'UnetLoaderGGUF' } else { 'UNETLoader' }
     Add-Check 'settings' 'pass' 'Relative model names and HTTP(S) origin are valid.'
 } catch { Add-Check 'settings' 'fail' $_.Exception.Message; $settings=$null }
 if ($settings) {
@@ -61,16 +62,21 @@ if ($settings) {
         try {
             $stats = Invoke-RestMethod -Uri ($settings.baseUrl + '/system_stats') -TimeoutSec 15
             if ($stats.system.comfyui_version -eq $preset.backend.version) { Add-Check 'backend-version' 'pass' $stats.system.comfyui_version } else { Add-Check 'backend-version' 'warn' "Reported $($stats.system.comfyui_version); tested $($preset.backend.version)." }
-            $requiredNodes=@($preset.nodes)
+            $requiredNodes=@($preset.nodes | ForEach-Object { if ($_ -eq 'UnetLoaderGGUF') { $diffusionLoader } else { $_ } })
             if ($settings.outputDepth -eq 16) { $requiredNodes+=@('PS_AISavePNG16') }
             foreach ($node in $requiredNodes) {
                 $info = Invoke-RestMethod -Uri ($settings.baseUrl + '/object_info/' + $node) -TimeoutSec 15
                 if (-not $info.$node) { Add-Check "node:$node" 'fail' 'Missing required node.'; continue }
                 Add-Check "node:$node" 'pass' 'Present.'
-                $mapping = switch ($node) { 'UnetLoaderGGUF' { @('unet','unet_name') } 'CLIPLoader' { @('clip','clip_name') } 'VAELoader' { @('vae','vae_name') } }
+                $mapping = switch ($node) { 'UnetLoaderGGUF' { @('unet','unet_name') } 'UNETLoader' { @('unet','unet_name') } 'CLIPLoader' { @('clip','clip_name') } 'VAELoader' { @('vae','vae_name') } }
                 if ($mapping) {
-                    $files = $info.$node.input.required.($mapping[1])[0]
-                    if ($files -contains $settings.models.($mapping[0])) { Add-Check "visible:$($mapping[0])" 'pass' 'Configured filename is visible to loader.' } else { Add-Check "visible:$($mapping[0])" 'fail' 'Configured filename not visible; inspect search paths and restart using your normal procedure.' }
+                    $definition=$info.$node.input.required.($mapping[1])
+                    if ($definition -isnot [array] -or $definition.Count -eq 0 -or $definition[0] -isnot [array] -or @($definition[0] | Where-Object { $_ -isnot [string] }).Count) { Add-Check "visible:$($mapping[0])" 'fail' 'Malformed loader model inventory.' }
+                    elseif ($definition[0] -ccontains $settings.models.($mapping[0])) { Add-Check "visible:$($mapping[0])" 'pass' 'Configured filename is visible to selected loader.' } else { Add-Check "visible:$($mapping[0])" 'fail' 'Configured filename not visible; inspect search paths and restart using your normal procedure.' }
+                }
+                if ($node -eq 'UNETLoader') {
+                    $dtype=$info.$node.input.required.weight_dtype
+                    if ($dtype -is [array] -and $dtype.Count -gt 0 -and $dtype[0] -is [array] -and $dtype[0] -ccontains 'default') { Add-Check 'unet-weight-dtype' 'pass' 'UNETLoader supports weight_dtype default.' } else { Add-Check 'unet-weight-dtype' 'fail' 'UNETLoader must support weight_dtype default.' }
                 }
                 if ($node -eq 'TextEncodeQwenImage21') {
                     $names = $info.$node.input.required.images[1].template.names
@@ -94,13 +100,15 @@ if ($ComfyRoot) {
         if ($revision -eq $preset.backend.commit) { Add-Check 'backend-commit' 'pass' $revision } else { Add-Check 'backend-commit' 'warn' "Different commit: $revision" }
         $server = Get-Content -LiteralPath (Join-Path $ComfyRoot 'server.py') -Raw
         if ($server.Contains('/api/jobs/{job_id}/cancel')) { Add-Check 'cancel-route-source' 'pass' 'ID-specific route present; no requests submitted or cancelled.' } else { Add-Check 'cancel-route-source' 'fail' 'Required ID-specific cancel route absent.' }
-        $extensions = @(Get-ChildItem -LiteralPath (Join-Path $ComfyRoot 'custom_nodes') -Directory | Where-Object { $_.Name -match 'GGUF' })
-        $found=$false
-        foreach ($extension in $extensions) {
-            $revision = & git -C $extension.FullName rev-parse HEAD 2>$null
-            if ($LASTEXITCODE -eq 0 -and $revision -eq $preset.gguf.commit) { $found=$true }
+        if ($settings -and $diffusionLoader -eq 'UnetLoaderGGUF') {
+            $extensions = @(Get-ChildItem -LiteralPath (Join-Path $ComfyRoot 'custom_nodes') -Directory | Where-Object { $_.Name -match 'GGUF' })
+            $found=$false
+            foreach ($extension in $extensions) {
+                $revision = & git -C $extension.FullName rev-parse HEAD 2>$null
+                if ($LASTEXITCODE -eq 0 -and $revision -eq $preset.gguf.commit) { $found=$true }
+            }
+            if ($found) { Add-Check 'gguf-commit' 'pass' $preset.gguf.commit } else { Add-Check 'gguf-commit' 'warn' 'Recorded GGUF baseline commit not identified; compatible alternatives require capability validation. Do not replace an existing extension automatically.' }
         }
-        if ($found) { Add-Check 'gguf-commit' 'pass' $preset.gguf.commit } else { Add-Check 'gguf-commit' 'warn' 'Tested leejet GGUF commit not identified; do not replace an existing extension automatically.' }
     } catch { Add-Check 'backend-source' 'warn' $_.Exception.Message }
 } else { Add-Check 'backend-source' 'warn' 'No ComfyRoot supplied; caller-assigned UUID/cancel contract requires tested source version.' }
 $passed = @($checks | Where-Object status -eq 'fail').Count -eq 0
