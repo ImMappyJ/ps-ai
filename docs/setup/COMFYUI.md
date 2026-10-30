@@ -6,14 +6,14 @@
 
 PS-AI 直接连接你的 ComfyUI，插件不附带后端或模型。本页从 Windows + NVIDIA 的全新准备讲到第一张结果；已有兼容安装可直接跳到[模型文件](#model-files)或[连接](#connection)。云端 API 请看[平台配置](PLATFORMS.md)。
 
-起步顺序：安装插件 → 解压后端 → 安装 GGUF 节点及依赖 → 放置三个模型 → 启动并连接 → 真实生成、检查新图层并撤销。
+起步顺序：安装插件 → 解压后端 → 安装 GGUF 节点及依赖 → 配齐生成模型、编码器和 VAE → 启动并连接 → 真实生成、检查新图层并撤销。
 
 <a id="beginner"></a>
 
 ## 开始前：确认要准备什么
 
 1. **Photoshop 27.0 或更高版本。** 本项目记录的宿主是 Windows Photoshop 27.0。先按[首页安装说明](../../README.md#安装发行包)安装 PS-AI 的 CCX 或 Portable 包，在 Photoshop“增效工具”中打开 PS-AI。两种 Portable 是不同东西：PS-AI Portable 是插件，下面的 ComfyUI Portable 是推理后端。
-2. **一块兼容的 NVIDIA 显卡、可用驱动及足够空间。** 本项目参考机器为 RTX 5080 16 GiB 显存、约 48 GB 内存；这不是最低配置。三个模型合计约 14.63 GB，另留 Portable、解压副本、Python 依赖、下载缓存与生成图片的空间。其他显卡、CPU、macOS 路径请看官方说明，本项目没有完成相同验证。
+2. **一块兼容的 NVIDIA 显卡、可用驱动及足够空间。** 本项目参考机器为 RTX 5080 16 GiB 显存、约 48 GB 内存；这不是最低配置。下方已测试预设的三个文件合计约 14.63 GB，自选组合的磁盘和显存需求另行核对；另留 Portable、解压副本、Python 依赖、下载缓存与生成图片的空间。其他显卡、CPU、macOS 路径请看官方说明，本项目没有完成相同验证。
 3. **匹配插件版本与教程。** 本页对应 [0.5.2 实验版](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.2)，包含引导界面。核对下载包、“设置”中的版本／构建标识及包附带说明；旧包的界面与行为可能不同。[源码构建](../../README.md#从源码构建)也需使用对应版本。版本匹配不代表已通过全新机器安装或完整宿主验收。
 
 本地已打包插件 + ComfyUI 的默认 8 位路径不需要 Node.js、全局 Python、Git、ComfyUI-Manager 或手动导入工作流。Node.js 24+ 只在[云平台本机适配服务](PLATFORMS.md)或源码构建时需要。环境工具包是可选检查／配置工具，不会替你安装后端、依赖或下载模型。本页是操作说明，不是一次全新机器安装或新版本宿主验收记录。
@@ -74,7 +74,7 @@ ComfyUI/custom_nodes/ComfyUI-GGUF/
 
 ### 1.3 启动并检查服务
 
-放好下面的[三个模型](#model-files)后，双击外层 `run_nvidia_gpu.bat`，或在上述 PowerShell 运行 `.\run_nvidia_gpu.bat`。等待控制台显示服务地址，手动在浏览器打开 [http://127.0.0.1:8188](http://127.0.0.1:8188)。使用期间让后端控制台保持打开；关闭它会停止服务。首次加载模型通常比后续任务慢，浏览器页面打开并不表示模型已加载成功。
+配齐下面的[三个模型组件](#model-files)后，双击外层 `run_nvidia_gpu.bat`，或在上述 PowerShell 运行 `.\run_nvidia_gpu.bat`。等待控制台显示服务地址，手动在浏览器打开 [http://127.0.0.1:8188](http://127.0.0.1:8188)。使用期间让后端控制台保持打开；关闭它会停止服务。首次加载模型通常比后续任务慢，浏览器页面打开并不表示模型已加载成功。
 
 若窗口很快退出，先试本机地址：可能已有后端占用该端口并正常服务。打不开时，从 PowerShell 启动以保留错误，并检查 GPU／依赖和节点导入日志；不要反复启动多个实例或盲目点 update。能打开页面后，再去 Photoshop 扫描模型和连接。无需在 ComfyUI 浏览器里手工拼节点，PS-AI 会提交自己的固定 API 图。
 
@@ -82,9 +82,27 @@ ComfyUI/custom_nodes/ComfyUI-GGUF/
 
 ## 2. 模型放在哪里
 
-预设使用以下三个文件。可以使用 ComfyUI 自己的 `models` 目录，也可以在 `extra_model_paths.yaml` 配置已有目录。插件只保存加载器返回的相对文件名，不读取权重的绝对路径。
+需要配齐 **生成模型、视觉／文本编码器、VAE** 三个角色；下方文件是已测试示例，不是只允许这三个文件名。可以使用 ComfyUI 自己的 `models` 目录，也可以在 `extra_model_paths.yaml` 配置已有目录。插件只保存加载器返回的相对文件名，不读取权重的绝对路径。
 
-如果直接放在 ComfyUI 目录中，结构如下。不要把三个文件都放进 `checkpoints`：
+<a id="model-compatibility"></a>
+
+### 自选模型的兼容条件
+
+已有符合下列条件的组件可以复用，无需为匹配示例文件名重新下载。其他量化／精度版本是否可用取决于实际权重、加载器和节点版本；这里不保证未测试组合兼容。
+
+| 组件 | 替换时必须保持的条件 |
+| --- | --- |
+| 生成模型 | Qwen-Image 2.1 兼容架构的 `.gguf`，能由上述 leejet `UnetLoaderGGUF` 加载，并适配固定的 `QwenImage21Cache` 与 `KSampler`（`cfg=1`、`euler`／`simple`、`denoise=1`）语义。主模型 `.safetensors`、需要其他采样设置的 Turbo／LoRA 不能只凭“2.1”名称直接替换。 |
+| 视觉／文本编码器 | Qwen3-VL **8B** 的兼容 `.safetensors`，满足 `CLIPLoader(type=qwen_image, device=default)` 和 `TextEncodeQwenImage21` 的文字、多图及条件输出约定。当前分支不能以 4B、Qwen2.5-VL 或编码器 GGUF 替代，见[固定核心的编码器分支](https://github.com/Comfy-Org/ComfyUI/blob/8ff6dc384ba5c410266b40e137799e049459d4f2/comfy/sd.py#L1955)。 |
+| VAE | `VAELoader` 可加载的兼容 `.safetensors`，匹配 Qwen 2.1 的 latent 格式、缩放与归一化；[官方配置](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/vae/config.json)为 64 latent 通道、16 倍空间缩放、RGBA 四通道输入／输出。编辑时同一 VAE 由 `TextEncodeQwenImage21` 编码来源图，再由 `VAEDecode` 解码结果；不能换成任意图像 VAE。 |
+
+可评估的上游选项包括 [leejet 的 Qwen-Image 2.1 GGUF 量化](https://huggingface.co/leejet/Qwen-Image-2.1-GGUF/tree/main)和 [Comfy-Org 的 Qwen3-VL 8B 编码器](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/tree/main/text_encoders)（BF16、INT8 convrot、W4A8）。这些是上游提供的候选，不代表本项目已逐一实测；当前官方 2.1 VAE 文件为下方 BF16 版本。
+
+在“模型与连接”点击“扫描模型”，为每个角色手动选择加载器返回的完整相对名（含子目录），再连接。插件接受符合路径／扩展名规则的自选名称；扫描只证明文件可见，连接只检查所选名称和节点 schema／接口，不读取权重内部结构。之后按[首次真实生成](#first-generation)分别检查文字生图、局部编辑、实际图层／蒙版和一步撤销，才能验证自己的组合；同时核对显存、效果和许可。不要通过修改扩展名冒充另一种模型格式。
+
+### 已测试预设示例
+
+以下目录、下载表与哈希对应记录中的测试组合。自选组件保留自己的实际名称和搜索类别。如果直接放在 ComfyUI 目录中，示例结构如下；不要把三个文件都放进 `checkpoints`：
 
 ```text
 ComfyUI/
@@ -111,9 +129,9 @@ ComfyUI/
 
 这是测试组合，不代表推荐所有用途。生成模型是第三方量化版本，使用前阅读它的模型卡以及上游 [Qwen 许可](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE)：当前许可限定非商业研究／评估，商业用途需另行授权。权重不随插件分发。
 
-精确字节数、固定来源版本和 SHA256 位于 [compatibility.json](../../config/compatibility.json)。已有同一文件不必重新下载。环境检查脚本会校验预设模型的文件大小和哈希，自选模型则标为“需要自行验证”。
+精确字节数、固定来源版本和 SHA256 位于 [compatibility.json](../../config/compatibility.json)。已有同一文件不必重新下载。提供 `-ModelRoot` 且配置中的完整相对名与预设一致时，环境检查脚本校验预设大小和哈希，不符会报错；其他自选名称标为“需要自行验证”（`warn`），不会只因名称不同而拒绝。警告意味着尚未验证，不是模型兼容证明。
 
-点击表中的固定版本链接，等待下载完成后再移动文件；不要把下载中的临时文件或网页 HTML 改成模型扩展名。模型文件本身不需要解压，也不要改名。精确值如下（GB 为十进制近似值）：
+若采用这套预设，点击表中的固定版本链接，等待下载完成后再移动文件；不要把下载中的临时文件或网页 HTML 改成模型扩展名。模型文件本身不需要解压；保留下载文件名方便核对来源与哈希。精确值如下（GB 为十进制近似值）：
 
 | 文件 | 字节数 | SHA256 |
 | --- | ---: | --- |
@@ -138,7 +156,7 @@ Get-FileHash .\ComfyUI\models\vae\qwen_image_2.1_vae_bf16.safetensors -Algorithm
 1. 打开“设置 → 模型与连接”，选择 **ComfyUI**。
 2. 本机 Portable 填 `http://127.0.0.1:8188`，与浏览器测试一致；已有安装也可使用它实际监听的 HTTP(S) 源地址，例如 `http://192.168.1.20:8188` 或 `https://comfy.example.com`。
 3. 点“扫描模型”。仍可见的当前选择会保留；缺失的映射仅按预设完整文件名或子目录内唯一同名文件补全。检查未解决的类别，再手动选择自定义文件；不会猜测另一个量化版本。
-4. 点“连接”，检查所选模型和节点模板后保存配置；显示“已连接”后再试生成一张。
+4. 点“连接”，检查所选文件名可见性和节点模板后保存配置；显示“已连接”后再试真实生成。连接不会加载权重或证明架构兼容。
 
 地址不能带账号密码、路径或查询参数。反向代理需在根路径转发 HTTP 和 WebSocket；HTTPS 需有效证书。插件没有集成 API Key 认证。远端后端会收到图片、参考图和提示词，请勿公开无认证的服务。
 
@@ -152,7 +170,7 @@ Get-FileHash .\ComfyUI\models\vae\qwen_image_2.1_vae_bf16.safetensors -Algorithm
 
 ### 第一次真实出图与回填
 
-先确认生成模型／编码器／VAE 三个角色分别是上表对应文件；若放在子目录，保留扫描返回的相对名。保持输出位深 **8 位**、一次一个候选。先在“配置”中完成检查，再点“运行生成示例”；这是实际推理，会加载模型、占用显存并写入后端输入／输出，不是连接演示。等待本任务完成，检查独立测试文档中的结果新图层和可编辑蒙版，再按一次 `Ctrl+Z`，确认应用可撤回。
+先确认生成模型／编码器／VAE 三个角色满足[兼容条件](#model-compatibility)，可以使用上表预设或自己的待验证组合；若放在子目录，保留扫描返回的完整相对名。保持输出位深 **8 位**、一次一个候选。先在“配置”中完成检查，再点“运行生成示例”；这是实际推理，会加载模型、占用显存并写入后端输入／输出，不是连接演示。等待本任务完成，检查独立测试文档中的结果新图层和可编辑蒙版，再按一次 `Ctrl+Z`，确认应用可撤回。另在“文字生图”生成一张，检查输出和后端错误；一种模式成功不能替代另一种模式的验证。
 
 随后用一张自己有权使用、已保存的 RGB8 图片做普通编辑：画一个小选区，选“局部物体／材质修改”，读取来源，输入明确提示（例如“把选中的杯子改成蓝色陶瓷，保持形状和构图”），生成一个候选。等待期间保留来源文档且不要修改它；在结果里检查预览，再点“应用到图层”。确认原图层仍在、选区外未被改动、边缘和透明度合理，然后撤销一次。公开旧版若没有向导，直接按[使用指南](../usage/USER_GUIDE.md)完成这次小选区测试。成功标准是实际候选与新图层／蒙版／撤销，不只是“已连接”；本说明不宣称你的硬件、模型输出或安装已通过验收。
 
@@ -178,8 +196,6 @@ Get-FileHash .\ComfyUI\models\vae\qwen_image_2.1_vae_bf16.safetensors -Algorithm
 
 配置 JSON 的可选字段 `"outputDepth": 16` 可随地址和模型映射一起导入、导出。旧配置不含此字段时使用 8 位。旧任务按各自原模板恢复。
 
-<a id="model-compatibility"></a>
-
 ## 4. 自己的模型怎样适配
 
 这版开放的是 **当前工作流内的模型映射**。模型必须属于兼容的 Qwen-Image 2.1 架构，并能被这些加载器以这些选项正确加载：
@@ -188,7 +204,7 @@ Get-FileHash .\ComfyUI\models\vae\qwen_image_2.1_vae_bf16.safetensors -Algorithm
 | --- | --- | --- |
 | 生成模型 | `UnetLoaderGGUF.unet_name` | `.gguf`，兼容 Qwen 2.1 的模型结构和采样链 |
 | 编码器 | `CLIPLoader.clip_name` | `.safetensors`，`type=qwen_image`，`device=default` |
-| VAE | `VAELoader.vae_name` | `.safetensors`，与模型 latent 格式匹配 |
+| VAE | `VAELoader.vae_name` | `.safetensors`，与 Qwen 2.1 latent 格式、缩放和归一化匹配；编辑输入编码与输出解码使用同一 VAE |
 | 编码／参考 | `TextEncodeQwenImage21` | `prompt`、`negative_prompt`、`resolution`；多图字段 `images.image_1` 至 `images.image_3`，有图时接受 `vae` |
 | 模型包装 | `QwenImage21Cache` | `model`、`device=auto`、`dtype=default` |
 | 输出 | `KSampler → VAEDecode → SaveImage / PS_AISavePNG16` | `euler`／`simple`，`cfg=1`，`denoise=1`，输出节点 ID 固定为 `8` |

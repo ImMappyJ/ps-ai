@@ -14,7 +14,7 @@ This composed overview pairs a native Photoshop Create panel captured during rel
 
 > **Version note:** This page covers **0.5.2 experimental**, including the guided interface, automatic color working copies and Blend lighting mode. Match the downloaded package with the version/build identity in Settings; older packages may differ. Full host regression and clean-machine installation for this version remain unvalidated. Cloud adapters have offline coverage; generation with real API keys remains unvalidated.
 
-First local setup: install the plugin → extract ComfyUI Portable → install the specified GGUF nodes and dependencies → place three models → start and connect → generate one image, inspect its layer and undo. Follow [Configure ComfyUI from zero](setup/COMFYUI.en.md#beginner).
+First local setup: install the plugin → extract ComfyUI Portable → install the specified GGUF nodes and dependencies → prepare a diffusion model, encoder and VAE → start and connect → generate one image, inspect its layer and undo. Follow [Configure ComfyUI from zero](setup/COMFYUI.en.md#beginner).
 
 ## Your first edit in three steps
 
@@ -33,7 +33,7 @@ Create follows **Choose a task → Source and range → Generate and output**; e
 | Test hardware | RTX 5080 with 16 GiB VRAM and about 48 GB RAM; minimum requirements are not established |
 | Cloud generation | Your key and model access for Nano Banana (Gemini), GPT Image (OpenAI Images) or BaiLian; automatic relay startup needs Windows, Node.js 24+ and host permission |
 
-The local workflow is specific to Qwen 2.1. SD, SDXL and Flux are not interchangeable replacements. See the [compatibility manifest](../config/compatibility.json) for versions, files and validation scope.
+The local workflow is specific to Qwen 2.1. Diffusion model, encoder and VAE are three component roles; the example filenames are not an allowlist. Other quantizations or precision variants within the same architecture must meet the [model compatibility requirements](setup/COMFYUI.en.md#model-compatibility) and be validated separately. SD, SDXL and Flux are not interchangeable replacements. See the [compatibility manifest](../config/compatibility.json) for versions, tested files and validation scope.
 
 ## Install a release package
 
