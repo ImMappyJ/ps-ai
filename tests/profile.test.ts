@@ -32,3 +32,20 @@ test('配置的三个模型字段进入固定图，不覆盖参考图或工作�
   assert.equal(g['1'].inputs.unet_name,models.unet);assert.equal(g['2'].inputs.clip_name,models.clip);assert.equal(g['3'].inputs.vae_name,models.vae);
   assert.deepEqual(g['4'].inputs['images.image_1'],['12',0]);assert.equal(g['4'].inputs.resolution,0);
 });
+
+test('non-preset component filenames survive settings and enter both fixed graphs without implying weight compatibility',()=>{
+  const custom={unet:'custom/qwen-image-2.1-Q5_K_M.gguf',clip:'custom/qwen21-compatible-encoder.safetensors',vae:'custom/qwen21-compatible-vae.safetensors'};
+  const settings=validateSettings(JSON.parse(JSON.stringify({...defaultSettings(),models:custom})));
+  assert.deepEqual(settings.models,custom);
+  const restored=switchConnection(switchConnection(settings,'openai'),'comfyui');
+  assert.deepEqual(restored.models,custom);
+  for(const source of [undefined,'original.png']){
+    const graph=buildGraph({requestId:'custom-models',prompt:'blue ceramic cup',seed:42,steps:25,resolution:768,source,models:restored.models});
+    assert.deepEqual(graph['1'],{class_type:'UnetLoaderGGUF',inputs:{unet_name:custom.unet}});
+    assert.equal(graph['2'].inputs.clip_name,custom.clip);assert.equal(graph['2'].inputs.type,'qwen_image');
+    assert.equal(graph['3'].inputs.vae_name,custom.vae);assert.equal(graph['4'].class_type,'TextEncodeQwenImage21');
+    assert.equal(graph['5'].class_type,'QwenImage21Cache');assert.deepEqual(graph['7'].inputs.vae,['3',0]);
+    assert.equal(graph['6'].inputs.cfg,1);assert.equal(graph['6'].inputs.sampler_name,'euler');assert.equal(graph['6'].inputs.scheduler,'simple');
+    if(source)assert.deepEqual(graph['4'].inputs.vae,['3',0]);else assert.equal(graph['4'].inputs.vae,undefined);
+  }
+});

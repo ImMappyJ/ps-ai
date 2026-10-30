@@ -98,6 +98,18 @@
     "LoadImage",
     "JoinImageWithAlpha"
   ],
+  "modelSelection": {
+    "scope": "The fixed Qwen-Image 2.1 GGUF graph, not arbitrary ComfyUI models or imported workflows.",
+    "testedFiles": "The models array records one tested starter combination and its exact file identities; it is not an exclusive filename allowlist.",
+    "roles": {
+      "unet": "A compatible Qwen-Image 2.1 GGUF loaded by UnetLoaderGGUF and usable with QwenImage21Cache plus cfg=1, Euler/simple sampling. Other quantizations or fine-tunes require compatible architecture, runtime and sampling behavior.",
+      "clip": "A matching Qwen3-VL-8B vision/text encoder in safetensors format supported by CLIPLoader type=qwen_image and TextEncodeQwenImage21; matching extension or family name alone is insufficient.",
+      "vae": "A matching Qwen-Image 2.1 VAE in safetensors format with 64 latent channels, 16x spatial scaling, RGBA input/output and compatible latent normalization and tensor layout. Editing uses this VAE to encode source/reference images as well as decode outputs; arbitrary VAEs are not interchangeable."
+    },
+    "selection": "Scanning preserves visible explicit choices for all three roles. Only exact or unique nested preset matches are suggested automatically; choose compatible alternatives manually using their full loader-relative filenames.",
+    "checks": "Settings validate paths and formats; connection checks loader visibility, node fields and socket types, not weight tensors. Preset size/SHA256 checks prove tested file identity, not an architecture allowlist. Non-preset files receive an unverified warning rather than a filename rejection.",
+    "acceptance": "Alternative weights need upstream pairing/license review, real text-to-image and source/reference editing, output color/alpha inspection and Photoshop apply/undo checks. Filename/graph regression tests do not establish alternative-model inference or native acceptance."
+  },
   "models": [
     {
       "key": "unet",

@@ -6,14 +6,14 @@
 
 PS-AI connects directly to your ComfyUI. The plugin includes no backend or weights. This page covers preparation from zero on Windows with NVIDIA through the first result. Existing compatible installations can skip to [models](#model-files) or [connection](#connection). For cloud APIs, see [platform setup](PLATFORMS.en.md).
 
-Setup order: install the plugin → extract the backend → install GGUF nodes and dependencies → place three models → start and connect → generate, inspect the new layer and undo.
+Setup order: install the plugin → extract the backend → install GGUF nodes and dependencies → prepare a diffusion model, encoder and VAE → start and connect → generate, inspect the new layer and undo.
 
 <a id="beginner"></a>
 
 ## Before starting: what you need
 
 1. **Photoshop 27.0 or later.** The recorded host is Windows Photoshop 27.0. Follow the [README installation steps](../README.en.md#install-a-release-package) for the PS-AI CCX or Portable package, then open PS-AI from Photoshop's Plugins menu. PS-AI Portable is the plugin; ComfyUI Portable below is a separate inference backend.
-2. **A compatible NVIDIA GPU, working driver and enough disk space.** The reference machine has an RTX 5080 with 16 GiB VRAM and about 48 GB RAM; these are not established minimum requirements. The three models total about 14.63 GB. Also allow space for Portable, extracted copies, Python dependencies, download caches and generated images. See official instructions for other GPUs, CPU and macOS; this project has not completed equivalent validation there.
+2. **A compatible NVIDIA GPU, working driver and enough disk space.** The reference machine has an RTX 5080 with 16 GiB VRAM and about 48 GB RAM; these are not established minimum requirements. The three files in the tested preset below total about 14.63 GB; check disk and VRAM requirements separately for your chosen combination. Also allow space for Portable, extracted copies, Python dependencies, download caches and generated images. See official instructions for other GPUs, CPU and macOS; this project has not completed equivalent validation there.
 3. **Match the plugin build to the tutorial.** This page covers [0.5.2 experimental](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.2), including the guided interface. Match the downloaded package, version/build identity in Settings and package notes; older packages may differ. A [source build](../README.en.md#build-from-source) also needs the corresponding version. A matching version does not establish clean-machine installation or complete host acceptance.
 
 The default 8-bit path with a packaged plugin and local ComfyUI needs no Node.js, global Python, Git, ComfyUI-Manager or manual workflow import. Node.js 24+ is needed only for the [cloud platform relay](PLATFORMS.en.md) or source builds. Optional environment tools check or prepare configuration; they do not install the backend/dependencies or download models. These are instructions, not a record of a clean-machine installation or new host acceptance.
@@ -74,7 +74,7 @@ The pinned [requirements.txt](https://github.com/leejet/ComfyUI-GGUF/blob/373048
 
 ### 1.3 Start and check the service
 
-After placing the [three models](#model-files) below, double-click the outer `run_nvidia_gpu.bat`, or run `.\run_nvidia_gpu.bat` in that PowerShell window. Wait for the console to show the service address, then manually open [http://127.0.0.1:8188](http://127.0.0.1:8188). Keep the backend console open during use; closing it stops the service. First model loading is usually slower than later tasks. A browser page does not prove that models loaded successfully.
+After preparing the [three model components](#model-files) below, double-click the outer `run_nvidia_gpu.bat`, or run `.\run_nvidia_gpu.bat` in that PowerShell window. Wait for the console to show the service address, then manually open [http://127.0.0.1:8188](http://127.0.0.1:8188). Keep the backend console open during use; closing it stops the service. First model loading is usually slower than later tasks. A browser page does not prove that models loaded successfully.
 
 If the window closes quickly, try the local address first: another healthy backend may already own the port. If unavailable, launch from PowerShell to retain the error and inspect GPU/dependency and node-import logs. Avoid starting multiple instances or blindly running update scripts. Once the page opens, scan models and connect in Photoshop. You do not need to build a browser workflow; PS-AI submits its own fixed API graph.
 
@@ -82,9 +82,27 @@ If the window closes quickly, try the local address first: another healthy backe
 
 ## 2. Model files
 
-Use ComfyUI's `models` directory or point `extra_model_paths.yaml` at existing weights. The plugin stores loader-relative filenames, never absolute weight paths.
+Prepare three roles: **diffusion model, vision/text encoder and VAE**. The files below are tested examples, not an exclusive filename list. Use ComfyUI's `models` directory or point `extra_model_paths.yaml` at existing weights. The plugin stores loader-relative filenames, never absolute weight paths.
 
-For files placed directly under ComfyUI, use this layout. Do not put all three files in `checkpoints`:
+<a id="model-compatibility"></a>
+
+### Compatibility requirements for your own models
+
+Reuse existing components that meet these requirements with their actual filenames. Other quantizations or precision variants depend on the actual weights, loader and node versions. Untested combinations are not guaranteed compatible.
+
+| Component | Requirements for replacement |
+| --- | --- |
+| Diffusion model | A `.gguf` with a compatible Qwen-Image 2.1 architecture, loadable by the leejet `UnetLoaderGGUF` above and compatible with the fixed `QwenImage21Cache` and `KSampler` semantics (`cfg=1`, `euler` / `simple`, `denoise=1`). A diffusion `.safetensors`, or Turbo/LoRA requiring other sampling settings, is not a direct replacement merely because its name contains “2.1.” |
+| Vision / text encoder | Compatible Qwen3-VL **8B** `.safetensors` meeting `CLIPLoader(type=qwen_image, device=default)` and `TextEncodeQwenImage21` text, multi-image and conditioning contracts. The current branch does not accept 4B, Qwen2.5-VL or encoder GGUF as substitutes; see the [pinned core's encoder branch](https://github.com/Comfy-Org/ComfyUI/blob/8ff6dc384ba5c410266b40e137799e049459d4f2/comfy/sd.py#L1955). |
+| VAE | Compatible `.safetensors` loadable by `VAELoader`, matching Qwen 2.1 latent format, scaling and normalization. The [official configuration](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/vae/config.json) specifies 64 latent channels, 16× spatial scaling and four-channel RGBA input/output. Editing uses this same VAE in `TextEncodeQwenImage21` to encode the source and in `VAEDecode` to decode the result; an arbitrary image VAE is insufficient. |
+
+Upstream options to evaluate include [leejet's Qwen-Image 2.1 GGUF quantizations](https://huggingface.co/leejet/Qwen-Image-2.1-GGUF/tree/main) and [Comfy-Org's Qwen3-VL 8B encoders](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/tree/main/text_encoders) (BF16, INT8 convrot and W4A8). Upstream availability does not mean this project has tested each option. The current official 2.1 VAE file is the BF16 version shown below.
+
+In **Backend and models**, choose **Scan models**, manually select each role's complete loader-relative name, including subfolders, then connect. Custom names are accepted when they meet the path/extension rules. Scanning proves file visibility; Connect checks the selected names and node schemas/interfaces without inspecting weight internals. Then follow [first real generation](#first-generation) to validate text-to-image, local editing, actual layers/masks and one Undo for your combination. Check memory use, quality and licensing too. Changing an extension does not convert a model format.
+
+### Tested preset example
+
+The following layout, downloads and hashes identify the recorded test combination. Custom components keep their actual names and search categories. For files placed directly under ComfyUI, the example layout is below. Do not put all three files in `checkpoints`:
 
 ```text
 ComfyUI/
@@ -111,9 +129,9 @@ This native Photoshop 27 screenshot was captured during release preparation unde
 
 This is a tested combination, not a recommendation for every use. The diffusion model is a third-party quantization. Read its model card and the upstream [Qwen license](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE): current terms permit non-commercial research / evaluation; commercial use requires separate permission. Weights are not distributed with the plugin.
 
-Exact sizes, pinned sources and SHA256 values are in [compatibility.json](../../config/compatibility.json). Reuse identical existing files. The environment checker verifies preset sizes and hashes; alternate models are reported as needing your own validation.
+Exact sizes, pinned sources and SHA256 values are in [compatibility.json](../../config/compatibility.json). Reuse identical existing files. With `-ModelRoot`, the environment checker validates preset sizes and hashes when the configured complete relative name equals the preset, and reports mismatches as errors. Other custom names receive a `warn` requiring your own validation; a different name alone is not rejected. A warning means unverified, not proven compatible.
 
-Use the pinned links in the table and wait for each download to finish before moving it. Do not rename a partial download or HTML page to a model extension. Model files need no extraction or renaming. Exact values follow (GB above uses decimal approximations):
+If using this preset, use the pinned links in the table and wait for each download to finish before moving it. Do not rename a partial download or HTML page to a model extension. Model files need no extraction; retain downloaded filenames to help verify provenance and hashes. Exact values follow (GB above uses decimal approximations):
 
 | File | Bytes | SHA256 |
 | --- | ---: | --- |
@@ -138,7 +156,7 @@ Get-FileHash .\ComfyUI\models\vae\qwen_image_2.1_vae_bf16.safetensors -Algorithm
 1. Open **Settings → Backend and models** and choose **ComfyUI**.
 2. For local Portable, enter `http://127.0.0.1:8188`, matching the browser check. Existing installations can use their actual HTTP(S) origin, such as `http://192.168.1.20:8188` or `https://comfy.example.com`.
 3. **Scan models**. Visible current choices are retained. Missing mappings are filled only by the exact preset filename or one unambiguous matching basename in a subdirectory. Review unresolved roles and choose custom files yourself; a different quantization is never guessed.
-4. Choose **Connect** to check the selected models and node template and save the configuration. After it reports **Connected**, try one generation.
+4. Choose **Connect** to check selected filename visibility and the node template and save the configuration. After it reports **Connected**, try real generation. Connect does not load weights or prove architecture compatibility.
 
 Addresses cannot contain credentials, paths or query strings. A reverse proxy must forward HTTP and WebSocket at its root; HTTPS needs a valid certificate. API-key authentication is not integrated. Remote backends receive images, references and prompts; keep unauthenticated services private.
 
@@ -152,7 +170,7 @@ First launch walks through address testing, model scanning and environment check
 
 ### First real generation and application
 
-Check that diffusion model, encoder and VAE match their respective files above. For subfolders, retain the relative name returned by scanning. Keep output at **8-bit**, with one candidate at a time. Complete Setup checks and choose **Generate example**. This performs real inference, loads models, uses VRAM and writes backend inputs/outputs. Wait for this task to finish, inspect the new result layer and editable mask in the separate test document, then press `Ctrl+Z` once to check that application can be undone.
+Check that diffusion model, encoder and VAE meet the [compatibility requirements](#model-compatibility), using the preset above or your own combination awaiting validation. For subfolders, retain the complete relative name returned by scanning. Keep output at **8-bit**, with one candidate at a time. Complete Setup checks and choose **Generate example**. This performs real inference, loads models, uses VRAM and writes backend inputs/outputs. Wait for this task to finish, inspect the new result layer and editable mask in the separate test document, then press `Ctrl+Z` once to check that application can be undone. Also generate one image in **Text-to-image** and inspect its output and backend errors; success in one mode does not validate the other.
 
 Next, try an ordinary edit on a saved RGB8 image you have permission to use. Make a small selection, choose the local object/material edit mode, read the source, enter a specific instruction (for example, “Change the selected cup to blue ceramic, preserving its shape and composition”) and generate one candidate. Keep the source open and unchanged while waiting. Inspect the result preview, then choose **Apply to layer**. Check the original layer remains, pixels outside the selection are unchanged, and edges/transparency look appropriate; undo once. If the public older build has no wizard, follow the [user guide](../usage/USER_GUIDE.en.md) for this small-selection test. Success means an actual candidate, new layer/mask and Undo, beyond a Connected label. These instructions do not certify your hardware, model quality or installation.
 
@@ -178,8 +196,6 @@ The node writes decoded VAE floats directly to tagged 16-bit RGB/RGBA PNG. Resiz
 
 The optional JSON field `"outputDepth": 16` travels with settings. Old settings default to 8-bit; historical jobs retain their own output template.
 
-<a id="model-compatibility"></a>
-
 ## 4. Adapting your own models
 
 This version supports **model mappings within the existing workflow**. Weights must use a compatible Qwen-Image 2.1 architecture and load correctly with these options:
@@ -188,7 +204,7 @@ This version supports **model mappings within the existing workflow**. Weights m
 | --- | --- | --- |
 | Diffusion model | `UnetLoaderGGUF.unet_name` | `.gguf`, compatible Qwen 2.1 structure and sampling chain |
 | Encoder | `CLIPLoader.clip_name` | `.safetensors`, `type=qwen_image`, `device=default` |
-| VAE | `VAELoader.vae_name` | `.safetensors`, matching latent format |
+| VAE | `VAELoader.vae_name` | `.safetensors`, matching Qwen 2.1 latent format, scaling and normalization; the same VAE encodes edit inputs and decodes outputs |
 | Encoding / references | `TextEncodeQwenImage21` | `prompt`, `negative_prompt`, `resolution`; `images.image_1` through `images.image_3`; accepts `vae` for image inputs |
 | Model wrapper | `QwenImage21Cache` | `model`, `device=auto`, `dtype=default` |
 | Output | `KSampler → VAEDecode → SaveImage / PS_AISavePNG16` | `euler` / `simple`, `cfg=1`, `denoise=1`; output node ID `8` |

@@ -19,3 +19,9 @@ test('model discovery matches relative Windows separators without changing loade
   const found=suggestModelMappings({unet:[`nested\\${DEFAULT_MODELS.unet}`],clip:[DEFAULT_MODELS.clip],vae:[DEFAULT_MODELS.vae]},DEFAULT_MODELS);
   assert.equal(found.models.unet,`nested\\${DEFAULT_MODELS.unet}`);assert.deepEqual(found.unresolved,[]);
 });
+
+test('explicit custom choices for all three roles are retained even when tested presets are available',()=>{
+  const current={unet:'custom/qwen-image-2.1-Q5_K_M.gguf',clip:'custom/qwen21-compatible-encoder.safetensors',vae:'custom/qwen21-compatible-vae.safetensors'};
+  const inventory={unet:[DEFAULT_MODELS.unet,current.unet],clip:[DEFAULT_MODELS.clip,current.clip],vae:[DEFAULT_MODELS.vae,current.vae]};
+  assert.deepEqual(suggestModelMappings(inventory,current),{models:current,changed:[],unresolved:[]});
+});

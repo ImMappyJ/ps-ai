@@ -14,7 +14,7 @@
 
 > **版本说明：**本页对应 **0.5.2 实验版**，包含引导界面、自动色彩工作副本与溶图光影方式。请核对下载包与“设置”中的版本／构建标识；旧版界面与行为可能不同。新版本完整宿主回归及全新机器安装仍待验证；云平台适配已有离线测试，真实 Key 出图仍待验证。
 
-首次本地使用顺序：安装插件 → 下载并解压 ComfyUI Portable → 安装指定 GGUF 节点及依赖 → 放好三个模型 → 启动并连接 → 生成一张、检查图层并撤销；步骤见[从零配置 ComfyUI](docs/setup/COMFYUI.md#beginner)。
+首次本地使用顺序：安装插件 → 下载并解压 ComfyUI Portable → 安装指定 GGUF 节点及依赖 → 配齐生成模型、编码器和 VAE → 启动并连接 → 生成一张、检查图层并撤销；步骤见[从零配置 ComfyUI](docs/setup/COMFYUI.md#beginner)。
 
 ## 三步完成一次编辑
 
@@ -33,7 +33,7 @@
 | 本机参考配置 | RTX 5080 16 GiB、约 48 GB 内存；最低硬件配置尚未确定 |
 | 云端生成 | Nano Banana（Gemini）、GPT Image（OpenAI Images）或百炼的 Key 与模型权限；自动中转需 Windows、Node.js 24+ 与宿主启动授权 |
 
-本地使用固定 Qwen 2.1 工作流，不能直接替换成 SD、SDXL 或 Flux。版本、模型文件和测试边界见[兼容清单](config/compatibility.json)。
+本地使用固定 Qwen 2.1 工作流。生成模型、编码器和 VAE 是三个组件角色，示例文件不是文件名白名单；同架构的其他量化／精度版本须满足[模型兼容条件](docs/setup/COMFYUI.md#model-compatibility)并单独验证，不能直接替换成 SD、SDXL 或 Flux。版本、已测试文件和测试边界见[兼容清单](config/compatibility.json)。
 
 ## 安装发行包
 
