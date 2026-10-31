@@ -7,10 +7,12 @@ import {IMAGE_BUDGETS,ImageBudgetError,checkDocumentSize,planRelightMemory,planN
 import {sampleEditStrip,nativeMaskStrip} from '../../imaging/native-edit';
 import {validateRelightLayerFields,renderRelightLayerStrip,type RelightLayerFields} from '../../features/relight/relight-layers';
 import {sha256} from '@noble/hashes/sha2.js';
+import {assetPlacementMask,validateAssetPlacement,type AssetPlacement} from '../../features/assets/asset-placement';
+import type {AssetContext} from '../backends/gateway-protocol';
 export interface Snapshot {documentId:number;width:number;height:number;profile:string;mode:string;depth:unknown;nativeDepth?:8|16;historyId:number;sessionId:string;bounds:Bounds;mask:Uint8Array;sourceHash:string;sourceLayerIds?:number[];clipBaseLayerId?:number;requiresClipping?:boolean;colorReason?:SourceColorReason;backgroundComposite?:'subject-background-v1';blendOpaqueScope?:boolean;captureGeometry?:{kind:'relight-analysis'|'edit-analysis'|'blend-analysis';width:number;height:number}}
 export interface Capture {snapshot:Snapshot;image:Raster;selectionMask:Uint8Array;protectionMask:Uint8Array;subjectMask?:Uint8Array;workingCopyOf?:number;documentName?:string}
-export interface CaptureOptions {context?:'selection'|'document';selection?:'edit'|'subject-background'|'document';preserveNativeDepth?:boolean;purpose?:'relight-analysis'|'blend-analysis'|'selection-asset';analysisResolution?:number;retainedBytes?:number}
-export interface EditAnalysisApplyOptions {preserveAlpha:boolean;assetContext?:'selection-v1';subjectMask?:Uint8Array;protectionMask?:Uint8Array;signal?:AbortSignal;onProgress?:(done:number,total:number)=>void;retainedBytes?:number}
+export interface CaptureOptions {context?:'selection'|'document';selection?:'edit'|'subject-background'|'document';preserveNativeDepth?:boolean;purpose?:'relight-analysis'|'blend-analysis'|'selection-asset'|'subject-asset';assetPlacement?:AssetPlacement;analysisResolution?:number;retainedBytes?:number}
+export interface EditAnalysisApplyOptions {preserveAlpha:boolean;assetContext?:AssetContext;subjectMask?:Uint8Array;protectionMask?:Uint8Array;signal?:AbortSignal;onProgress?:(done:number,total:number)=>void;retainedBytes?:number}
 export interface Protection {documentId:number;width:number;height:number;bounds:Bounds;mask:Uint8Array;sessionId:string}
 /** Geometry only: restoring it grants no permission to apply an old candidate. */
 export interface SelectionRange {documentId:number;sessionId:string;width:number;height:number;mode:string;depth:unknown;bounds:Bounds;mask:Uint8Array}
@@ -293,10 +295,13 @@ export class PhotoshopAdapter {
   }
   async capture(margin=.15,protection?:Protection,expectedDocumentId=this.activeDocument()?.id,outputDepth:8|16=8,options:CaptureOptions={},beforeCommit?:(capture:Capture)=>void):Promise<Capture> {
     if(!Number.isFinite(margin)||margin<0||margin>1)throw new Error('上下文边距无效');
-    if(!options||typeof options!=='object'||Array.isArray(options)||Object.keys(options).some(k=>!['context','selection','preserveNativeDepth','purpose','analysisResolution','retainedBytes'].includes(k))||options.context!==undefined&&!['selection','document'].includes(options.context)||options.selection!==undefined&&!['edit','subject-background','document'].includes(options.selection)||options.selection==='document'&&options.context==='selection'||options.preserveNativeDepth!==undefined&&typeof options.preserveNativeDepth!=='boolean'||options.purpose!==undefined&&!['relight-analysis','blend-analysis','selection-asset'].includes(options.purpose)||options.purpose==='relight-analysis'&&options.selection==='subject-background'||options.analysisResolution!==undefined&&(!Number.isInteger(options.analysisResolution)||options.analysisResolution<32||options.analysisResolution>2048||options.analysisResolution%32)||options.retainedBytes!==undefined&&(!Number.isSafeInteger(options.retainedBytes)||options.retainedBytes<0)||![8,16].includes(outputDepth))throw new Error('捕获策略无效');
-    const blend=options.purpose==='blend-analysis',analysis=options.purpose==='relight-analysis'||blend,asset=options.purpose==='selection-asset';
+    if(!options||typeof options!=='object'||Array.isArray(options)||Object.keys(options).some(k=>!['context','selection','preserveNativeDepth','purpose','assetPlacement','analysisResolution','retainedBytes'].includes(k))||options.context!==undefined&&!['selection','document'].includes(options.context)||options.selection!==undefined&&!['edit','subject-background','document'].includes(options.selection)||options.selection==='document'&&options.context==='selection'||options.preserveNativeDepth!==undefined&&typeof options.preserveNativeDepth!=='boolean'||options.purpose!==undefined&&!['relight-analysis','blend-analysis','selection-asset','subject-asset'].includes(options.purpose)||options.purpose==='relight-analysis'&&options.selection==='subject-background'||options.analysisResolution!==undefined&&(!Number.isInteger(options.analysisResolution)||options.analysisResolution<32||options.analysisResolution>2048||options.analysisResolution%32)||options.retainedBytes!==undefined&&(!Number.isSafeInteger(options.retainedBytes)||options.retainedBytes<0)||![8,16].includes(outputDepth))throw new Error('捕获策略无效');
+    const blend=options.purpose==='blend-analysis',analysis=options.purpose==='relight-analysis'||blend,subjectAsset=options.purpose==='subject-asset',asset=options.purpose==='selection-asset'||subjectAsset;
+    if(!subjectAsset&&options.assetPlacement!==undefined)throw new Error('捕获策略无效');
+    const placement=subjectAsset?validateAssetPlacement(options.assetPlacement):undefined;
+    if(placement&&((options.context==='document')!==(placement.scope==='document')))throw new Error('捕获策略无效');
     if(blend&&(options.selection!==undefined&&options.selection!=='edit'||options.context==='selection'||options.preserveNativeDepth===false))throw new Error('捕获策略无效');
-    if(asset&&(options.selection!==undefined&&options.selection!=='edit'||options.context==='document'||options.preserveNativeDepth===false))throw new Error('捕获策略无效');
+    if(asset&&(options.selection!==undefined&&options.selection!=='edit'||!subjectAsset&&options.context==='document'||options.preserveNativeDepth===false))throw new Error('捕获策略无效');
     const background=options.selection==='subject-background',whole=options.selection==='document',fullContext=blend||background||whole||options.context==='document';
     await this.checkpoint('capture.start');
     const expected=this.document();
@@ -326,8 +331,9 @@ export class PhotoshopAdapter {
           const left=Math.max(bounds.left,protection.bounds.left),right=Math.min(bounds.right,protection.bounds.right),width=bounds.right-bounds.left;
           if(right>left)for(let y=Math.max(bounds.top,protection.bounds.top);y<Math.min(bounds.bottom,protection.bounds.bottom);y++)protectionMask.set(protection.mask.subarray((y-protection.bounds.top)*pw+left-protection.bounds.left,(y-protection.bounds.top)*pw+right-protection.bounds.left),(y-bounds.top)*width+left-bounds.left);
         }
-        mask=effectiveMask(mask,protectionMask);
+        if(!subjectAsset)mask=effectiveMask(mask,protectionMask);
       }
+      if(placement)mask=assetPlacementMask(selectionMask,protectionMask,placement.occlusion);
       if(!background&&!mask.some(v=>v>0))throw new Error('编辑范围完全被保护区覆盖');
       if(background&&editAnalysis&&mask===subjectMask)mask=new Uint8Array(mask.length);
       let copy:any,colorOrigin:string|undefined,keepCopy=false,copyUnregistered=false;
@@ -370,7 +376,7 @@ export class PhotoshopAdapter {
           mask=backgroundEditMask(image,subjectMask!,protectionMask);
         }
         if(background&&!mask.some(v=>v>0))throw new Error('编辑范围完全被保护区覆盖或没有可替换背景');
-        if(!background&&fullContext&&!whole){const contextMask=bounded?downsampleSnapshotMask({bounds,mask:selectionMask},image.width,image.height):selectionMask;if(!contextMask.some((s,p)=>s===0&&image.rgba[p*4+3]>=16*rasterMax(image)/255))throw new Error('主体选区外没有可见环境，请保留可见背景作为溶图参考');}
+        if(!background&&!asset&&fullContext&&!whole){const contextMask=bounded?downsampleSnapshotMask({bounds,mask:selectionMask},image.width,image.height):selectionMask;if(!contextMask.some((s,p)=>s===0&&image.rgba[p*4+3]>=16*rasterMax(image)/255))throw new Error('主体选区外没有可见环境，请保留可见背景作为溶图参考');}
         const visibleMask=bounded?downsampleSnapshotMask({bounds,mask},image.width,image.height):mask;
         if(!background&&!asset&&!blend&&(options.preserveNativeDepth||analysis)&&!visibleMask.some((v,p)=>v>0&&image.rgba[p*4+3]>0))throw new Error('作用区域没有可见像素，请选择可见内容后重新读取原图');
         let hash=2166136261;for(const v of image.rgba)hash=Math.imul(hash^v,16777619);
@@ -524,7 +530,7 @@ export class PhotoshopAdapter {
     checkDocumentSize(snapshot.width,snapshot.height);checkDocumentSize(width,height);checkSize(image.width,image.height);
     if(!Object.values(b).every(Number.isSafeInteger)||b.left<0||b.top<0||b.right>snapshot.width||b.bottom>snapshot.height||(g?.kind!=='edit-analysis'&&g?.kind!=='blend-analysis')||g.kind==='blend-analysis'&&(typeof snapshot.blendOpaqueScope!=='boolean'||background||g.width>width||g.height>height||g.width*g.height>IMAGE_BUDGETS.analysisPixels||Math.max(g.width,g.height)>IMAGE_BUDGETS.analysisSide||b.left!==0||b.top!==0||b.right!==snapshot.width||b.bottom!==snapshot.height)||!Number.isSafeInteger(g.width)||!Number.isSafeInteger(g.height)||g.width<1||g.height<1||g.width*g.height>IMAGE_BUDGETS.editPixels||Math.max(g.width,g.height)>IMAGE_BUDGETS.editSide||snapshot.nativeDepth!==8&&snapshot.nativeDepth!==16||typeof snapshot.requiresClipping!=='boolean'||!(snapshot.mask instanceof Uint8Array)||snapshot.mask.length!==width*height||!snapshot.mask.some(v=>v>0)||image.rgba.length!==image.width*image.height*4)throw new Error('编辑工作图来源、尺寸或原生蒙版无效，请重新捕获');
     if(!options||typeof options.preserveAlpha!=='boolean'||options.retainedBytes!==undefined&&(!Number.isSafeInteger(options.retainedBytes)||options.retainedBytes<0)||background&&(options.preserveAlpha||!(options.subjectMask instanceof Uint8Array)||options.subjectMask.length!==width*height||!(options.protectionMask instanceof Uint8Array)||options.protectionMask.length!==width*height||snapshot.requiresClipping)||!background&&(options.subjectMask!==undefined||options.protectionMask!==undefined))throw new Error('编辑工作图回填策略或背景蒙版无效');
-    if(options.assetContext!==undefined&&(options.assetContext!=='selection-v1'||options.preserveAlpha||background||options.subjectMask!==undefined||options.protectionMask!==undefined))throw new Error('编辑工作图回填策略或背景蒙版无效');
+    if(options.assetContext!==undefined&&(!['selection-v1','subject-v1'].includes(options.assetContext)||options.preserveAlpha||background||options.subjectMask!==undefined||options.protectionMask!==undefined))throw new Error('编辑工作图回填策略或背景蒙版无效');
     if(options.assetContext){
       const max=rasterMax(image);let transparent=false;
       for(let p=3;p<image.rgba.length;p+=4)if(image.rgba[p]<max){transparent=true;break;}

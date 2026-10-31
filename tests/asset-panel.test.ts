@@ -3,14 +3,71 @@ import {panelHarness} from './uxp-harness';
 import {decodePng} from '../src/imaging/image';
 
 const output={width:32,height:32,rgba:Uint8Array.from({length:32*32*4},(_,i)=>[40,100,230,128][i%4])};
-function asset(h:Awaited<ReturnType<typeof panelHarness>>){h.click('tab-cosplay');h.el('resolution').value='32';}
+function asset(h:Awaited<ReturnType<typeof panelHarness>>){h.click('tab-cosplay');h.el('asset-input').value='selection-v1';h.change('asset-input');h.el('resolution').value='32';}
 
-for(const mode of ['effect','atmosphere'])for(const destination of ['selection','document'])test(`${mode} defaults to current visible source and mandatory effective guide for ${destination} output`,async()=>{
+test('reloading the same subject asset in composite view never waits on its own pixel queue',async()=>{
+  const h=await panelHarness({output});try{
+    await h.wait();h.click('tab-cosplay');h.el('resolution').value='32';h.click('generate');await h.wait();
+    const record=h.records()[0];h.el('asset-preview-view').value='composite';h.change('asset-preview-view');await h.wait();
+    h.selectHistory(record.id);h.click('load-history');await h.wait();
+    assert.equal(h.el('generate').disabled,false);assert.equal(h.el('detail-frame').getAttribute('aria-busy'),'false');assert.equal(h.posts.length,1);assert.equal(h.errors.length,0);
+  }finally{await h.close();}
+});
+
+test('asset preview dropdown refreshes its native caption when language changes',async()=>{
+  const h=await panelHarness({uxpSelect:true,output});try{
+    await h.wait();h.click('tab-cosplay');
+    for(const [control,value] of [['asset-preset','objects'],['asset-scope','context'],['asset-occlusion','front'],['asset-preview-view','raw']])assert.equal(h.el(control).value,value);
+    h.el('language').value='en-US';h.change('language');await h.wait();
+    assert.equal(h.el('asset-preview-view').displayedCaption,'Asset only · inspect transparency and remnants');
+    h.el('resolution').value='32';h.click('generate');await h.wait();assert.equal(h.posts.length,1,JSON.stringify(h.errors));
+  }finally{await h.close();}
+});
+
+test('large RGB16 subject assets keep behind masks through disk history and native strip application',{timeout:60000},async()=>{
+  const h=await panelHarness({output});try{
+    await h.wait();const doc=h.ps.app.activeDocument;doc.width=6000;doc.height=3000;doc.bitsPerChannel=16;
+    Object.defineProperty(doc,'selection',{get:()=>({bounds:{left:2000,top:0,right:4000,bottom:3000}}),configurable:true});
+    h.ps.imaging.getSelection=async(options:any)=>{const bounds=options.sourceBounds,width=bounds.right-bounds.left,height=bounds.bottom-bounds.top;return {sourceBounds:bounds,imageData:{width,height,components:1,componentSize:8,getData:async()=>new Uint8Array(width*height).fill(128),dispose(){}}};};
+    h.ps.imaging.getPixels=async(options:any)=>{const bounds=options.sourceBounds,width=options.targetSize?.width??bounds.right-bounds.left,height=options.targetSize?.height??bounds.bottom-bounds.top;assert.ok(options.targetSize||width*height<=262144);const values=new Uint16Array(width*height*4).fill(65535);values[0]=12345;return {sourceBounds:bounds,imageData:{width,height,components:4,componentSize:16,getData:async()=>values,dispose(){}}};};
+    h.click('tab-cosplay');h.el('asset-scope').value='document';h.change('asset-scope');h.el('asset-occlusion').value='behind';h.change('asset-occlusion');h.el('resolution').value='32';h.click('generate');await h.wait();
+    assert.equal(h.posts.length,1,JSON.stringify(h.errors));const record=h.records()[0];assert.equal((record.snapshot as any).captureGeometry.kind,'edit-analysis');
+    const source=decodePng(h.files[`${record.id}-source.png`] as Uint8Array);assert.ok(source.rgba instanceof Uint16Array);assert.equal(source.rgba[0],12345);
+    const mask=h.files[`${record.id}-mask.bin`] as Uint8Array;assert.equal(mask.length,18_000_000);assert.equal(mask[0],255);assert.equal(mask[2000],127);assert.equal(mask[4000],255);
+    h.selectHistory(record.id);h.click('load-history');await h.wait();
+    let strips=0,writtenPixels=0;h.ps.imaging.putPixels=async(options:any)=>{strips++;assert.equal(options.imageData.values.BYTES_PER_ELEMENT,2);assert.equal(options.imageData.fullRange,true);};
+    h.ps.imaging.putLayerMask=async(options:any)=>{const values=options.imageData.values;writtenPixels+=values.length;for(let offset=0;offset<values.length;offset++)assert.equal(values[offset],(offset%6000>=2000&&offset%6000<4000?127:255)*257);};
+    h.click('apply');await h.wait();assert.equal(h.errors.length,0,h.el('diagnostic-details').value);assert.equal(h.appliedLayers.length,1);assert.ok(strips>1);assert.equal(writtenPixels,18_000_000);assert.equal(h.posts.length,1);assert.equal(h.uploads.length,3);
+  }finally{await h.close();}
+});
+
+for(const occlusion of ['front','behind'])test(`subject asset defaults separate reference from ${occlusion} placement and preserve saved masks`,async()=>{
+  const source={width:2,height:2,rgba:new Uint8Array([200,80,40,255,200,80,40,255,200,80,40,255,200,80,40,255])};
+  const h=await panelHarness({source,output,selection:{bounds:{left:0,top:0,right:2,bottom:2},mask:new Uint8Array([0,255,128,0])}});
+  try{
+    await h.wait();h.click('tab-cosplay');assert.equal(h.el('asset-input').value,'subject-v1');
+    assert.equal([...h.el('mode').options].some((option:any)=>option.value==='atmosphere'),false);
+    h.el('asset-occlusion').value=occlusion;h.change('asset-occlusion');h.el('resolution').value='32';h.click('generate');await h.wait();
+    assert.equal(h.posts.length,1,JSON.stringify(h.errors));assert.equal(h.uploads.length,3);
+    const record=h.records()[0],params=record.params as any,expected=occlusion==='front'?[255,255,255,255]:[255,0,127,255];
+    assert.equal(params.assetContext,'subject-v1');assert.deepEqual(params.assetPlacement,{version:'subject-v1',scope:'context',occlusion});
+    assert.deepEqual([...h.files[`${record.id}-mask.bin`] as Uint8Array],expected);
+    assert.deepEqual([...h.files[`${record.id}-subject-mask.bin`] as Uint8Array],[0,255,128,0]);
+    assert.equal(h.uploads[1].image.rgba[0],0);assert.equal(h.uploads[2].image.rgba[0],255);
+    const rawPreview=h.el('detail-preview').src;h.el('asset-preview-view').value='composite';h.change('asset-preview-view');await h.wait();assert.notEqual(h.el('detail-preview').src,rawPreview);assert.equal(h.posts.length,1);
+    h.click('export');await h.wait();assert.deepEqual(decodePng(h.files[`ps-ai-${record.id.slice(0,8)}.png`] as Uint8Array),output);
+    const masks:any[]=[];h.ps.imaging.putLayerMask=async(value:any)=>{masks.push(value);};
+    h.click('apply');await h.wait();assert.equal(h.appliedLayers.length,1);assert.deepEqual([...masks[0].imageData.values],expected);
+    h.selectHistory(record.id);h.click('repeat-history');await h.wait();assert.equal(h.el('asset-input').value,'subject-v1');assert.equal(h.el('asset-occlusion').value,occlusion);assert.equal(h.posts.length,1);
+  }finally{await h.close();}
+});
+
+for(const mode of ['effect'])for(const destination of ['selection','document'])test(`${mode} legacy input retains current visible source and mandatory effective guide for ${destination} output`,async()=>{
   const h=await panelHarness({source:{width:2,height:2,rgba:new Uint16Array([12345,23456,34567,65534,12000,24000,36000,32768,15000,25000,35000,65535,10000,20000,30000,65535])},output});
   try{
     await h.wait();h.setSelection({bounds:{left:0,top:0,right:2,bottom:2},mask:new Uint8Array([0,128,0,255])});h.click('protect');await h.wait();
     h.setSelection({bounds:{left:0,top:0,right:2,bottom:2},mask:new Uint8Array([255,128,64,255])});
-    h.click('tab-cosplay');h.el('mode').value=mode;h.change('mode');h.el('guide').checked=false;h.el('destination').value=destination;h.change('destination');h.el('resolution').value='32';
+    asset(h);h.el('mode').value=mode;h.change('mode');h.el('guide').checked=false;h.el('destination').value=destination;h.change('destination');h.el('resolution').value='32';
     const prompt='  电弧 <image9> original  ';h.el('prompt').value=prompt;h.click('generate');await h.wait();
     assert.equal(h.posts.length,1);assert.equal(h.uploads.length,2);
     const record=h.records()[0],params=record.params as any;assert.equal(record.state,'ready');assert.equal(record.userPrompt,prompt);

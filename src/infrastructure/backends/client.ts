@@ -1,4 +1,4 @@
-import type {Graph} from '../../generation/workflow';import {DEFAULT_MODELS,validateModels,ModelFiles,normalizeBaseUrl} from '../config/profile';
+import type {Graph} from '../../generation/workflow';import {DEFAULT_MODELS,validateModels,ModelFiles,normalizeBaseUrl,diffusionLoader} from '../config/profile';
 import type {JobRecord} from '../../generation/jobs';
 import {DiagnosticError,backendFailureCode} from '../../diagnostics/diagnostics';import type {DiagnosticCode} from '../../diagnostics/diagnostics';
 export interface OutputFile {filename:string;subfolder:string;type:string}
@@ -36,26 +36,35 @@ export class ComfyClient {
     return this.request(path,body===undefined?undefined:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},async res=>{try{return await res.json();}catch(error){throw new DiagnosticError('incompatible-api','environment',`ComfyUI JSON: ${error instanceof Error?error.message:String(error)}`);}});
   }
   async connect():Promise<unknown> {const stats=await this.json('/system_stats');if(!stats||typeof stats!=='object'||Array.isArray(stats))throw new DiagnosticError('incompatible-api','connection','ComfyUI system_stats 格式不匹配');return stats;}
+  private modelFiles(nodeInfo:Record<string,any>,cls:string,field:string,key:keyof ModelFiles):string[] {
+    const definition=nodeInfo[cls]?.input?.required?.[field],files=definition?.[0];
+    if(!Array.isArray(definition)||!Array.isArray(files)||files.some(filename=>typeof filename!=='string'))throw new DiagnosticError('incompatible-api','environment',`节点模型字段不匹配：${cls}.${field}`);
+    return files.filter(filename=>{try{validateModels({...this.models,[key]:filename});return key!=='unet'||diffusionLoader(filename)===cls;}catch{return false;}});
+  }
   async inspect(outputDepth:8|16=8):Promise<{stats:unknown;nodeInfo:Record<string,any>;models:Record<keyof ModelFiles,string[]>}> {
     const stats=await this.connect();
-    const classes=['UnetLoaderGGUF','CLIPLoader','VAELoader','TextEncodeQwenImage21','QwenImage21Cache','KSampler','VAEDecode','SaveImage','LoadImage','JoinImageWithAlpha'];
+    const loaders=['UnetLoaderGGUF','UNETLoader'];
+    const classes=[...loaders,'CLIPLoader','VAELoader','TextEncodeQwenImage21','QwenImage21Cache','KSampler','VAEDecode','SaveImage','LoadImage','JoinImageWithAlpha'];
     if(outputDepth===16)classes.push('PS_AISavePNG16');
-    const infos=await Promise.all(classes.map(c=>this.json(`/object_info/${c}`)));
+    const infos=await Promise.all(classes.map(async cls=>{
+      const info=await this.json(`/object_info/${cls}`);
+      if(!info||typeof info!=='object'||Array.isArray(info)||Object.keys(info).length&&!Object.prototype.hasOwnProperty.call(info,cls))throw new DiagnosticError('incompatible-api','environment',`节点响应格式不匹配：${cls}`);
+      if(Object.prototype.hasOwnProperty.call(info,cls)&&(!info[cls]||typeof info[cls]!=='object'||Array.isArray(info[cls])))throw new DiagnosticError('incompatible-api','environment',`节点字段不匹配：${cls}`);
+      return info;
+    }));
     const nodeInfo=Object.assign({},...infos);
-    for(const c of classes)if(!nodeInfo[c])throw new DiagnosticError('missing-node','environment',`缺少节点：${c}`);
-    const models={} as Record<keyof ModelFiles,string[]>;
-    for(const [cls,field,key] of [['UnetLoaderGGUF','unet_name','unet'],['CLIPLoader','clip_name','clip'],['VAELoader','vae_name','vae']] as const) {
-      const files=nodeInfo[cls]?.input?.required?.[field]?.[0];
-      if(!Array.isArray(files)||files.some(f=>typeof f!=='string'))throw new DiagnosticError('incompatible-api','environment',`节点模型字段不匹配：${cls}.${field}`);
-      models[key]=files;
-    }
+    if(!loaders.some(cls=>nodeInfo[cls]))throw new DiagnosticError('missing-node','environment',`缺少节点：${loaders.join(' / ')}`);
+    for(const cls of classes)if(!loaders.includes(cls)&&!nodeInfo[cls])throw new DiagnosticError('missing-node','environment',`缺少节点：${cls}`);
+    const models:Record<keyof ModelFiles,string[]>={unet:[...new Set(loaders.flatMap(cls=>nodeInfo[cls]?this.modelFiles(nodeInfo,cls,'unet_name','unet'):[]))],clip:this.modelFiles(nodeInfo,'CLIPLoader','clip_name','clip'),vae:this.modelFiles(nodeInfo,'VAELoader','vae_name','vae')};
     const names=nodeInfo.TextEncodeQwenImage21.input?.required?.images?.[1]?.template?.names;
     if(!names?.includes('image_1')||!names?.includes('image_3'))throw new DiagnosticError('incompatible-api','environment','多参考图节点字段不匹配');
     return {stats,nodeInfo,models};
   }
   async check(outputDepth:8|16=8):Promise<{stats:unknown;nodeInfo:Record<string,any>}> {
     const result=await this.inspect(outputDepth);
-    for(const key of ['unet','clip','vae'] as const)if(!result.models[key].includes(this.models[key]))throw new DiagnosticError('missing-model','environment',`缺少模型 ${key}：${this.models[key]}；请在模型配置中扫描并选择文件`);
+    const loader=diffusionLoader(this.models.unet);
+    if(!result.nodeInfo[loader])throw new DiagnosticError('missing-node','environment',`缺少节点：${loader}`);
+    for(const key of ['unet','clip','vae'] as const)if(!(key==='unet'?this.modelFiles(result.nodeInfo,loader,'unet_name',key):result.models[key]).includes(this.models[key]))throw new DiagnosticError('missing-model','environment',`缺少模型 ${key}：${this.models[key]}；请在模型配置中扫描并选择文件`);
     return result;
   }
   async upload(bytes:Uint8Array,name:string):Promise<string> {

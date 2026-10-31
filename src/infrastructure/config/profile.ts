@@ -5,6 +5,7 @@ export type ConnectionId='comfyui'|'gateway'|PlatformId;
 interface ConnectionProfile {baseUrl:string;models:ModelFiles;outputDepth?:8|16;gatewayModel?:string}
 export interface BackendSettings extends ConnectionProfile {schemaVersion:1;language?:Language;autoViewResults?:boolean;backend?:'comfyui'|'gateway';platform?:PlatformId;connections?:Partial<Record<ConnectionId,ConnectionProfile>>}
 export const DEFAULT_MODELS:ModelFiles={unet:'qwen-image-2.1-Q4_K_M.gguf',clip:'qwen3vl_8b_int8_convrot.safetensors',vae:'qwen_image_2.1_vae_bf16.safetensors'};
+export function diffusionLoader(filename:string):'UnetLoaderGGUF'|'UNETLoader' {if(filename.toLowerCase().endsWith('.gguf'))return 'UnetLoaderGGUF';if(filename.toLowerCase().endsWith('.safetensors'))return 'UNETLoader';throw new Error('扩散模型需要 .gguf 或 .safetensors 文件名');}
 export function defaultSettings():BackendSettings {return {schemaVersion:1,baseUrl:'http://localhost:8188',models:{...DEFAULT_MODELS}};}
 // UXP does not provide the browser URL constructor on every supported host.
 // Accept origins only: a reverse proxy must expose ComfyUI at its root.
@@ -27,8 +28,8 @@ export function normalizeBaseUrl(value:unknown,pinIpv4=false):string {
 export function validateModels(value:unknown):ModelFiles {
   if(!value||typeof value!=='object')throw new Error('模型映射无效');const input=value as Record<string,unknown>,out={} as ModelFiles;
   for(const name of ['unet','clip','vae'] as const){
-    const text=input[name],extension=name==='unet'?'.gguf':'.safetensors';
-    if(typeof text!=='string'||!text.trim()||text!==text.trim()||/^[\\/]|^[a-zA-Z]:|[\u0000-\u001f]/.test(text)||text.split(/[\\/]/).some(p=>!p||p==='.'||p==='..')||!text.toLowerCase().endsWith(extension))throw new Error(`模型 ${name} 需要后端搜索目录中的相对 ${extension} 文件名`);
+    const text=input[name],extensions=name==='unet'?['.gguf','.safetensors']:['.safetensors'];
+    if(typeof text!=='string'||!text.trim()||text!==text.trim()||/^[\\/]|[:*?"<>|\u0000-\u001f]/.test(text)||text.split(/[\\/]/).some(p=>!p||p==='.'||p==='..')||!extensions.some(extension=>text.toLowerCase().endsWith(extension)))throw new Error(`模型 ${name} 需要后端搜索目录中的相对 ${extensions.join(' / ')} 文件名`);
     out[name]=text;
   }return out;
 }

@@ -1,7 +1,16 @@
 {
   "schemaVersion": 1,
   "preset": "qwen-image-2.1-gguf-q4-experimental",
-  "status": "experimental; Windows Photoshop 27.0 tested, broader host stability unverified",
+  "releaseAcceptance": {
+    "version": "0.6.0",
+    "date": "2026-10-31",
+    "basis": "User reported successful testing after the Portable candidate handoff and explicitly authorized merge and stable release",
+    "candidateCommit": "44c2fd7bd961e90afca18fce2876068eed25e86c",
+    "candidatePortableSha256": "772d43abe8d2ba144f5ebac92ccd472fb4e6b82c43055ed8a9791ec68dc30502",
+    "scope": "User report without a case-by-case test record; does not establish every mode, model, CCX installation, upgrade, clean-machine or platform acceptance",
+    "finalArtifacts": "Rebuilt by the release workflow from the merged source; consult release-manifest.json for final source and digests"
+  },
+  "status": "0.6.0 stable release; Windows Photoshop 27.0 tested, broader host stability unverified",
   "photoshop": {
     "tested": "27.0",
     "minimumManifest": "27.0",
@@ -42,7 +51,7 @@
       "date": "2026-10-30",
       "reason": "assumed-srgb",
       "policy": "Approximate source capture only; no claim of recovering original color. Existing document ICC and verified file semantics retain priority. Repeated capture of the same session-proven sRGB working copy keeps the reason.",
-      "validation": "Version 0.5.2 implementation has offline regression and integration coverage. Native Photoshop acceptance and real inference for this policy have not been completed."
+      "validation": "Published 0.5.2 has offline coverage. The 0.6.0 source on 2026-10-31 additionally passed standalone Photoshop 27 API checks for owned pathless two-raster-layer RGB8/16 composites: zero picker calls, preserved original state/layer/selection pixels, approximate tagged duplicate and same-session provenance, frozen-ID apply using real native-model output, profile-safe Undo and stale/closed guards. This is not installed-panel, arbitrary imported-file or photographic-color acceptance."
     },
     "savedColorResolution": {
       "status": "Offline parser/mock tests and PS27 WebP8 capture/apply/undo passed; public PNG8 selection/document capture passed native API checks, installed b3548bd4 passed bounded recovery, and hash-verified installed 291c1d40 passed missing-selection rejection/real picker/selection capture. Reference import, persistent access and broader controls remain separate checks.",
@@ -99,16 +108,115 @@
     "JoinImageWithAlpha"
   ],
   "modelSelection": {
-    "scope": "The fixed Qwen-Image 2.1 GGUF graph, not arbitrary ComfyUI models or imported workflows.",
+    "scope": "The fixed Qwen-Image 2.1 graph, not arbitrary ComfyUI models or imported workflows. Published 0.5.2 is GGUF-only; this source branch additionally routes native Safetensors diffusion weights through UNETLoader. Source route evidence is recorded separately below.",
     "testedFiles": "The models array records one tested starter combination and its exact file identities; it is not an exclusive filename allowlist.",
     "roles": {
-      "unet": "A compatible Qwen-Image 2.1 GGUF loaded by UnetLoaderGGUF and usable with QwenImage21Cache plus cfg=1, Euler/simple sampling. Other quantizations or fine-tunes require compatible architecture, runtime and sampling behavior.",
+      "unet": "Compatible Qwen-Image 2.1 diffusion weights: .gguf uses UnetLoaderGGUF; this source branch adds .safetensors using built-in UNETLoader with weight_dtype=default. Both retain QwenImage21Cache plus cfg=1, Euler/simple and denoise=1. Format does not prove architecture; other quantizations or fine-tunes require compatible architecture, runtime and sampling behavior.",
       "clip": "A matching Qwen3-VL-8B vision/text encoder in safetensors format supported by CLIPLoader type=qwen_image and TextEncodeQwenImage21; matching extension or family name alone is insufficient.",
       "vae": "A matching Qwen-Image 2.1 VAE in safetensors format with 64 latent channels, 16x spatial scaling, RGBA input/output and compatible latent normalization and tensor layout. Editing uses this VAE to encode source/reference images as well as decode outputs; arbitrary VAEs are not interchangeable."
     },
-    "selection": "Scanning preserves visible explicit choices for all three roles. Only exact or unique nested preset matches are suggested automatically; choose compatible alternatives manually using their full loader-relative filenames.",
+    "selection": "The three roles remain models.unet, models.clip and models.vae under schemaVersion 1, not three fixed filenames. Scanning preserves explicit choices, including native diffusion routes. Only exact or unique nested preset matches are suggested automatically; choose compatible alternatives manually using their full loader-relative filenames. Never silently replace a selected native route with the GGUF preset.",
     "checks": "Settings validate paths and formats; connection checks loader visibility, node fields and socket types, not weight tensors. Preset size/SHA256 checks prove tested file identity, not an architecture allowlist. Non-preset files receive an unverified warning rather than a filename rejection.",
     "acceptance": "Alternative weights need upstream pairing/license review, real text-to-image and source/reference editing, output color/alpha inspection and Photoshop apply/undo checks. Filename/graph regression tests do not establish alternative-model inference or native acceptance."
+  },
+  "sourceModelRoutes": {
+    "date": "2026-10-31",
+    "status": "Available in 0.6.0 stable; 0.5.2 remains GGUF-only. Exact INT8 native combination has bounded real inference and Photoshop API evidence below. See releaseAcceptance for the separate user-reported test; broader acceptance remains unverified.",
+    "baselinePolicy": "Existing backend, gguf, nodes, models and workflow.loader fields retain the recorded GGUF baseline and file hashes. Node author and filename are not compatibility allowlists.",
+    "settingsSchemaVersion": 1,
+    "routes": [
+      {
+        "extension": ".gguf",
+        "node": "UnetLoaderGGUF",
+        "input": "unet_name",
+        "evidence": "Recorded GGUF baseline; alternate implementations and weights need separate validation."
+      },
+      {
+        "extension": ".safetensors",
+        "node": "UNETLoader",
+        "input": "unet_name",
+        "weight_dtype": "default",
+        "requiresGgufExtension": false,
+        "evidence": "Exact INT8 combination tested below; extension or file visibility alone never establishes compatibility with other weights."
+      }
+    ],
+    "preflight": "Scan matching inventories for both diffusion routes. Validate the selected route and shared nodes before upload/submission; tolerate an absent unused loader, but retain network and malformed-schema failures. No automatic fallback, weight download, node installation or inference retry.",
+    "sharedContract": "Compatible Qwen-Image 2.1 architecture and fixed sampling; matching Qwen3-VL 8B Safetensors encoder, RGBA Qwen 2.1 Safetensors VAE and existing input/output contracts remain required.",
+    "upstreamGguf": {
+      "checkedDate": "2026-10-31",
+      "baselineDetection": "https://github.com/leejet/ComfyUI-GGUF/blob/373048b8403a7820620065210a691263d4da0a61/tools/convert.py#L163",
+      "city96PullRequest": "https://github.com/city96/ComfyUI-GGUF/pull/483",
+      "finding": "Upstream city96 lacks the corresponding Qwen-Image 2.1 detection; PR 483 remains open. A same-name loader alone is insufficient."
+    },
+    "nativeCombination": {
+      "date": "2026-10-31",
+      "source": "Uncommitted codex/comfy-model-routes candidate based on 7d404025b3689142387f101ca50ae11d5462e0db; not an installed release",
+      "diffusion": {
+        "filename": "qwen_image_2.1_int8_convrot.safetensors",
+        "directory": "diffusion_models",
+        "bytes": 7256783064,
+        "sha256": "cb74113cb03faecd79611b01fd7fd642f0aa60d6f0b95086abee214d75eaa57d",
+        "repository": "Comfy-Org/Qwen-Image-2.1",
+        "revision": "aacf31a6d48e707f352ecba714cee0680da3479b",
+        "repositoryPath": "diffusion_models/qwen_image_2.1_int8_convrot.safetensors",
+        "license": "qwen-research"
+      },
+      "sharedComponents": "Exact clip and vae identities in the existing models array; both full file hashes reverified, no replacement or download",
+      "runtime": {
+        "comfyui": "0.37.4 / 8ff6dc384ba5c410266b40e137799e049459d4f2",
+        "backendModified": true,
+        "modifiedTrackedFiles": ["comfy/ldm/minimax/controlnet.py", "comfy/ldm/qwen_image21/model.py", "comfy_extras/nodes_minimax_h3.py", "comfy_extras/nodes_model_patch.py"],
+        "python": "3.13.15",
+        "torch": "2.14.0+cu130",
+        "safetensors": "0.8.0",
+        "comfyKitchen": "0.2.35",
+        "comfyAimdo": "0.5.5",
+        "gpu": "NVIDIA GeForce RTX 5080, 16303 MiB reported memory",
+        "scope": "Existing locally modified backend, not a clean Portable installation or pristine upstream reproducibility proof"
+      },
+      "inference": {
+        "nativeReadyCases": ["text8", "text16", "asset8", "background", "edit", "costume", "relight", "blend", "reference", "photo"],
+        "ggufReadyComparisons": ["text8", "background", "costume", "relight", "blend", "photo"],
+        "inputScope": "Text-only fixtures, authorized illustration demonstrations and the NASA astronaut photograph distributed by scikit-image; no universal photographic-quality acceptance",
+        "photo": "Both routes recolored the spacesuit but ignored the guide's strict rectangular extent in raw output. Photoshop mask application is a separate guarantee; facial/detail fidelity is not certified.",
+        "reference": "Native source-plus-reference output contains an obvious inset rectangle and scale/seam error: visual acceptance failed despite valid PNG and successful inference.",
+        "visualReview": "Background and Blend examples show plausible scene/ambient changes; Relight lamp-direction fidelity is inconclusive. Costume follows the sock instruction but native raw output replaces substantial source transparency with near-opaque white; preserve source alpha and inspect edges in the actual candidate workflow. These are illustrative observations, not blanket mode acceptance.",
+        "p0": "Explicit-config runner completed all six original synthetic cases at outputDepth 8 and again at 16 with UNETLoader and the exact native combination; not photo or host acceptance",
+        "outputValidation": "Real SaveImage / PS_AISavePNG16 outputs strictly decoded for dimensions, PNG/color/depth and alpha; UUID persisted before one POST per case",
+        "sdr16": "text16 reused cached generation from text8 with a different save node; verifies native 16-bit PNG saving, not new inference latency or 16-bit model precision",
+        "vram": "Sampled total device memory-used, not model-only allocation or a universal minimum",
+        "limits": "Protocol/output validation is separate from visual quality, Photoshop mode controls, source fidelity and full native application"
+      },
+      "photoshopApi": {
+        "host": "Windows Photoshop 27.0.0",
+        "nonce": "7123664f-5189-40cd-8453-684ba671e788",
+        "scope": "Standalone current production adapter; real text8/text16 outputs on owned 128x96 sRGB8/16 sources",
+        "passed": ["Exact native selection feathers and protection", "Independent layer with exact editable mask", "Original, outside and fully protected pixels unchanged", "One Undo restores exact pixels, history and layers", "Injected cancellation after pixel writing rolls back exact pixels, history and layers", "Changed source rejects without writing", "Owned documents cleaned up and preexisting documents unchanged"],
+        "limits": "Not installed-panel interaction, CCX/Portable installation, real-photo quality or human cancellation controls"
+      },
+      "sourcePolicyApi": {
+        "host": "Windows Photoshop 27.0.0",
+        "nonce": "33a5787c-659c-48a3-a4fc-1a3ec6eaa027",
+        "casesPassed": 5,
+        "small": "Tagged and untagged pathless two-raster-layer RGB8/16: current ICC bypasses file access, untagged source creates unmerged assumed-sRGB copy with zero picker calls; original/native selection/protection preserved; same-session approximation provenance, frozen target vs another active document, exact one Undo/profile baseline, stale/closed rejection",
+        "large": "4096x3072 RGB16 exceeds native byte budget and uses edit-analysis; exact full native mask, bounded working raster and strip apply with real SDR16 output, original-layer full hash unchanged and one Undo restores full composite hash/history/layers",
+        "limits": "Owned synthetic fixtures only, not arbitrary imported files, every ICC, largest supported geometry or installed controls"
+      },
+      "lifecycle": {
+        "id": "dbdd764d-07f6-4355-b5ff-75c732efca3d",
+        "submissionPosts": 1,
+        "recovery": "Deliberately discarded successful POST response; recovered original UUID as running",
+        "cancellation": "Atomic /api/jobs/{id}/cancel reached cancelled; no global interrupt or resubmission",
+        "limits": "Owned local task, not installed UI or arbitrary network/host failure acceptance"
+      },
+      "releaseGate": "These bounded checks alone do not authorize release. The later user-reported candidate test and stable-release authorization are recorded separately in releaseAcceptance."
+    },
+    "evidenceLevels": [
+      "File visibility in the correct loader inventory",
+      "Selected-route and shared node/schema/socket validation",
+      "Real-weight text-to-image and source/reference editing inference",
+      "Photoshop apply, editable mask, source preservation and one Undo"
+    ]
   },
   "models": [
     {
@@ -144,6 +252,7 @@
   ],
   "modelLicense": "https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE",
   "workflow": {
+    "scope": "Recorded GGUF baseline; sourceModelRoutes separately describes native Safetensors, exact bounded evidence and remaining acceptance gates.",
     "template": "qwen21-local-v2-rgba",
     "architecture": "Qwen-Image 2.1",
     "loader": "UnetLoaderGGUF",
@@ -240,7 +349,7 @@
     }
   },
   "platformGateway": {
-    "status": "development; unreleased; no real API key or Photoshop gateway acceptance",
+    "status": "adapters included in 0.6.0; no real API key or Photoshop gateway acceptance",
     "protocol": "ps-ai/1",
     "nodeMinimum": 24,
     "defaultPort": 8190,
@@ -607,6 +716,16 @@
       "installedWorkbench": "b3548bd4: intensity 1 to 3.2, one workbench Undo back to 1, zero editing-time POSTs; other sliders/termination paths and drag latency not established"
     },
     "contextAssets": {
+      "subjectPlacement": {
+        "marker": "subject-v1",
+        "metadata": "assetPlacement: {version: subject-v1, scope: context|document, occlusion: front|behind}",
+        "inputs": "source = current composite; guide = raw subject; reference = effective placement, all aligned sRGB8; no user reference image",
+        "mask": "front = 1-P; behind = (1-S)*(1-P), within frozen context rectangle or full canvas; raw S and P preserved at native coordinates",
+        "capability": "Explicit subject-v1 plus maxInputImages >= 3; reject before upload; OpenAI native mask uses placement, not subject",
+        "preview": "Raw asset or bounded saved-source composite; export and apply never use display pixels",
+        "validation": "Offline coverage and separate user-reported successful candidate test in releaseAcceptance; no case-by-case installed-control, real-model quality or native apply/undo record for this new path",
+        "limitations": "No automatic matting, source subtraction, arbitrary second selection or front/back ring decomposition; transparency does not prove isolation"
+      },
       "marker": "selection-v1",
       "inputs": "Paired current visible source and effective grayscale guide; native source depth separate from sRGB8 model input",
       "capability": "Optional assetContexts; missing declaration rejects before upload",

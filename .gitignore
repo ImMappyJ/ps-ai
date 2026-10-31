@@ -42,6 +42,7 @@ docs/development/*
 !docs/development/RELIGHT.en.md
 !docs/development/RELEASING.md
 !docs/development/RELEASING.en.md
+!docs/development/COMFYUI-COMPATIBILITY.md
 scripts/photoshop-network.ps1
 tests/network-isolation.test.ts
 .vscode/

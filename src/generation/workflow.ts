@@ -1,4 +1,4 @@
-import {DEFAULT_MODELS,validateModels} from '../infrastructure/config/profile';import type {ModelFiles} from '../infrastructure/config/profile';
+import {DEFAULT_MODELS,validateModels,diffusionLoader} from '../infrastructure/config/profile';import type {ModelFiles} from '../infrastructure/config/profile';
 export interface GraphOptions {requestId:string;prompt:string;seed:number;steps:number;resolution:number;source?:string;guide?:string;reference?:string;models?:ModelFiles;outputDepth?:8|16}
 export type Graph = Record<string,{class_type:string;inputs:Record<string,unknown>}>;
 export const MODELS=DEFAULT_MODELS;
@@ -9,9 +9,9 @@ export function buildGraph(o:GraphOptions):Graph {
   if(!o.prompt.trim()||!Number.isSafeInteger(o.seed)||o.seed<0||!Number.isInteger(o.steps)||o.steps<1||o.steps>100||!Number.isInteger(o.resolution)||o.resolution<32||o.resolution>2048||o.resolution%32) throw new Error('提示词、种子、步数或分辨率无效');
   if(!/^[a-zA-Z0-9-]+$/.test(o.requestId)) throw new Error('任务 ID 无效');
   if((o.guide||o.reference)&&!o.source) throw new Error('参考输入需要 image_1 原图');
-  const models=validateModels(o.models??MODELS);
+  const models=validateModels(o.models??MODELS),loader=diffusionLoader(models.unet);
   const graph:Graph={
-    '1':{class_type:'UnetLoaderGGUF',inputs:{unet_name:models.unet}},
+    '1':{class_type:loader,inputs:{unet_name:models.unet,...(loader==='UNETLoader'?{weight_dtype:'default'}:{})}},
     '2':{class_type:'CLIPLoader',inputs:{clip_name:models.clip,type:'qwen_image',device:'default'}},
     '3':{class_type:'VAELoader',inputs:{vae_name:models.vae}},
     '4':{class_type:'TextEncodeQwenImage21',inputs:{clip:['2',0],prompt:o.prompt,negative_prompt:'',resolution:o.source?0:o.resolution}},

@@ -79,7 +79,7 @@ export function localValidationMessage(message:string):string|undefined {
   const key=LOCAL_VALIDATION_MESSAGES.find(key=>message===key||message===english[key]);
   if(key)return t(key);
   // Only the three pairs emitted by validateModels are allowed; input filenames are never used.
-  for(const [field,extension] of [['unet','.gguf'],['clip','.safetensors'],['vae','.safetensors']] as const){
+  for(const [field,extension] of [['unet','.gguf / .safetensors'],['clip','.safetensors'],['vae','.safetensors']] as const){
     const source=MODEL_VALIDATION.replace('{0}',field).replace('{1}',extension);
     const translated=english[MODEL_VALIDATION].replace('{0}',field).replace('{1}',extension);
     if(message===source||message===translated)return t(MODEL_VALIDATION,field,extension);

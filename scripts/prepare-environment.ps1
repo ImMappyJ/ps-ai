@@ -10,9 +10,21 @@ param(
 )
 $ErrorActionPreference='Stop'
 function Write-Utf8([string]$Path,[string]$Text,[bool]$Bom=$false) { [IO.File]::WriteAllText($Path,$Text,[Text.UTF8Encoding]::new($Bom)) }
-function Test-ModelName([string]$Name,[string]$Key) {
-    $extension=if ($Key -eq 'unet') { '.gguf' } else { '.safetensors' }
-    return $Name -and $Name -eq $Name.Trim() -and $Name -notmatch '^[\\/]|^[A-Za-z]:|[\x00-\x1f]' -and @($Name -split '[\\/]' | Where-Object { $_ -in @('', '.', '..') }).Count -eq 0 -and $Name.ToLowerInvariant().EndsWith($extension)
+function Test-ModelName($Name,[string]$Key) {
+    $extensions=if ($Key -eq 'unet') { @('.gguf','.safetensors') } else { @('.safetensors') }
+    return $Name -is [string] -and $Name -and $Name -eq $Name.Trim() -and $Name -notmatch '^[\\/]|[\x00-\x1f:*?"<>|]' -and @($Name -split '[\\/]' | Where-Object { $_ -in @('', '.', '..') }).Count -eq 0 -and [IO.Path]::GetExtension($Name).ToLowerInvariant() -in $extensions
+}
+function Get-ModelInventory([string]$Class,[string]$Field,[string]$Key,[string]$Extension,[bool]$Optional=$false) {
+    $info=Invoke-RestMethod -Uri ($settings.baseUrl+'/object_info/'+$Class) -TimeoutSec 15
+    if ($null -eq $info -or ($info -isnot [PSCustomObject] -and $info -isnot [System.Collections.IDictionary])) { throw "Malformed node response: $Class" }
+    if (-not $info.$Class) {
+        $propertyCount=if ($info -is [System.Collections.IDictionary]) { $info.Count } else { @($info.PSObject.Properties).Count }
+        if ($Optional -and $propertyCount -eq 0) { return }
+        throw "Missing model inventory: $Class.$Field"
+    }
+    $definition=$info.$Class.input.required.$Field
+    if ($definition -isnot [array] -or $definition.Count -eq 0 -or $definition[0] -isnot [array] -or @($definition[0] | Where-Object { $_ -isnot [string] }).Count) { throw "Malformed model inventory: $Class.$Field" }
+    $definition[0] | Where-Object { (Test-ModelName $_ $Key) -and [IO.Path]::GetExtension($_).ToLowerInvariant() -eq $Extension } | Select-Object -Unique
 }
 try {
     $outputPath=[IO.Path]::GetFullPath($OutputDirectory)
@@ -29,12 +41,12 @@ try {
         if ($builder.Host -eq '127.0.0.1') { $builder.Host='localhost' }
         $settings.baseUrl=$builder.Uri.GetLeftPart([UriPartial]::Authority)
         $inventory=[ordered]@{};$changed=[System.Collections.Generic.List[string]]::new();$unresolved=[System.Collections.Generic.List[string]]::new()
-        foreach ($mapping in @(@('unet','UnetLoaderGGUF','unet_name'),@('clip','CLIPLoader','clip_name'),@('vae','VAELoader','vae_name'))) {
-            $key=$mapping[0];$class=$mapping[1];$field=$mapping[2]
-            $info=Invoke-RestMethod -Uri ($settings.baseUrl+'/object_info/'+$class) -TimeoutSec 15
-            $files=$info.$class.input.required.$field[0]
-            if ($files -isnot [array] -or @($files | Where-Object { $_ -isnot [string] }).Count) { throw "Missing model inventory: $class.$field" }
-            $files=@($files | Where-Object { Test-ModelName $_ $key } | Select-Object -Unique);$inventory[$key]=$files
+        $gguf=@(Get-ModelInventory 'UnetLoaderGGUF' 'unet_name' 'unet' '.gguf' $true)
+        $native=@(Get-ModelInventory 'UNETLoader' 'unet_name' 'unet' '.safetensors' $true)
+        foreach ($key in @('unet','clip','vae')) {
+            $files=if ($key -eq 'unet') { @($gguf)+@($native) } elseif ($key -eq 'clip') { @(Get-ModelInventory 'CLIPLoader' 'clip_name' 'clip' '.safetensors') } else { @(Get-ModelInventory 'VAELoader' 'vae_name' 'vae' '.safetensors') }
+            $inventory[$key]=@($files)
+            if ($key -eq 'unet') { $files=if ([IO.Path]::GetExtension($settings.models.unet) -ieq '.gguf') { $gguf } else { $native } }
             if ($files -ccontains $settings.models.$key) { continue }
             $preset=$defaults.models.$key;$nested=@($files | Where-Object { ($_ -split '[\\/]')[-1] -ceq $preset })
             $match=if ($files -ccontains $preset) { $preset } elseif ($nested.Count -eq 1) { $nested[0] } else { $null }

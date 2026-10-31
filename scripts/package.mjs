@@ -60,7 +60,7 @@ export function environmentSourceNames(){
 }
 export const ENVIRONMENT_GENERATED_FILES=Object.freeze(['backend/ps-ai-gateway.mjs','backend/THIRD_PARTY_NOTICES.txt','backend/LICENSE']);
 export const PLUGIN_RUNTIME_FILES=Object.freeze(['manifest.json','index.html','main.js','style.css','THIRD_PARTY_NOTICES.txt','LICENSE','INSTALL.md','icons/brand.png','icons/wordmark.png',...['panel-on-dark','panel-on-light','plugin'].flatMap(name=>[`icons/${name}.png`,`icons/${name}@1x.png`,`icons/${name}@2x.png`]),'relay/ps-ai-gateway.mjs','relay/start-ps-ai-relay.cmd','relay/start-ps-ai-relay.ps1']);
-export const SOURCE_ONLY_GUIDES=Object.freeze(['AGENTS.md','docs/development/BACKEND.md','docs/development/BACKEND.en.md','docs/development/RELIGHT.md','docs/development/RELIGHT.en.md','docs/development/RELEASING.md','docs/development/RELEASING.en.md']);
+export const SOURCE_ONLY_GUIDES=Object.freeze(['AGENTS.md','docs/development/BACKEND.md','docs/development/BACKEND.en.md','docs/development/RELIGHT.md','docs/development/RELIGHT.en.md','docs/development/RELEASING.md','docs/development/RELEASING.en.md','docs/development/COMFYUI-COMPATIBILITY.md']);
 export function sourceGuideReference(sourceRef='main'){
   if(sourceRef!=='main'&&(typeof sourceRef!=='string'||!/^[a-f0-9]{40}$/.test(sourceRef)))throw new Error('sourceRef must be main or a full lowercase source commit SHA');
   return sourceRef;
