@@ -33,6 +33,7 @@ Local models fill three roles: diffusion model, vision/text encoder and VAE, wit
 | Candidates | 1–4 per batch, generated sequentially; a locked seed increments per candidate |
 | Resolution / steps | Common choices are 768, 992 and 1024; default 25 steps, more is not necessarily better |
 | Context margin | Default 15%, adding reference context only; background, scene and Blend read the full canvas |
+| Edge blend (native pixels) | Ordinary editing only: an 8 px outward fade by default, adjustable from 0–64; 0 disables it |
 | Range guide | A visual hint; Photoshop masks enforce the actual boundary. Some modes disable it |
 | Preserve source transparency | Useful for clothing/material edits; disable when intentionally extending or removing silhouettes |
 | Alignment / color matching | Use where appropriate; do not cancel deliberate lighting changes with color matching |
@@ -57,6 +58,8 @@ Settings JSON transfers addresses, model mappings and language, without keys, mo
 | Portrait · [Image Blending](#blend) | Select the foreground already placed in a visible environment |
 
 To protect faces or text, select them and use **Set protection**, then select the edit area (the reference subject for default AI assets). Protection is subtracted with feathers retained. Ordinary editing context does not enlarge the apply boundary. Prepare selections again after changing documents or reusing parameters.
+
+**Ordinary editing edge blend:** local object/material editing extends the effective mask outward by 8 native pixels by default to soften small boundary color differences. Inspect the orange transition in the range preview and adjust from 0–64 as needed. Protection is subtracted last and the Photoshop selection stays unchanged. This does not correct a color cast across the whole result and does not apply to Blend lighting groups, Blend AI redraw or other modes. New tasks save the width and raw selection; old history retains its original boundary, with edge blending disabled when reusing old parameters.
 
 If Undo loses your selection, **Restore last selection and reread** restores the saved range for this document and mode within the same session, then reads current pixels. It does not submit a task or restore old candidates' apply permission.
 
@@ -116,6 +119,8 @@ Read failures retain lights and old candidates but cannot authorize a new task w
 New tasks in 0.5.2 default to **Preserve detail · lighting only**, applying a lighting group without a base-image copy. Adjust fidelity/detail locally without resubmission, or explicitly choose **AI redraw subject**. Old history retains its original method. Lighting has the same source requirements as Relighting, with no automatic fallback.
 
 Blend reads the full composite and disables alignment and context color matching; ComfyUI omits the grayscale guide. Weak AI lighting cannot be amplified into nonexistent light by extraction. Photographic results can be subtle, and patches/shadows need inspection. The gallery's old Blend example uses **AI redraw**, not the new lighting extraction.
+
+Before reading a large Blend source, the plugin budgets the source, native masks, candidate and retained previews, reducing the **analysis raster** when needed. The original document, native masks and requested generation resolution stay unchanged. The source caption lists each size; lower analysis resolution can smooth fine lighting. History and local lighting reprocessing use the saved analysis grid. Ordinary editing with edge blending also budgets candidate validation before capture and uses a bounded working raster with native strip application when needed. The 512 MB plugin working budget and document limits remain: extreme resolution/depth combinations or excessive retained buffers can still reject before upload; lower generation resolution to retry. This estimate is not total Photoshop memory or VRAM usage, and does not expand lighting color-space support.
 
 <details>
 <summary>Real outputs and limitations for all eleven modes</summary>

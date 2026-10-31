@@ -15,6 +15,9 @@ import type {RelightOutputKind} from '../features/relight/relight-session';
 import {validateRelightExtractionSettings,type RelightLayerFields} from '../features/relight/relight-layers';
 import {sha256} from '@noble/hashes/sha2.js';
 import {validateBlendTaskMetadata,assertBlendSnapshot,assertBlendLightingCapture} from '../features/blend/blend-session';
+import {planBlendCandidateMemory} from '../imaging/blend-budget';
+import {planEdgeBlendCandidate} from '../imaging/edge-blend-budget';
+import {outwardBlendMask,validateEdgeBlend} from '../features/editing/edge-blend';
 
 type ReadBinary=(name:string)=>Promise<Uint8Array>;
 export interface PreparedCandidate {image:Raster;snapshot?:Snapshot;warning?:string;outputKind?:RelightOutputKind;lightingState?:'composite'|'reference-only';lightingFailure?:Error;lightingSummary?:RelightLayerFields['summary']}
@@ -32,6 +35,22 @@ export function historyOutputName(record:JobRecord):string {
 function backgroundHistoryError(){return new DiagnosticError('invalid-output','output',t('背景历史的蒙版数据缺失或损坏，无法安全重建候选；原始输出已保留'));}
 function lightingHistoryError(){return new DiagnosticError('invalid-output','output',t('光影层历史的来源、尺寸、蒙版或输出类型不一致；原始输出已保留'));}
 function editAnalysisHistoryError(){return new DiagnosticError('invalid-output','output',t('大区域历史的来源尺寸、原生蒙版或位深不一致；原始输出已保留'));}
+function edgeBlendContext(record:JobRecord):number|undefined {
+  const snapshot=record.snapshot as Snapshot|undefined,params=record.params as any;
+  if(snapshot?.edgeBlend===undefined){if(params?.edgeBlend!==undefined&&params.edgeBlend!==0)throw editAnalysisHistoryError();return;}
+  const edge=validateEdgeBlend(snapshot.edgeBlend);
+  if(params?.mode!=='edit'||params.outputKind!=='edit'||params.edgeBlend!==edge.radius||record.blend||record.relight||params.assetContext||snapshot.backgroundComposite||![8,16].includes(snapshot.nativeDepth!)||snapshot.captureGeometry&&snapshot.captureGeometry.kind!=='edit-analysis')throw editAnalysisHistoryError();
+  return edge.radius;
+}
+async function validateEdgeBlendMasks(record:JobRecord,snapshot:Snapshot,read:ReadBinary):Promise<void> {
+  const radius=edgeBlendContext(record);if(!radius)return;
+  const b=snapshot.bounds,width=b.right-b.left,height=b.bottom-b.top;
+  let raw:Uint8Array,protection:Uint8Array;
+  try{raw=await read(`${record.id}-subject-mask.bin`);protection=await read(`${record.id}-protection-mask.bin`);}catch{throw editAnalysisHistoryError();}
+  if(!(raw instanceof Uint8Array)||!(protection instanceof Uint8Array)||raw.length!==width*height||protection.length!==raw.length||snapshot.mask.length!==raw.length||!raw.some(v=>v>0)||!snapshot.mask.some(v=>v>0))throw editAnalysisHistoryError();
+  const expected=outwardBlendMask(raw,width,height,radius,protection);
+  if(expected.some((v,p)=>v!==snapshot.mask[p]))throw editAnalysisHistoryError();
+}
 /** Only the saved version grants current-image asset semantics; old assets stay text-only. */
 function selectionAssetContext(record:JobRecord):AssetContext|undefined {
   const params=record.params as any,context=params?.assetContext;
@@ -60,13 +79,14 @@ async function validateAssetMasks(record:JobRecord,snapshot:Snapshot,read:ReadBi
   if(placement&&!selection.some(value=>value>0))throw editAnalysisHistoryError();
   for(let p=0;p<size;p++)if(snapshot.mask[p]!== (placement?assetPlacementValue(selection[p],protection[p],placement.occlusion):Math.round(selection[p]*(255-protection[p])/255)))throw editAnalysisHistoryError();
 }
-function smallAssetGeometry(record:JobRecord,outputBytes:number,retainedBytes:number){
+function smallAssetGeometry(record:JobRecord,outputBytes:number,retainedBytes:number,maskPlanes=3){
   const snapshot=record.snapshot as Snapshot,b=snapshot.bounds,model=(record.params as any).modelSize;
   checkDocumentSize(snapshot.width,snapshot.height);
   if(!b||!Object.values(b).every(Number.isSafeInteger)||b.left<0||b.top<0||b.right>snapshot.width||b.bottom>snapshot.height||![8,16].includes(snapshot.nativeDepth!)||!model||!Number.isSafeInteger(model.width)||!Number.isSafeInteger(model.height)||model.width<1||model.height<1||model.width*model.height>16_000_000)throw editAnalysisHistoryError();
   const width=b.right-b.left,height=b.bottom-b.top;checkDocumentSize(width,height);
   const sourceBytes=width*height*(snapshot.nativeDepth===16?8:4),modelBytes=model.width*model.height*(record.template==='qwen21-local-v3-rgba16'?8:4);
-  planEditApplyMemory(width,height,snapshot.nativeDepth!,sourceBytes*2+modelBytes*3+outputBytes,width*height*3,retainedBytes);
+  if(edgeBlendContext(record))planEdgeBlendCandidate(width,height,snapshot.nativeDepth!,{width,height},model,record.template==='qwen21-local-v3-rgba16'?16:8,outputBytes,retainedBytes);
+  else planEditApplyMemory(width,height,snapshot.nativeDepth!,sourceBytes*2+modelBytes*3+outputBytes,width*height*maskPlanes,retainedBytes);
   return {width,height};
 }
 export function candidateOutputKind(record:JobRecord):RelightOutputKind|undefined {
@@ -83,7 +103,7 @@ export function candidateOutputKind(record:JobRecord):RelightOutputKind|undefine
 async function restoreSnapshot(record:JobRecord,read:ReadBinary):Promise<Snapshot|undefined> {
   if(!record.snapshot)return undefined;assertTaskNames(record);const saved=record.snapshot as Omit<Snapshot,'mask'>;
   if(saved.backgroundComposite!==undefined&&saved.backgroundComposite!=='subject-background-v1')throw backgroundHistoryError();
-  try{return {...saved,mask:await read(`${record.id}-mask.bin`)};}catch(error){if(saved.backgroundComposite)throw backgroundHistoryError();throw error;}
+  try{const snapshot={...saved,mask:await read(`${record.id}-mask.bin`)};await validateEdgeBlendMasks(record,snapshot,read);return snapshot;}catch(error){if(saved.backgroundComposite)throw backgroundHistoryError();throw error;}
 }
 async function restoreBackgroundMasks(record:JobRecord,snapshot:Snapshot,source:Raster,read:ReadBinary){
   let subject:Uint8Array,protection:Uint8Array;
@@ -97,7 +117,7 @@ async function restoreBackgroundMasks(record:JobRecord,snapshot:Snapshot,source:
 
 /** New bounded records have a native geometry and a separate, native-depth PNG grid. */
 function editAnalysisGeometry(record:JobRecord,retainedBytes:number,outputBytes:number,application:boolean){
-  const snapshot=record.snapshot as Snapshot|undefined,geometry=snapshot?.captureGeometry,params=record.params as any,assetContext=selectionAssetContext(record);
+  const snapshot=record.snapshot as Snapshot|undefined,geometry=snapshot?.captureGeometry,params=record.params as any,assetContext=selectionAssetContext(record),edge=edgeBlendContext(record);
   const edit=params?.outputKind==='edit'&&['edit','remove','background','costume','reference','scene','relight','blend'].includes(params.mode);
   if(!snapshot||geometry?.kind!=='edit-analysis'||!params||!edit&&!assetContext||typeof snapshot.requiresClipping!=='boolean'||![8,16].includes(snapshot.nativeDepth!))throw editAnalysisHistoryError();
   checkDocumentSize(snapshot.width,snapshot.height);
@@ -115,7 +135,8 @@ function editAnalysisGeometry(record:JobRecord,retainedBytes:number,outputBytes:
   // The helper doubles raster bytes for its live/copy peak. Selection assets
   // temporarily verify all three native planes, then retain only the effective
   // application mask. Ordinary browsing reads and releases one plane at a time.
-  planEditApplyMemory(width,height,snapshot.nativeDepth!,sourceBytes*2+modelBytes*3+outputBytes,width*height*(assetContext||application&&background?3:1),retainedBytes);
+  if(edge)planEdgeBlendCandidate(width,height,snapshot.nativeDepth!,geometry,model,record.template==='qwen21-local-v3-rgba16'?16:8,outputBytes,retainedBytes);
+  else planEditApplyMemory(width,height,snapshot.nativeDepth!,sourceBytes*2+modelBytes*3+outputBytes,width*height*(assetContext||application&&background?3:1),retainedBytes);
   return {snapshot,geometry,params,width,height,background,assetContext};
 }
 function estimatedCandidatePngBytes(record:JobRecord):number {
@@ -147,12 +168,16 @@ export function preflightSelectionAssetCandidate(record:JobRecord,retainedBytes=
     return geometry?editAnalysisGeometry(record,retainedBytes,bytes,false):smallAssetGeometry(record,bytes,retainedBytes);
   });
 }
+export function preflightEdgeBlendCandidate(record:JobRecord,retainedBytes=0):void {
+  if(!edgeBlendContext(record))return;assertTaskNames(record);
+  candidateCapturePreflight(()=>((record.snapshot as Snapshot).captureGeometry?editAnalysisGeometry(record,retainedBytes,estimatedCandidatePngBytes(record),false):smallAssetGeometry(record,estimatedCandidatePngBytes(record),retainedBytes,4)));
+}
 
 async function editAnalysisInputs(record:JobRecord,bytes:Uint8Array,read:ReadBinary,retainedBytes:number,application:boolean){
   assertTaskNames(record);const expected=editAnalysisGeometry(record,retainedBytes,bytes.byteLength,application);
   if(bytes.length<33)throw editAnalysisHistoryError();
   const outputHeader=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
-  if(outputHeader.getUint32(16)!==expected.params.modelSize.width||outputHeader.getUint32(20)!==expected.params.modelSize.height||expected.assetContext&&bytes[24]!==(record.template==='qwen21-local-v3-rgba16'?16:8))throw editAnalysisHistoryError();
+  if(outputHeader.getUint32(16)!==expected.params.modelSize.width||outputHeader.getUint32(20)!==expected.params.modelSize.height||(expected.assetContext||expected.snapshot.edgeBlend)&&bytes[24]!==(record.template==='qwen21-local-v3-rgba16'?16:8))throw editAnalysisHistoryError();
   const snapshot:Snapshot={...expected.snapshot,mask:new Uint8Array()};
   const sourceBytes=await read(`${record.id}-source.png`),geometry=expected.geometry;
   if(sourceBytes.length<33)throw editAnalysisHistoryError();
@@ -166,6 +191,7 @@ async function editAnalysisInputs(record:JobRecord,bytes:Uint8Array,read:ReadBin
     let native:Uint8Array;try{native=await read(name);}catch{throw expected.background?backgroundHistoryError():editAnalysisHistoryError();}
     if(!(native instanceof Uint8Array)||native.length!==expected.width*expected.height||effective&&!native.some(value=>value>0))throw editAnalysisHistoryError();
     if(effective&&expected.assetContext)await validateAssetMasks(record,{...snapshot,mask:native},read);
+    if(effective&&edgeBlendContext(record))await validateEdgeBlendMasks(record,{...snapshot,mask:native},read);
     if(application){if(effective)snapshot.mask=native;return native;}
     return resampleGray(native,expected.width,expected.height,width,height);
   };
@@ -214,8 +240,7 @@ function blendGeometry(record:JobRecord,retainedBytes=0,outputBytes=0){
   const geometry=snapshot.captureGeometry!,b=snapshot.bounds,width=b.right-b.left,height=b.bottom-b.top;checkDocumentSize(width,height);
   if(!Number.isSafeInteger(geometry.width)||!Number.isSafeInteger(geometry.height)||geometry.width<1||geometry.height<1||geometry.width>width||geometry.height>height||geometry.width*geometry.height>IMAGE_BUDGETS.analysisPixels||Math.max(geometry.width,geometry.height)>IMAGE_BUDGETS.analysisSide)throw lightingHistoryError();
   const model=params.modelSize;if(!model||!Number.isSafeInteger(model.width)||!Number.isSafeInteger(model.height)||model.width<1||model.height<1||model.width*model.height>16_000_000)throw lightingHistoryError();
-  const sourceBytes=geometry.width*geometry.height*(snapshot.nativeDepth===16?8:4),modelBytes=model.width*model.height*(record.template==='qwen21-local-v3-rgba16'?8:4);
-  planEditApplyMemory(width,height,snapshot.nativeDepth!,sourceBytes*2+modelBytes*3+outputBytes+geometry.width*geometry.height*64,width*height*3,retainedBytes);
+  planBlendCandidateMemory({width,height,depth:snapshot.nativeDepth!,analysis:geometry,model,outputDepth:record.template==='qwen21-local-v3-rgba16'?16:8,outputBytes,retainedBytes});
   return {metadata,snapshot,params,geometry,width,height};
 }
 /** New blend records retain exact raw/effective/protection planes; never infer native geometry from PNG. */
@@ -347,10 +372,10 @@ async function lightingInputs(record:JobRecord,raw:Raster,snapshot:Snapshot,read
 }
 
 /** Re-derive on demand rather than retain full channel buffers for every candidate. No network IO. */
-export async function prepareLightingLayerApplication(record:JobRecord,bytes:Uint8Array,read:ReadBinary,signal?:AbortSignal){
+export async function prepareLightingLayerApplication(record:JobRecord,bytes:Uint8Array,read:ReadBinary,signal?:AbortSignal,retainedBytes=0){
   if(candidateOutputKind(record)!=='lighting-layers')throw lightingHistoryError();
   if(record.blend!==undefined){
-    blendGeometry(record,0,bytes.byteLength);const raw=decodeBlendOutput(record,bytes),input=await blendInputs(record,read,raw,bytes.byteLength);
+    blendGeometry(record,retainedBytes,bytes.byteLength);const raw=decodeBlendOutput(record,bytes),input=await blendInputs(record,read,raw,bytes.byteLength,retainedBytes);
     const fields=await deriveBlendApplication(input,raw,signal);return {snapshot:input.snapshot,fields,source:input.source,mask:input.mask};
   }
   const snapshot=await restoreSnapshot(record,read);if(!snapshot)throw lightingHistoryError();
@@ -372,12 +397,14 @@ export async function prepareSelectionAssetApplication(record:JobRecord,bytes:Ui
 }
 /** One read-only restoration/composition path for Results and the independent history preview. */
 export async function prepareCandidate(record:JobRecord,bytes:Uint8Array,read:ReadBinary,retainedBytes=0):Promise<PreparedCandidate> {
+  const edge=edgeBlendContext(record);
   if(record.blend!==undefined)return prepareBlendCandidate(record,bytes,read,retainedBytes);
   const assetContext=selectionAssetContext(record);
   const geometry=(record.snapshot as Snapshot|undefined)?.captureGeometry;
   if(geometry?.kind==='edit-analysis')return prepareEditAnalysisCandidate(record,bytes,read,retainedBytes);
+  if(edge)smallAssetGeometry(record,bytes.byteLength,retainedBytes,4);
   const assetGeometry=assetContext&&!geometry?smallAssetGeometry(record,bytes.byteLength,retainedBytes):undefined;
-  if(assetGeometry){
+  if(assetGeometry||edge){
     // The budget uses the saved model grid/depth. Reject a different compressed
     // raster before inflation/decoding or loading any UUID-owned gray plane.
     if(bytes.length<33)throw editAnalysisHistoryError();
@@ -420,7 +447,14 @@ export async function prepareCandidate(record:JobRecord,bytes:Uint8Array,read:Re
   }
   if(params?.outputKind==='edit'&&snapshot){
     const expected=params.modelSize;if(!expected||image.width!==expected.width||image.height!==expected.height)throw new DiagnosticError('invalid-output','output',t('候选尺寸与输入工作流不符，已保留原始输出；请检查后端，避免拉伸错位'));
-    const source=decodePng(await read(`${record.id}-source.png`));
+    const sourceBytes=await read(`${record.id}-source.png`);
+    if(edge){
+      if(sourceBytes.length<33)throw editAnalysisHistoryError();
+      const header=new DataView(sourceBytes.buffer,sourceBytes.byteOffset,sourceBytes.byteLength),b=snapshot.bounds;
+      if(header.getUint32(16)!==b.right-b.left||header.getUint32(20)!==b.bottom-b.top||sourceBytes[24]!==snapshot.nativeDepth)throw editAnalysisHistoryError();
+    }
+    const source=decodePng(sourceBytes);
+    if(edge){let hash=2166136261;for(const value of source.rgba)hash=Math.imul(hash^value,16777619);if((hash>>>0).toString(16)!==snapshot.sourceHash||rasterDepth(source)!==snapshot.nativeDepth)throw editAnalysisHistoryError();}
     const backgroundMasks=snapshot.backgroundComposite==='subject-background-v1'?await restoreBackgroundMasks(record,snapshot,source,read):undefined;
     const maskImage=resize(maskRaster(snapshot.mask,source.width,source.height),image.width,image.height);
     const mask=new Uint8Array(image.width*image.height);for(let i=0;i<mask.length;i++)mask[i]=maskImage.rgba[i*4];

@@ -32,7 +32,8 @@ function colorHistory(h:Harness){
   install(docs[0]);
   return {docs,duplicates,undo:(doc=h.ps.app.activeDocument)=>{const origin=origins.get(doc.id);assert.ok(origin);doc.colorProfileName=origin.profile;doc.colorProfileType=origin.type;doc.activeHistoryState={id:origin.history};},failAssignment:(value:boolean)=>{failAssignment=value;},cancel:(value:boolean)=>{cancelled=value;}};
 }
-async function harness(){const h=await panelHarness({untaggedSource:{bytes}});await h.wait();return {h,native:colorHistory(h)};}
+// These cases exercise exact legacy selection/protection recovery without expansion.
+async function harness(){const h=await panelHarness({untaggedSource:{bytes}});await h.wait();h.el('edge-blend').value='0';return {h,native:colorHistory(h)};}
 async function profileFailure(h:Harness,native:ReturnType<typeof colorHistory>,generate=false){
   if(generate){h.el('resolution').value='32';h.click('generate');}else h.click('capture');await h.wait();if(generate)await pause();
   const old=h.ps.app.activeDocument;native.undo(old);h.click('nav-create');h.click('capture');await h.wait();

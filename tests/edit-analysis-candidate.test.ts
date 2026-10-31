@@ -5,6 +5,7 @@ import {backgroundEditMask} from '../src/imaging/composite';
 import {encodePng,type Raster} from '../src/imaging/image';
 import type {JobRecord} from '../src/generation/jobs';
 import UPNG from 'upng-js';
+import {outwardBlendMask} from '../src/features/editing/edge-blend';
 
 const id='91000000-1111-4111-8111-111111111111';
 function fixture(mode='edit',depth:8|16=8){
@@ -47,6 +48,26 @@ test('native edit application receives model pixels before source-alpha retentio
   assert.equal(result.snapshot.mask.length,8*6);
   assert.equal(result.subjectMask,undefined);
   assert.equal(result.protectionMask,undefined);
+});
+
+test('versioned ordinary edge blend verifies saved raw selection/protection before preview or native apply',async()=>{
+  const f=fixture(),s=f.record.snapshot as any,p=f.record.params as any;
+  s.edgeBlend={version:'outward-v1',radius:2};p.edgeBlend=2;
+  f.subject.fill(0);f.subject[2*8+3]=255;
+  f.files[`${id}-mask.bin`]=outwardBlendMask(f.subject,8,6,2,f.protection);
+  const applied=await preparation.prepareEditAnalysisApplication(f.record,encodePng(f.model),f.read);
+  assert.deepEqual(applied.snapshot.mask,f.files[`${id}-mask.bin`]);assert.equal(applied.snapshot.mask[0],0);
+  f.files[`${id}-mask.bin`][2*8+4]=0;
+  await assert.rejects(preparation.prepareCandidate(f.record,encodePng(f.model),f.read),/蒙版|范围|历史/);
+  await assert.rejects(preparation.prepareEditAnalysisApplication(f.record,encodePng(f.model),f.read),/蒙版|范围|历史/);
+});
+test('edge blend cannot be inferred for markerless history or attached to other modes',async()=>{
+  const legacy=fixture();await preparation.prepareCandidate(legacy.record,encodePng(legacy.model),legacy.read);
+  assert.equal(legacy.reads.some(name=>name.endsWith('subject-mask.bin')),false);
+  for(const mode of ['blend','remove','background']){
+    const f=fixture(mode);(f.record.snapshot as any).edgeBlend={version:'outward-v1',radius:2};(f.record.params as any).edgeBlend=2;
+    await assert.rejects(preparation.prepareCandidate(f.record,encodePng(f.model),f.read),/历史|边缘|范围/);
+  }
 });
 
 test('bounded background history retains native subject/protection for native reconstruction',async()=>{
@@ -181,4 +202,44 @@ test('bounded selection assets reject output depth mismatches before any PNG dec
     await assert.rejects(prepare(f.record,bytes,f.read));
     assert.equal(decode.mock.callCount(),0,'budgeted model depth is checked before bounded source or model decoding');assert.deepEqual(f.reads,[]);
   }
+});
+
+
+test('native edge history rejects changed source pixels, depth and geometry',async()=>{
+  for(const corruption of ['pixels','depth','geometry']){
+    const f=fixture(),s=f.record.snapshot as any,p=f.record.params as any;
+    delete s.captureGeometry;s.bounds.right=s.bounds.left+4;s.bounds.bottom=s.bounds.top+3;
+    s.edgeBlend={version:'outward-v1',radius:2};p.edgeBlend=2;
+    const raw=new Uint8Array(12);raw[5]=255;
+    f.files[id+'-subject-mask.bin']=raw;f.files[id+'-protection-mask.bin']=new Uint8Array(12);
+    f.files[id+'-mask.bin']=outwardBlendMask(raw,4,3,2);
+    await preparation.prepareCandidate(f.record,encodePng(f.model),f.read);
+    const changed={...f.source,rgba:f.source.rgba.slice()};
+    if(corruption==='pixels')changed.rgba[0]++;
+    if(corruption==='depth')changed.rgba=new Uint16Array(changed.rgba);
+    if(corruption==='geometry'){changed.width=3;changed.height=4;}
+    f.files[id+'-source.png']=encodePng(changed);
+    await assert.rejects(preparation.prepareCandidate(f.record,encodePng(f.model),f.read),/历史|位深|来源/);
+  }
+});
+
+test('bounded edge blend rejects output depth mismatches before any PNG decoding or local reads',async(t)=>{
+  const decode=t.mock.method(UPNG,'decode');
+  for(const prepare of [preparation.prepareCandidate,preparation.prepareEditAnalysisApplication])for(const expected of [8,16]){
+    const f=fixture();(f.record.snapshot as any).edgeBlend={version:'outward-v1',radius:2};(f.record.params as any).edgeBlend=2;
+    f.files[`${id}-mask.bin`]=outwardBlendMask(f.subject,8,6,2,f.protection);
+    f.record.template=expected===16?'qwen21-local-v3-rgba16':'qwen21-local-v2-rgba';
+    const bytes=encodePng({...f.model,rgba:expected===16?f.model.rgba:Uint16Array.from(f.model.rgba,value=>value*257)});
+    await assert.rejects(prepare(f.record,bytes,f.read));
+    assert.equal(decode.mock.callCount(),0,'the budgeted depth must be checked before source or model decoding');assert.deepEqual(f.reads,[]);
+  }
+});
+
+test('native edge candidate rejects a changed output grid before reading saved masks',async()=>{
+  const f=fixture(),s=f.record.snapshot as any,p=f.record.params as any;
+  delete s.captureGeometry;s.bounds.right=s.bounds.left+4;s.bounds.bottom=s.bounds.top+3;
+  s.edgeBlend={version:'outward-v1',radius:2};p.edgeBlend=2;
+  const bytes=encodePng(f.model).slice();new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength).setUint32(16,4096);
+  await assert.rejects(preparation.prepareCandidate(f.record,bytes,f.read));
+  assert.equal(f.reads.length,0);
 });

@@ -78,6 +78,11 @@ test('both new blend modes preflight paid candidate budgets and source views rel
   const f=fixture();assert.doesNotThrow(()=>preflightEditAnalysisCandidate(f.record));(f.record.blend as any).outputKind='full-result';assert.doesNotThrow(()=>preflightEditAnalysisCandidate(f.record));
   assert.deepEqual((await loadCandidateSource(f.record,f.read)).rgba,f.source.rgba);assert.throws(()=>preflightEditAnalysisCandidate(f.record,512_000_000),/预算|内存/);
 });
+test('Blend lighting application checks retained session bytes before reading native saved planes',async()=>{
+  const f=fixture(),reads:string[]=[];
+  await assert.rejects(prepareLightingLayerApplication(f.record,encodePng(f.raw),async name=>{reads.push(name);return f.read(name);},undefined,512_000_000),/预算/);
+  assert.deepEqual(reads,[]);
+});
 test('new blend rejects incompatible output header/depth before reading local masks or source',async()=>{
   for(const bad of ['size','depth']){const f=fixture(),bytes=bad==='size'?encodePng({width:16,height:16,rgba:new Uint8Array(16*16*4).fill(255)}):encodePng({width:32,height:32,rgba:new Uint16Array(32*32*4).fill(65535)}),reads:string[]=[];
     await assert.rejects(prepareCandidate(f.record,bytes,async name=>{reads.push(name);return f.read(name);}));assert.deepEqual(reads,[]);

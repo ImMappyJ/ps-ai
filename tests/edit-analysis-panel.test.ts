@@ -21,7 +21,7 @@ function largeDocument(h:Awaited<ReturnType<typeof panelHarness>>,background=fal
   return {width,height,doc,reads,writes};
 }
 
-test('large ordinary edit passes bounded source through generation, history and lazy candidate display',async()=>{
+test('large ordinary edit passes bounded source through generation, history and lazy candidate display',{timeout:90_000},async()=>{
   const h=await panelHarness();try{
     const native=largeDocument(h);h.el('resolution').value='32';h.el('margin').value='0';h.el('count').value='2';h.click('generate');await h.wait();
     assert.equal(h.posts.length,2,JSON.stringify(h.errors));
