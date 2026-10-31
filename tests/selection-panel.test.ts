@@ -19,7 +19,7 @@ test('ordinary edit undo with no selection needs explicit restoration, then capt
     h.click('apply');await h.wait();assert.equal(h.appliedLayers.length,1);assert.equal(h.pixelRequests.length,2);assert.equal(h.errors.slice(-1)[0]?.code,'source-changed');assert.equal(h.ps.app.activeDocument.activeHistoryState.id,8);
     const freshPreview=decodePng(new Uint8Array(Buffer.from(h.el('source-preview').src.split(',')[1],'base64')));assert.deepEqual([...freshPreview.rgba.slice(0,4)],[50,60,70,255]);
     h.click('generate');await h.wait();assert.equal(h.posts.length,2);const record=h.records().find(r=>r.id===h.posts[1].prompt_id)!,s=record.snapshot as any;assert.equal(s.profile,'Adobe RGB (1998)');assert.equal(s.historyId,8);
-    const uploaded=h.uploads.filter(u=>u.name.endsWith('-source.png')).slice(-1)[0];assert.deepEqual([...uploaded.image.rgba.slice(0,4)],[50,60,70,255]);const mask=h.files[`${record.id}-mask.bin`] as Uint8Array;assert.equal(mask[32*67+33],64);
+    const uploaded=h.uploads.filter(u=>u.name.endsWith('-source.png')).slice(-1)[0];assert.deepEqual([...uploaded.image.rgba.slice(0,4)],[50,60,70,255]);const mask=h.files[`${record.id}-mask.bin`] as Uint8Array;assert.equal((h.files[record.id+'-subject-mask.bin'] as Uint8Array)[32*67+33],128,'range recovery retains raw feather values');assert.equal(mask[32*67+33],113,'outward envelope 226 is multiplied by the 127/255 protection remainder once');
   }finally{await h.close();}
 });
 

@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {PhotoshopAdapter} from '../src/infrastructure/photoshop/photoshop';
 import {IMAGE_BUDGETS} from '../src/imaging/budget';
+import {planBlendMemory} from '../src/imaging/blend-budget';
 
 function host(width=9000,height=5000,depth:8|16=16){
   const calls:any[]=[],doc:any={id:7,width,height,mode:'rgb',bitsPerChannel:depth,colorProfileName:'sRGB IEC61966-2.1',activeHistoryState:{id:3},selection:{bounds:{left:0,top:0,right:width,bottom:height}},layers:[{id:1,visible:true,kind:'normal',opacity:100,fillOpacity:100,blendMode:'normal'}]};
@@ -68,4 +69,37 @@ test('blend redraw may capture a transparent subject area with visible environme
   const h=host(64,64,8);h.doc.selection.bounds={left:0,top:0,right:32,bottom:64};const read=h.ps.imaging.getPixels;
   h.ps.imaging.getPixels=async(o:any)=>{const r=await read(o),get=r.imageData.getData;r.imageData.getData=async()=>{const rgba=await get();for(let y=0;y<r.imageData.height;y++)for(let x=0;x<r.imageData.width;x++)if(o.sourceBounds.left+(x+.5)*(o.sourceBounds.right-o.sourceBounds.left)/r.imageData.width<32)rgba[(y*r.imageData.width+x)*4+3]=0;return rgba;};return r;};
   const c=await h.adapter.capture(0,undefined,7,8,{purpose:'blend-analysis'});assert.equal(c.snapshot.blendOpaqueScope,false);assert.equal(c.snapshot.requiresClipping,false);assert.equal(c.image.rgba[3],0);
+});
+
+test('33MP Blend captures the affordable grid while retaining native feathered selection and RGB16',{timeout:60_000},async()=>{
+  const h=host(7008,4672,16);h.doc.selection.bounds={left:0,top:0,right:3504,bottom:4672};
+  const expected=planBlendMemory(7008,4672,16,1024,16,32_000_000);
+  const c=await h.adapter.capture(0,undefined,7,16,{purpose:'blend-analysis',analysisResolution:1024,retainedBytes:32_000_000});
+  assert.deepEqual([c.image.width,c.image.height],[expected.width,expected.height]);
+  assert.deepEqual(c.snapshot.bounds,{left:0,top:0,right:7008,bottom:4672});
+  assert.equal(c.snapshot.mask.length,7008*4672);assert.equal(c.snapshot.mask[0],128);assert.equal(c.snapshot.mask[7007],0);
+  assert.ok(c.image.rgba instanceof Uint16Array);assert.equal(c.image.rgba[0],12345);assert.equal(c.snapshot.blendOpaqueScope,true);
+});
+test('unaffordable Blend rejects before reading any selection or pixels',async()=>{
+  const h=host(7008,4672,16);h.doc.selection.bounds.right=3504;
+  await assert.rejects(h.adapter.capture(0,undefined,7,16,{purpose:'blend-analysis',analysisResolution:2048}),/预算/);
+  assert.equal(h.calls.length,0);
+});
+test('ordinary edit edge blend freezes an outward native mask but preserves raw selection and protection',async()=>{
+  const h=host(9,9,16);h.doc.selection.bounds={left:3,top:3,right:6,bottom:6};
+  h.ps.imaging.getSelection=async()=>({sourceBounds:{...h.doc.selection.bounds},imageData:{width:3,height:3,componentSize:8,components:1,getData:async()=>new Uint8Array(9).fill(128),dispose(){}}});
+  const protection={documentId:7,width:9,height:9,bounds:{left:0,top:0,right:9,bottom:9},mask:new Uint8Array(81),sessionId:'analysis-session'};protection.mask[4*9+2]=255;
+  const c=await h.adapter.capture(0,protection,7,8,{edgeBlend:3});
+  assert.deepEqual(c.snapshot.edgeBlend,{version:'outward-v1',radius:3});
+  assert.equal(c.selectionMask[4*9+6],0);assert.ok(c.snapshot.mask[4*9+6]>0);assert.equal(c.snapshot.mask[4*9+2],0);
+  assert.deepEqual(h.doc.selection.bounds,{left:3,top:3,right:6,bottom:6});
+  for(const purpose of ['blend-analysis','relight-analysis','subject-asset'] as const)await assert.rejects(h.adapter.capture(0,undefined,7,8,{purpose,edgeBlend:3}),/策略/);
+});
+
+
+test('ordinary edge capture moves a native-fit RGB16 region to bounded analysis before candidate validation would overflow',async()=>{
+  const h=host(3000,3000,16),c=await h.adapter.capture(0,undefined,7,8,{edgeBlend:8,analysisResolution:1024});
+  assert.equal(c.snapshot.captureGeometry?.kind,'edit-analysis');assert.equal(c.snapshot.mask.length,9_000_000);
+  assert.deepEqual(c.snapshot.edgeBlend,{version:'outward-v1',radius:8});
+  assert.ok(c.image.width*c.image.height<=1048576);assert.ok(c.image.rgba instanceof Uint16Array);assert.equal(c.image.rgba[0],12345);
 });

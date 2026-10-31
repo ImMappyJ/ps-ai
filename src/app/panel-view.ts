@@ -36,11 +36,12 @@ export class ResultNavigation {
   take(available:readonly string[],ready:boolean,enabled=true):string|undefined {const pending=this.pending;if(!pending)return;if(!enabled||pending.intent!==this.latest||!available.includes(pending.candidateId)){this.pending=undefined;return;}if(!ready)return;this.pending=undefined;return pending.candidateId;}
 }
 
-export interface CaptureSizeDetails {documentWidth:number;documentHeight:number;nativeWidth:number;nativeHeight:number;workWidth:number;workHeight:number;modelWidth?:number;modelHeight?:number;outputWidth?:number;outputHeight?:number}
+export interface CaptureSizeDetails {documentWidth:number;documentHeight:number;nativeWidth:number;nativeHeight:number;workWidth:number;workHeight:number;modelWidth?:number;modelHeight?:number;outputWidth?:number;outputHeight?:number;blendAnalysis?:boolean}
 export function captureSizeSummary(size:CaptureSizeDetails):string {
   const lines=[t('原文档 {0}×{1} · 原坐标回填 {2}×{3} · 工作图 {4}×{5}',size.documentWidth,size.documentHeight,size.nativeWidth,size.nativeHeight,size.workWidth,size.workHeight)];
   if(size.modelWidth&&size.modelHeight)lines.push(t('送模 {0}×{1}',size.modelWidth,size.modelHeight));
   if(size.outputWidth&&size.outputHeight)lines.push(t('PNG／新文档 {0}×{1}',size.outputWidth,size.outputHeight));
+  if(size.blendAnalysis)lines.push(t('溶图分析尺寸按内存预算调整，原图与蒙版保持原尺寸；细小光影可能被平滑。'));
   lines.push(t('模型细节受工作与送模尺寸限制；原尺寸结果请回填后从 Photoshop 保存／导出。'));
   return lines.join(' · ');
 }

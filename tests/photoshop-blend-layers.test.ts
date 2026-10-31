@@ -40,6 +40,11 @@ test('blend native RGB8/16 passes through shadow/light with one effective mask a
     assert.deepEqual(samples[0],depth===16?[0,257,16448,32896,65535]:[0,1,64,128,255]);assert.deepEqual(h.calls.filter(c=>c[0]==='resume'),[['resume',true]]);assert.ok(h.resources.every(r=>r.disposed));
   }
 });
+test('Blend native writer rejects retained memory pressure before modal or writes',async()=>{
+  const h=blend(16);
+  await assert.rejects(h.adapter.applyRelightLayers(h.snapshot,h.fields,'Blend',{retainedBytes:512_000_000}),/预算/);
+  assert.equal(h.calls.length,0);
+});
 test('blend writer checks discriminated metadata, layers, opaque scope and history without publishing a group',async()=>{
   for(const failure of ['kind','layers','opaque','history','alpha']){const h=blend();
     if(failure==='kind')h.snapshot.captureGeometry!.kind='relight-analysis';if(failure==='layers')h.fields.source.layerIds=[2];if(failure==='opaque')h.snapshot.blendOpaqueScope=false;if(failure==='history')h.doc.activeHistoryState.id++;

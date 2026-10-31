@@ -13,6 +13,10 @@ test('bounded capture captions keep document, native write, work, model and expo
  try{for(const language of ['zh-CN','en-US'] as const){setLanguage(language);const caption=format(sizes);for(const value of ['9000×5000','8000×4000','1024×512','1408×704'])assert.ok(caption.includes(value),caption);if(language==='en-US')assert.doesNotMatch(caption,/[一-龥]/);}}
  finally{setLanguage('zh-CN');}
 });
+test('Blend captions explain adaptive analysis separately from original-sized masks in both languages',()=>{
+  const sizes={documentWidth:7008,documentHeight:4672,nativeWidth:7008,nativeHeight:4672,workWidth:900,workHeight:600,blendAnalysis:true};
+  try{setLanguage('zh-CN');assert.match(panelView.captureSizeSummary(sizes),/溶图.*分析.*蒙版/);setLanguage('en-US');const text=panelView.captureSizeSummary(sizes);assert.match(text,/Blend.*analysis.*masks/);assert.doesNotMatch(text,/[一-龥]/);}finally{setLanguage('zh-CN');}
+});
 
 test('view transitions notify once for both navigation clicks and programmatic shows without remounting controls',()=>{
  const {document,window}=parseHTML('<button data-panel-nav="create"></button><button data-panel-nav="results"></button><div data-panel-page="create"><input id="draft" value="keep"></div><div data-panel-page="results"></div><div data-panel-page="history"></div>'),changes:string[]=[],views=new panelView.PanelViews(document,page=>changes.push(page)),draft=document.getElementById('draft');

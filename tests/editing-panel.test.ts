@@ -122,7 +122,7 @@ test('new background history persists native subject and protection masks as bin
 
 test('old background history retains its stored edit direction without requiring new binary masks',async()=>{
   const h=await panelHarness({selection:{bounds:{left:0,top:0,right:1,bottom:2},mask:new Uint8Array([255,0,255,0])}});try{
-    await h.wait();h.el('resolution').value='32';h.click('generate');await h.wait();
+    await h.wait();h.el('edge-blend').value='0';h.el('resolution').value='32';h.click('generate');await h.wait();
     const records=h.records(),record=records[0];(record.params as any).mode='background';delete (record.snapshot as any).backgroundComposite;
     h.files['history.json']=JSON.stringify(records);const saved=(h.files[record.id+'-mask.bin'] as Uint8Array).slice();
     h.selectHistory(record.id);h.click('load-history');await h.wait();
@@ -133,7 +133,7 @@ test('old background history retains its stored edit direction without requiring
 
 test('a new background history with missing or damaged mask data fails explicitly while keeping its raw output',async()=>{
   const h=await panelHarness({selection:{bounds:{left:0,top:0,right:1,bottom:2},mask:new Uint8Array([255,0,255,0])}});try{
-    await h.wait();h.el('resolution').value='32';h.click('generate');await h.wait();
+    await h.wait();h.el('edge-blend').value='0';h.el('resolution').value='32';h.click('generate');await h.wait();
     const records=h.records(),record=records[0];(record.params as any).mode='background';(record.snapshot as any).backgroundComposite='subject-background-v1';h.files['history.json']=JSON.stringify(records);
     h.selectHistory(record.id);h.click('load-history');await h.wait();
     assert.match(h.el('status').textContent,/背景历史.*蒙版/);assert.ok(h.files[record.outputFile as string]);
