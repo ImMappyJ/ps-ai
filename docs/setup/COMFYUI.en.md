@@ -6,7 +6,7 @@
 
 PS-AI connects directly to your ComfyUI. The plugin includes no backend or weights. This page covers environment selection on Windows with NVIDIA through the first result. For cloud APIs, see [platform setup](PLATFORMS.en.md).
 
-> **Check your build first:** Published [0.5.2 experimental](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.2) supports GGUF diffusion weights only. **0.6.0 is an unreleased source candidate** adding native `.safetensors` loading. One INT8 combination has real inference/PNG and small Photoshop API evidence; see the [tested example](#native-tested). Installed panels, CCX/Portable and complete host acceptance remain pending. Changing settings cannot add this route to an older package.
+> **Check your build first:** Use [0.6.0 stable](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.6.0) for GGUF and compatible native `.safetensors` routes. See the [tested example](#native-tested) for the exact INT8 evidence and limits. The user reported successful candidate testing and approved release; this does not establish every installation method or model. Older 0.5.2 packages remain GGUF-only and cannot gain native loading through settings changes.
 
 Setup order: choose an existing or new environment → choose a GGUF or native route supported by your build → prepare its nodes and three model roles → start and connect → generate, inspect the new layer and undo.
 
@@ -20,12 +20,12 @@ Make two choices before downloading:
 | --- | --- |
 | Existing compatible ComfyUI | Keep the installation and weights, check [model compatibility](#model-compatibility), then [scan and connect](#connection); a running service can also use the [configuration tools](#environment-tools) |
 | New ComfyUI installation | Follow [backend preparation](#backend) for official Portable matching your hardware, then add only the nodes/models missing for your chosen route |
-| GGUF diffusion weights | Available in 0.5.2 and this source branch; requires `UnetLoaderGGUF` capable of recognizing Qwen 2.1; see the [GGUF node baseline](#gguf-nodes) |
-| Native Safetensors diffusion weights | Available in the unreleased 0.6.0 source candidate; built-in `UNETLoader` needs no GGUF extension package but still requires shared Qwen nodes, a matching encoder and RGBA VAE; see the [tested combination](#native-tested) |
+| GGUF diffusion weights | Available in 0.5.2 and 0.6.0; requires `UnetLoaderGGUF` capable of recognizing Qwen 2.1; see the [GGUF node baseline](#gguf-nodes) |
+| Native Safetensors diffusion weights | Available from 0.6.0; built-in `UNETLoader` needs no GGUF extension package but still requires shared Qwen nodes, a matching encoder and RGBA VAE; see the [tested combination](#native-tested) |
 
 1. **Photoshop 27.0 or later.** The recorded host is Windows Photoshop 27.0. Follow the [README installation steps](../README.en.md#install-a-release-package) for the PS-AI CCX or Portable package, then open PS-AI from Photoshop's Plugins menu. PS-AI Portable is the plugin; ComfyUI Portable below is a separate inference backend.
 2. **A compatible NVIDIA GPU, working driver and enough disk space.** The reference machine has an RTX 5080 with 16 GiB VRAM and about 48 GB RAM; these are not established minimum requirements. Tested examples total about 14.63 GB for GGUF or 17.28 GB for native INT8, sharing the same encoder/VAE. Assess disk, VRAM and operator support for other combinations. Allow additional space for Portable, extraction, dependencies, download caches and images. Other GPUs, CPU and macOS lack equivalent validation.
-3. **Match the plugin build to the tutorial.** The public download is 0.5.2; the new route belongs to the unreleased 0.6.0 source candidate. Check the version/build identity in Settings and package notes. Native loading needs a [source build containing this change](../README.en.md#build-from-source); no 0.6.0 installation package has completed acceptance. A matching version does not establish clean-machine or complete host acceptance.
+3. **Match the plugin build to the tutorial.** Choose CCX or Portable from [0.6.0 stable](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.6.0), without compiling source. Check the version/build identity in Settings and package notes. Older 0.5.2 packages do not support native loading. A matching version does not validate your machine or weights; still complete the small generation, application and Undo checks below.
 
 The default 8-bit path with a packaged plugin and local ComfyUI needs no Node.js, global Python, Git, ComfyUI-Manager or manual workflow import. Node.js 24+ is needed only for the [cloud platform relay](PLATFORMS.en.md) or source builds. Optional environment tools check or prepare configuration; they do not install the backend/dependencies or download models. These are instructions, not a record of a clean-machine installation or new host acceptance.
 
@@ -166,7 +166,7 @@ Get-FileHash .\ComfyUI\models\vae\qwen_image_2.1_vae_bf16.safetensors -Algorithm
 
 <a id="native-tested"></a>
 
-### Tested native INT8 example: unreleased 0.6.0 source
+### Tested native INT8 example: 0.6.0
 
 The combination tested on 2026-10-31 uses built-in `UNETLoader(weight_dtype=default)` with the diffusion file below and reuses the table's `qwen3vl_8b_int8_convrot.safetensors` encoder and `qwen_image_2.1_vae_bf16.safetensors` RGBA VAE. Total size is about **17.28 GB**, compared with **14.63 GB** for the GGUF example. Reuse identical encoders/VAE. BF16 diffusion weights are not required; this is not a recommendation for other INT8/FP8/BF16 variants.
 
@@ -192,8 +192,8 @@ The source is Comfy-Org/Qwen-Image-2.1 revision `aacf31a6d48e707f352ecba714cee06
 
 1. Open **Settings → Backend and models** and choose **ComfyUI**.
 2. For local Portable, enter `http://127.0.0.1:8188`, matching the browser check. Existing installations can use their actual HTTP(S) origin, such as `http://192.168.1.20:8188` or `https://comfy.example.com`.
-3. **Scan models**. This source branch reads available GGUF and native diffusion-loader lists and preserves explicit choices; it never replaces a selected native route with the GGUF preset automatically. Unselected roles receive only exact preset or unique nested-basename suggestions. Choose unresolved custom files yourself; a different quantization is never guessed. Published 0.5.2 scans only the GGUF diffusion route.
-4. Review the read-only loading route, then choose **Connect** to check selected filenames, shared nodes, fields and socket types and save settings. The source candidate reports **Nodes checked**, with a warning that the selected weights' real inference remains unverified; external acceptance records are not automatically assigned to your files. Address/model/depth changes require a new check. An absent unused loader is acceptable; network failures and malformed schemas remain errors. Then validate your own real generation.
+3. **Scan models**. Version 0.6.0 reads available GGUF and native diffusion-loader lists and preserves explicit choices; it never replaces a selected native route with the GGUF preset automatically. Unselected roles receive only exact preset or unique nested-basename suggestions. Choose unresolved custom files yourself; a different quantization is never guessed. Published 0.5.2 scans only the GGUF diffusion route.
+4. Review the read-only loading route, then choose **Connect** to check selected filenames, shared nodes, fields and socket types and save settings. The panel reports **Nodes checked**, with a warning that the selected weights' real inference remains unverified; external acceptance records are not automatically assigned to your files. Address/model/depth changes require a new check. An absent unused loader is acceptable; network failures and malformed schemas remain errors. Then validate your own real generation.
 
 Addresses cannot contain credentials, paths or query strings. A reverse proxy must forward HTTP and WebSocket at its root; HTTPS needs a valid certificate. API-key authentication is not integrated. Remote backends receive images, references and prompts; keep unauthenticated services private.
 
@@ -242,7 +242,7 @@ This version supports **model mappings within the existing workflow**. Weights m
 | Role | Node and field | Contract |
 | --- | --- | --- |
 | Diffusion: GGUF | `UnetLoaderGGUF.unet_name` | `.gguf`, compatible Qwen 2.1 structure and fixed sampling chain; existing 0.5.2 route |
-| Diffusion: native | `UNETLoader.unet_name`, `weight_dtype=default` | `.safetensors`, new in unreleased 0.6.0 source; requires the same Qwen 2.1 structure and sampling chain. Only the [specified INT8 combination](#native-tested) has the stated test evidence |
+| Diffusion: native | `UNETLoader.unet_name`, `weight_dtype=default` | `.safetensors`, new in 0.6.0; requires the same Qwen 2.1 structure and sampling chain. Only the [specified INT8 combination](#native-tested) has the stated test evidence |
 | Encoder | `CLIPLoader.clip_name` | `.safetensors`, `type=qwen_image`, `device=default` |
 | VAE | `VAELoader.vae_name` | `.safetensors`, matching Qwen 2.1 latent format, scaling and normalization; the same VAE encodes edit inputs and decodes outputs |
 | Encoding / references | `TextEncodeQwenImage21` | `prompt`, `negative_prompt`, `resolution`; `images.image_1` through `images.image_3`; accepts `vae` for image inputs |

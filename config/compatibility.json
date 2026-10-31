@@ -1,7 +1,16 @@
 {
   "schemaVersion": 1,
   "preset": "qwen-image-2.1-gguf-q4-experimental",
-  "status": "experimental; Windows Photoshop 27.0 tested, broader host stability unverified",
+  "releaseAcceptance": {
+    "version": "0.6.0",
+    "date": "2026-10-31",
+    "basis": "User reported successful testing after the Portable candidate handoff and explicitly authorized merge and stable release",
+    "candidateCommit": "44c2fd7bd961e90afca18fce2876068eed25e86c",
+    "candidatePortableSha256": "772d43abe8d2ba144f5ebac92ccd472fb4e6b82c43055ed8a9791ec68dc30502",
+    "scope": "User report without a case-by-case test record; does not establish every mode, model, CCX installation, upgrade, clean-machine or platform acceptance",
+    "finalArtifacts": "Rebuilt by the release workflow from the merged source; consult release-manifest.json for final source and digests"
+  },
+  "status": "0.6.0 stable release; Windows Photoshop 27.0 tested, broader host stability unverified",
   "photoshop": {
     "tested": "27.0",
     "minimumManifest": "27.0",
@@ -42,7 +51,7 @@
       "date": "2026-10-30",
       "reason": "assumed-srgb",
       "policy": "Approximate source capture only; no claim of recovering original color. Existing document ICC and verified file semantics retain priority. Repeated capture of the same session-proven sRGB working copy keeps the reason.",
-      "validation": "Published 0.5.2 has offline coverage. The unreleased 0.6.0 source on 2026-10-31 additionally passed standalone Photoshop 27 API checks for owned pathless two-raster-layer RGB8/16 composites: zero picker calls, preserved original state/layer/selection pixels, approximate tagged duplicate and same-session provenance, frozen-ID apply using real native-model output, profile-safe Undo and stale/closed guards. This is not installed-panel, arbitrary imported-file or photographic-color acceptance."
+      "validation": "Published 0.5.2 has offline coverage. The 0.6.0 source on 2026-10-31 additionally passed standalone Photoshop 27 API checks for owned pathless two-raster-layer RGB8/16 composites: zero picker calls, preserved original state/layer/selection pixels, approximate tagged duplicate and same-session provenance, frozen-ID apply using real native-model output, profile-safe Undo and stale/closed guards. This is not installed-panel, arbitrary imported-file or photographic-color acceptance."
     },
     "savedColorResolution": {
       "status": "Offline parser/mock tests and PS27 WebP8 capture/apply/undo passed; public PNG8 selection/document capture passed native API checks, installed b3548bd4 passed bounded recovery, and hash-verified installed 291c1d40 passed missing-selection rejection/real picker/selection capture. Reference import, persistent access and broader controls remain separate checks.",
@@ -112,7 +121,7 @@
   },
   "sourceModelRoutes": {
     "date": "2026-10-31",
-    "status": "Unreleased 0.6.0 candidate; published 0.5.2 remains GGUF-only. Exact INT8 native combination has bounded real inference and Photoshop API evidence below; installed CCX/Portable and broader acceptance remain pending.",
+    "status": "Available in 0.6.0 stable; 0.5.2 remains GGUF-only. Exact INT8 native combination has bounded real inference and Photoshop API evidence below. See releaseAcceptance for the separate user-reported test; broader acceptance remains unverified.",
     "baselinePolicy": "Existing backend, gguf, nodes, models and workflow.loader fields retain the recorded GGUF baseline and file hashes. Node author and filename are not compatibility allowlists.",
     "settingsSchemaVersion": 1,
     "routes": [
@@ -200,7 +209,7 @@
         "cancellation": "Atomic /api/jobs/{id}/cancel reached cancelled; no global interrupt or resubmission",
         "limits": "Owned local task, not installed UI or arbitrary network/host failure acceptance"
       },
-      "releaseGate": "Pending installed package and broader native acceptance; no release publication based on these bounded tests"
+      "releaseGate": "These bounded checks alone do not authorize release. The later user-reported candidate test and stable-release authorization are recorded separately in releaseAcceptance."
     },
     "evidenceLevels": [
       "File visibility in the correct loader inventory",
@@ -340,7 +349,7 @@
     }
   },
   "platformGateway": {
-    "status": "development; unreleased; no real API key or Photoshop gateway acceptance",
+    "status": "adapters included in 0.6.0; no real API key or Photoshop gateway acceptance",
     "protocol": "ps-ai/1",
     "nodeMinimum": 24,
     "defaultPort": 8190,
@@ -714,7 +723,7 @@
         "mask": "front = 1-P; behind = (1-S)*(1-P), within frozen context rectangle or full canvas; raw S and P preserved at native coordinates",
         "capability": "Explicit subject-v1 plus maxInputImages >= 3; reject before upload; OpenAI native mask uses placement, not subject",
         "preview": "Raw asset or bounded saved-source composite; export and apply never use display pixels",
-        "validation": "Offline only; installed controls, real-model quality and native apply/undo acceptance pending",
+        "validation": "Offline coverage and separate user-reported successful candidate test in releaseAcceptance; no case-by-case installed-control, real-model quality or native apply/undo record for this new path",
         "limitations": "No automatic matting, source subtraction, arbitrary second selection or front/back ring decomposition; transparency does not prove isolation"
       },
       "marker": "selection-v1",

@@ -4,7 +4,7 @@
 
 Start with a small edit: **connect → read the range → describe and generate → inspect and apply**. [Install the plugin](../README.en.md#install-a-release-package), then [configure ComfyUI from zero](../setup/COMFYUI.en.md#beginner) for a local backend, or connect a [cloud service](../setup/PLATFORMS.en.md).
 
-> This guide describes the **unreleased 0.6.0 source candidate**. The public download remains **0.5.2 experimental, with GGUF diffusion weights only**. Match the package with the version/build identity in Settings. Historical interfaces, real outputs and local composite previews are labeled separately. Installed panels, CCX/Portable, complete mode regression and clean-machine installation for 0.6.0 remain unvalidated.
+> This guide covers **0.6.0 stable**, supporting compatible GGUF/Safetensors diffusion weights. On 2026-10-31 the user reported successful candidate testing and approved release; no case-by-case record establishes every mode, installation method or clean-machine acceptance. Match the package with the version/build identity in Settings. Historical interfaces, real outputs and local composite previews are labeled separately.
 
 Create, Settings and Results are native PS27 screenshots captured during release preparation under a separate Preview demonstration identity: source preview, read-only model scanning and existing historical candidate loading were performed, without new generation. The Relighting interface screenshot remains historical 0.5.0. Screenshots use the Chinese interface.
 
@@ -66,7 +66,7 @@ If Undo loses your selection, **Restore last selection and reread** restores the
 
 ### Place butterflies around a person, not only inside them
 
-The 0.6.0 candidate source combines effects and atmosphere into **Portrait → AI assets**. **Objects and particles** suits butterflies, petals and arcs; **Lighting and atmosphere** suits haze and smoke. These are prompt presets, not separate models.
+Version 0.6.0 combines effects and atmosphere into **Portrait → AI assets**. **Objects and particles** suits butterflies, petals and arcs; **Lighting and atmosphere** suits haze and smoke. These are prompt presets, not separate models.
 
 1. Select the person in Photoshop and keep **Reference subject · independent placement**.
 2. Choose a **Rectangle around the subject**, adjust expansion (50% by default), or explicitly choose **Full canvas**. A second arbitrary hand-drawn placement region is not supported in this increment.

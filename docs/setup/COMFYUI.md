@@ -6,7 +6,7 @@
 
 PS-AI 直接连接你的 ComfyUI，插件不附带后端或模型。本页从 Windows + NVIDIA 的环境选择讲到第一张结果。云端 API 请看[平台配置](PLATFORMS.md)。
 
-> **先核对版本：**已发布的 [0.5.2 实验版](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.5.2)仅支持 GGUF 主模型。**0.6.0 是未发布源码候选**，新增 `.safetensors` 原生路线；指定 INT8 组合已有真实推理／PNG 及小型 Photoshop API 证据，见[实测示例](#native-tested)。已安装面板、CCX／Portable 与完整宿主验收仍待完成，旧包不会因修改设置获得新路线。
+> **先核对版本：**请使用 [0.6.0 正式版](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.6.0)，支持 GGUF 与兼容的 `.safetensors` 原生路线。指定 INT8 组合的实测边界见[实测示例](#native-tested)；用户已反馈候选测试成功并批准发布，不代表所有安装方式或模型均已验收。旧 0.5.2 包仅支持 GGUF，不会因修改设置获得新路线。
 
 起步顺序：选已有环境或新装环境 → 按版本选 GGUF 或原生路线 → 准备对应节点与三个模型角色 → 启动并连接 → 真实生成、检查新图层并撤销。
 
@@ -20,12 +20,12 @@ PS-AI 直接连接你的 ComfyUI，插件不附带后端或模型。本页从 Wi
 | --- | --- |
 | 已有兼容 ComfyUI | 保留现有安装和权重，先看[模型兼容条件](#model-compatibility)，再[扫描并连接](#connection)；运行中的后端也可使用[配置工具](#environment-tools) |
 | 新装 ComfyUI | 按[后端准备](#backend)下载适合硬件的官方 Portable，再补所选路线真正缺少的节点与模型 |
-| GGUF 主模型 | 0.5.2 与本分支源码均有此路线；需要能识别 Qwen 2.1 的 `UnetLoaderGGUF`，见[GGUF 节点基线](#gguf-nodes) |
-| 原生 Safetensors 主模型 | 0.6.0 未发布源码候选提供；使用内置 `UNETLoader`，不需要安装 GGUF 扩展包，仍需共享 Qwen 节点、匹配编码器和 RGBA VAE；先看[已测组合](#native-tested) |
+| GGUF 主模型 | 0.5.2 与 0.6.0 均有此路线；需要能识别 Qwen 2.1 的 `UnetLoaderGGUF`，见[GGUF 节点基线](#gguf-nodes) |
+| 原生 Safetensors 主模型 | 0.6.0 起提供；使用内置 `UNETLoader`，不需要安装 GGUF 扩展包，仍需共享 Qwen 节点、匹配编码器和 RGBA VAE；先看[已测组合](#native-tested) |
 
 1. **Photoshop 27.0 或更高版本。** 本项目记录的宿主是 Windows Photoshop 27.0。先按[首页安装说明](../../README.md#安装发行包)安装 PS-AI 的 CCX 或 Portable 包，在 Photoshop“增效工具”中打开 PS-AI。两种 Portable 是不同东西：PS-AI Portable 是插件，下面的 ComfyUI Portable 是推理后端。
 2. **一块兼容的 NVIDIA 显卡、可用驱动及足够空间。** 本项目参考机器为 RTX 5080 16 GiB 显存、约 48 GB 内存；这不是最低配置。已测 GGUF 示例合计约 14.63 GB，原生 INT8 示例约 17.28 GB，可复用相同编码器与 VAE；其他组合另核对磁盘、显存和算子支持。另留 Portable、解压副本、Python 依赖、下载缓存与生成图片的空间。其他显卡、CPU、macOS 未完成相同验证。
-3. **匹配插件版本与教程。** 公开下载为 0.5.2，新增路线属于 0.6.0 未发布源码候选。核对“设置”中的版本／构建标识及包附带说明；原生路线需[构建包含此变更的源码](../../README.md#从源码构建)，没有已验收的 0.6.0 安装包。版本匹配不代表全新机器安装或完整宿主验收通过。
+3. **匹配插件版本与教程。** 从 [0.6.0 正式版](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.6.0)选择 CCX 或 Portable，无需编译源码。核对“设置”中的版本／构建标识及包附带说明；旧 0.5.2 包不支持原生路线。版本匹配不代表你的机器或模型已经通过实测，后面仍需完成小范围生成、应用与撤销检查。
 
 本地已打包插件 + ComfyUI 的默认 8 位路径不需要 Node.js、全局 Python、Git、ComfyUI-Manager 或手动导入工作流。Node.js 24+ 只在[云平台本机适配服务](PLATFORMS.md)或源码构建时需要。环境工具包是可选检查／配置工具，不会替你安装后端、依赖或下载模型。本页是操作说明，不是一次全新机器安装或新版本宿主验收记录。
 
@@ -166,7 +166,7 @@ Get-FileHash .\ComfyUI\models\vae\qwen_image_2.1_vae_bf16.safetensors -Algorithm
 
 <a id="native-tested"></a>
 
-### 原生 INT8 实测示例：0.6.0 未发布源码
+### 原生 INT8 实测示例：0.6.0
 
 2026-10-31 的指定组合以内置 `UNETLoader(weight_dtype=default)` 加载下列主模型，复用上表的 `qwen3vl_8b_int8_convrot.safetensors` 编码器与 `qwen_image_2.1_vae_bf16.safetensors` RGBA VAE；三项合计约 **17.28 GB**，GGUF 示例约 **14.63 GB**。已有相同编码器／VAE 无需重下；不要求改用 BF16 主模型，也不据此推荐其他 INT8／FP8／BF16 变体。
 
@@ -192,7 +192,7 @@ Get-FileHash .\ComfyUI\models\vae\qwen_image_2.1_vae_bf16.safetensors -Algorithm
 
 1. 打开“设置 → 模型与连接”，选择 **ComfyUI**。
 2. 本机 Portable 填 `http://127.0.0.1:8188`，与浏览器测试一致；已有安装也可使用它实际监听的 HTTP(S) 源地址，例如 `http://192.168.1.20:8188` 或 `https://comfy.example.com`。
-3. 点“扫描模型”。本分支源码读取 GGUF 与原生主模型加载器的可用列表，保留明确选择；不会把已选原生路线自动换成 GGUF 预设。未选角色仅按预设完整文件名或子目录内唯一同名文件提示，未解决时手动选择；不会猜测另一个量化版本。0.5.2 仅扫描 GGUF 主模型路线。
+3. 点“扫描模型”。0.6.0 读取 GGUF 与原生主模型加载器的可用列表，保留明确选择；不会把已选原生路线自动换成 GGUF 预设。未选角色仅按预设完整文件名或子目录内唯一同名文件提示，未解决时手动选择；不会猜测另一个量化版本。0.5.2 仅扫描 GGUF 主模型路线。
 4. 查看只读的当前加载路线，再点“连接”，检查所选路线的文件名、共享节点及字段／连接类型后保存配置。源码候选显示“节点已检查”，并提示“所选权重的真实推理尚未验证”；不会把外部验收记录自动绑定到当前文件。改动地址、模型或位深需重新检查；不用的加载器缺失可接受，网络失败或损坏 schema 仍是错误。之后再做自己的真实生成检查。
 
 地址不能带账号密码、路径或查询参数。反向代理需在根路径转发 HTTP 和 WebSocket；HTTPS 需有效证书。插件没有集成 API Key 认证。远端后端会收到图片、参考图和提示词，请勿公开无认证的服务。
@@ -242,7 +242,7 @@ Get-FileHash .\ComfyUI\models\vae\qwen_image_2.1_vae_bf16.safetensors -Algorithm
 | 角色 | 节点与参数 | 约定 |
 | --- | --- | --- |
 | 生成模型：GGUF | `UnetLoaderGGUF.unet_name` | `.gguf`，兼容 Qwen 2.1 的模型结构和固定采样链；0.5.2 的既有路线 |
-| 生成模型：原生 | `UNETLoader.unet_name`、`weight_dtype=default` | `.safetensors`，0.6.0 未发布源码新增；仍须兼容同一 Qwen 2.1 结构和采样链，只有[指定 INT8 组合](#native-tested)具备所述实测证据 |
+| 生成模型：原生 | `UNETLoader.unet_name`、`weight_dtype=default` | `.safetensors`，0.6.0 新增；仍须兼容同一 Qwen 2.1 结构和采样链，只有[指定 INT8 组合](#native-tested)具备所述实测证据 |
 | 编码器 | `CLIPLoader.clip_name` | `.safetensors`，`type=qwen_image`，`device=default` |
 | VAE | `VAELoader.vae_name` | `.safetensors`，与 Qwen 2.1 latent 格式、缩放和归一化匹配；编辑输入编码与输出解码使用同一 VAE |
 | 编码／参考 | `TextEncodeQwenImage21` | `prompt`、`negative_prompt`、`resolution`；多图字段 `images.image_1` 至 `images.image_3`，有图时接受 `vae` |
