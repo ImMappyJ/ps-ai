@@ -2,6 +2,21 @@ import test from 'node:test';import assert from 'node:assert/strict';
 import {PhotoshopAdapter,Snapshot} from '../src/infrastructure/photoshop/photoshop';
 import {prepareBackgroundCandidate} from '../src/imaging/composite';
 
+for(const scope of ['context','document'])for(const occlusion of ['front','behind'])test(`subject asset capture separates selected subject from ${scope} ${occlusion} placement`,async()=>{
+  const harness=host();harness.doc.width=4;harness.doc.height=2;
+  harness.doc.selection.bounds={left:1,top:0,right:3,bottom:2};
+  const selection=JSON.stringify(harness.doc.selection.bounds),history=harness.doc.activeHistoryState.id;
+  harness.ps.imaging.getSelection=async()=>({sourceBounds:{left:1,top:0,right:3,bottom:2},imageData:{width:2,height:2,components:1,componentSize:8,getData:async()=>new Uint8Array([255,128,255,128]),dispose(){}}});
+  harness.ps.imaging.getPixels=async(options:any)=>{const bounds=options.sourceBounds,width=bounds.right-bounds.left,height=bounds.bottom-bounds.top;return {sourceBounds:bounds,imageData:{width,height,components:4,componentSize:8,getData:async()=>Uint8Array.from({length:width*height*4},(_,index)=>[30,60,90,255][index%4]),dispose(){}}};};
+  const adapter=new PhotoshopAdapter(harness.ps,'asset-session');
+  const protection={documentId:harness.doc.id,width:4,height:2,sessionId:'asset-session',bounds:{left:0,top:0,right:4,bottom:2},mask:new Uint8Array([0,255,128,0,0,255,128,0])};
+  const captured=await adapter.capture(.5,protection,harness.doc.id,8,{purpose:'subject-asset',preserveNativeDepth:true,context:scope==='document'?'document':'selection',assetPlacement:{version:'subject-v1',scope,occlusion}} as any);
+  assert.deepEqual(captured.selectionMask,new Uint8Array([0,255,128,0,0,255,128,0]));
+  assert.deepEqual(captured.snapshot.mask,new Uint8Array(occlusion==='front'?[255,0,127,255,255,0,127,255]:[255,0,63,255,255,0,63,255]));
+  assert.equal(JSON.stringify(harness.doc.selection.bounds),selection);assert.equal(harness.doc.activeHistoryState.id,history);
+  assert.equal(captured.snapshot.documentId,harness.doc.id);
+});
+
 function host() {
   const calls:any[]=[];let inside=false;let serial=0;
   let layerSerial=55;

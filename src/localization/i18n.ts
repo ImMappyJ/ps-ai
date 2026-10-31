@@ -3,6 +3,16 @@ import type {Language} from '../infrastructure/config/profile';
 // Chinese source messages are stable keys. Model prompts and saved parameter values
 // are deliberately independent of the display language.
 export const english:Record<string,string>={
+  'AI 素材':'AI assets','素材类型':'Asset type','物体与粒子':'Objects and particles','光效与氛围':'Lighting and atmosphere',
+  '参考主体 · 独立放置':'Reference subject · independent placement','素材活动范围':'Asset placement region','主体周围的矩形区域':'Rectangle around the subject','整张画布':'Full canvas',
+  '向主体周围扩展（%）':'Expand around subject (%)','与主体的关系':'Subject occlusion','前景叠加 · 允许遮住主体':'Foreground overlay · may cover the subject','主体遮挡 · 素材只在主体外显示':'Subject occludes · show outside the subject',
+  '读取主体并预览活动范围':'Read subject and preview placement',
+  '先选主体，再设置素材活动范围。来源、主体参照与放置图分开送模；结果只作为独立素材图层，不替换原图。请检查是否残留人物、背景或辅助图，透明不代表已正确分离。':'Select the subject, then choose the placement region. Source, subject and placement guides are separate inputs. The result is an independent asset layer, not a source replacement. Check for people, background or guide remnants; transparency does not prove clean isolation.',
+  '从左到右：来源、主体参照、实际放置范围。最后一张白色可放置、黑色不放置；主体遮挡与保护区只扣除一次。':'Left to right: source, reference subject, actual placement. White in the last image allows placement; black excludes it. Subject occlusion and protection are applied once.',
+  '选择要参照的主体，不要把蝴蝶等素材的活动范围当成主体。此选区不再限制前景素材只能出现在人物内部。':'Select the reference subject, not the area for butterflies or other assets. This selection no longer restricts foreground assets to the inside of the person.',
+  '素材预览':'Asset preview','仅素材 · 检查透明与残留':'Asset only · inspect transparency and remnants','叠加预览 · 不改变导出':'Composite preview · export stays unchanged',
+  '叠加预览只显示捕获范围，最长边 1280px；另存与应用始终使用原始素材。':'Composite preview shows the captured region at up to 1280px. Export and apply always use the original asset.',
+  '素材主体与活动范围配置无效':'Invalid subject and placement settings','素材主体或活动范围蒙版无效':'Invalid subject or placement mask',
   '下一步':'Next step','1 · 选择任务':'1 · Choose a task','2 · 确定来源与范围':'2 · Source and range','3 · 生成与输出':'3 · Generate and output',
   '描述要改变的内容，以及必须保留的细节。':'Describe the change and the details that must stay.',
   '文件授权与隐私':'File access and privacy','文件授权与隐私 ▸':'File access and privacy ▸',

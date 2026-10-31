@@ -51,13 +51,12 @@ Settings JSON transfers addresses, model mappings and language, without keys, mo
 | <a id="costume"></a>Portrait · Clothing and props | Select clothing/props, avoiding faces and hands that should stay |
 | <a id="reference"></a>Portrait · Character reference | Select the edit area, import a reference and name the features to borrow; identity is not guaranteed |
 | <a id="scene"></a>Portrait · Replace scene | Keep the subject selected, as for backgrounds; describe environment, time and lighting |
-| <a id="effect"></a>Portrait · Effect asset | Select placement, describe shape/direction/color; text-only generation is also available |
-| <a id="atmosphere"></a>Portrait · Atmosphere asset | Select placement for mist, smoke or particles; text-only generation is also available |
+| <a id="effect"></a><a id="atmosphere"></a>Portrait · AI assets | Select the reference subject, then choose placement; Objects and particles / Lighting and atmosphere share one entry, with text-only generation also available |
 | <a id="generate"></a>Generate · Text to image | Describe subject, setting, composition and style; no references, usually no selection |
 | Portrait · [Relighting](#relight) | Current selection, or explicitly choose Entire image, then arrange lights |
 | Portrait · [Image Blending](#blend) | Select the foreground already placed in a visible environment |
 
-To protect faces or text, select them and use **Set protection**, then select the edit area. Protection is subtracted from the editable range, retaining feathers; context never enlarges the apply boundary. Prepare selections again after changing documents or reusing parameters.
+To protect faces or text, select them and use **Set protection**, then select the edit area (the reference subject for default AI assets). Protection is subtracted with feathers retained. Ordinary editing context does not enlarge the apply boundary. Prepare selections again after changing documents or reusing parameters.
 
 If Undo loses your selection, **Restore last selection and reread** restores the saved range for this document and mode within the same session, then reads current pixels. It does not submit a task or restore old candidates' apply permission.
 
@@ -65,9 +64,22 @@ If Undo loses your selection, **Restore last selection and reread** restores the
 
 <a id="context-assets"></a>
 
-**Effects / atmosphere:** **Use current image and selection** sends source and grayscale range together; imported character references are not used. Choose **Text-only independent asset** to omit the source. Input and destination are separate: **New document** does not mean text-only. Apply retains asset alpha and uses the saved range mask once; fully opaque output is export-only.
+### Place butterflies around a person, not only inside them
 
-Image-context Qwen samples can retain people, backgrounds or guide boundaries and **have not passed visual acceptance**. The gallery's asset examples are text-only outputs positioned manually, not successful image-context generation.
+The 0.6.0 candidate source combines effects and atmosphere into **Portrait → AI assets**. **Objects and particles** suits butterflies, petals and arcs; **Lighting and atmosphere** suits haze and smoke. These are prompt presets, not separate models.
+
+1. Select the person in Photoshop and keep **Reference subject · independent placement**.
+2. Choose a **Rectangle around the subject**, adjust expansion (50% by default), or explicitly choose **Full canvas**. A second arbitrary hand-drawn placement region is not supported in this increment.
+3. **Foreground overlay** allows assets inside and outside the subject. **Subject occludes** excludes the subject from the asset mask; it does not move the asset underneath the source layer. Front/back interleaving requires separate generations or manual layers, not automatic 3D wrapping.
+4. **Read subject and preview placement**. Inspect source, subject and placement from left to right. Only white in the last guide permits placement; protection is also excluded.
+5. Describe, for example, “several glowing blue butterflies around the shoulders and head, varying in size.” Inspect **Asset only**, then **Composite preview**. Do not apply a result retaining people, backgrounds or guide marks.
+6. Apply as an independent layer with an editable mask; source layers are neither redrawn nor replaced. Output alpha is retained and placement is applied once. Fully opaque results remain exportable but cannot apply.
+
+Composite preview uses the saved source, shows only the captured region and is bounded to 1280px; it is not native full-resolution acceptance. PNG export / New document still contains the **raw asset**, without the source or baked placement mask. Imported character references are unused. New document does not imply text-only. Explicit **Reference current image and selection** retains old inside-selection placement; old History never expands automatically. **Text-only independent asset** reads no current pixels.
+
+The subject path sends 3 images and requires an explicit platform capability. An old relay or unsupported model rejects before upload, without silent fallback; update the bundled relay with the plugin. ComfyUI, Bailian Qwen 2.1 and OpenAI Images request paths have offline coverage. Gemini does not support this transparent-asset path.
+
+Older two-image Qwen samples retained people, backgrounds or guide boundaries and **failed visual acceptance**. The new three-image subject path corrects input, placement and application logic; real-model quality and installed-panel acceptance remain pending. It cannot guarantee clean isolated butterflies. Transparency alone is not proof of isolation; the plugin does not automatically matte, subtract the source or resubmit. Gallery assets remain text-only outputs positioned manually, not evidence for this path. Existing screenshots do not show the new asset controls.
 
 <a id="relight"></a>
 

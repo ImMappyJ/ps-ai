@@ -13,6 +13,28 @@ function asset(model:string,mode='effect',id=testId):GenerationRequest {
   return {...cloudRequest,model,seed:model.startsWith('gpt-')?0:42,kind:compiled.kind,mode,prompt:compiled.prompt,assetContext:'selection-v1',source:`${id}-source.png`,guide:`${id}-guide.png`};
 }
 function fromDataUrl(value:string){return new Uint8Array(Buffer.from(value.split(',')[1],'base64'));}
+
+test('subject assets bind source, subject and placement separately across adapters',async()=>{
+  const compiled=intent('cosplay','effect','butterflies around the subject',false,true,'','images',false,'subject-v1');
+  assert.match(compiled.prompt,/<image2>.*主体/);assert.match(compiled.prompt,/<image3>.*放置/);
+  const graph=buildGraph({requestId:testId,prompt:compiled.prompt,source:'source.png',guide:'subject.png',reference:'placement.png',seed:42,steps:25,resolution:992});
+  assert.equal(graph['10'].inputs.image,'subject.png');assert.equal(graph['11'].inputs.image,'placement.png');
+  const subject=decodePng(cloudPng(992,992)),placement=decodePng(cloudPng(992,992));
+  for(let offset=0;offset<subject.rgba.length;offset+=4){subject.rgba.set([64,64,64,255],offset);placement.rgba.set([128,128,128,255],offset);}
+  const images=[cloudPng(992,992),encodePng(subject),encodePng(placement)];
+  let body:any;
+  const openai=new OpenAIImagesProvider({apiKey:'fake',transport:async(_url,init)=>{body=JSON.parse(String(init!.body));return inline(cloudPng(992,992,true));}});
+  const request={...asset('gpt-image-2.5-sunburst'),width:992,height:992,assetContext:'subject-v1' as const,reference:`${testId}-reference.png`};
+  await openai.submit(request,images);
+  assert.equal(body.images.length,3);assert.equal(decodePng(fromDataUrl(body.images[1].image_url)).rgba[0],64);
+  assert.equal(decodePng(fromDataUrl(body.mask.image_url)).rgba[3],127);
+  const bailian=new BailianProvider({apiKey:'fake',transport:async(_url,init)=>{body=JSON.parse(String(init!.body));return Response.json({output:{task_id:testId,task_status:'PENDING'}});}});
+  await bailian.submit({...request,model:'qwen-image-2.1-pro'},images);
+  const content=body.input.messages[0].content;assert.equal(content.length,4);
+  assert.deepEqual(fromDataUrl(content[1].image),images[1]);assert.deepEqual(fromDataUrl(content[2].image),images[2]);
+  assert.match(content[3].text,/<image2>.*主体/);assert.match(content[3].text,/<image3>.*放置/);
+  for(const provider of [openai,bailian])await assert.rejects(provider.submit({...request,model:provider===openai?request.model:'qwen-image-2.1-pro'},[images[0],images[1],cloudPng()]),/canvas|dimensions|Invalid OpenAI/);
+});
 function inline(bytes:Uint8Array){return Response.json({data:[{b64_json:Buffer.from(bytes).toString('base64')}],output_format:'png'});}
 async function host(root:string,provider:ImageProvider,model:string){const gateway=await createGateway({dataDir:root,provider});await listenLoopback(gateway.server);return {gateway,client:new GatewayClient(`http://127.0.0.1:${(gateway.server.address() as any).port}`,model)};}
 async function settled(client:GatewayClient,id:string){for(let i=0;i<100;i++){const status=await client.status(id);if(!['queued','running'].includes(status.state))return status;await new Promise(r=>setTimeout(r,10));}throw Error('Local provider did not settle');}

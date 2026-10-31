@@ -3,6 +3,8 @@ import {decodeModelPng,decodePng,resize,maskRaster,rasterDepth,rasterMax,type Ra
 import {prepareEditCandidate,prepareEditModel,prepareBackgroundCandidate,backgroundEditMask,retainSourceAlpha} from '../imaging/composite';
 import {editBehavior,backgroundCoverage} from '../features/editing/edit-behavior';
 import {isBackgroundMode} from '../generation/intent';
+import {validateAssetPlacement,assetPlacementValue} from '../features/assets/asset-placement';
+import type {AssetContext} from '../infrastructure/backends/gateway-protocol';
 import type {Snapshot} from '../infrastructure/photoshop/photoshop';
 import {diagnostic,DiagnosticError} from '../diagnostics/diagnostics';
 import {t} from '../localization/i18n';
@@ -31,10 +33,15 @@ function backgroundHistoryError(){return new DiagnosticError('invalid-output','o
 function lightingHistoryError(){return new DiagnosticError('invalid-output','output',t('光影层历史的来源、尺寸、蒙版或输出类型不一致；原始输出已保留'));}
 function editAnalysisHistoryError(){return new DiagnosticError('invalid-output','output',t('大区域历史的来源尺寸、原生蒙版或位深不一致；原始输出已保留'));}
 /** Only the saved version grants current-image asset semantics; old assets stay text-only. */
-function selectionAssetContext(record:JobRecord):'selection-v1'|undefined {
+function selectionAssetContext(record:JobRecord):AssetContext|undefined {
   const params=record.params as any,context=params?.assetContext;
+  if(params?.assetPlacement!==undefined&&context!=='subject-v1')throw editAnalysisHistoryError();
   if(context===undefined)return undefined;
-  if(context!=='selection-v1'||params.outputKind!=='asset'||!['effect','atmosphere'].includes(params.mode)||!record.snapshot||record.relight||(record.snapshot as Snapshot).backgroundComposite)throw editAnalysisHistoryError();
+  if(!['selection-v1','subject-v1'].includes(context)||params.outputKind!=='asset'||!['effect','atmosphere'].includes(params.mode)||!record.snapshot||record.relight||(record.snapshot as Snapshot).backgroundComposite)throw editAnalysisHistoryError();
+  if(context==='subject-v1'){
+    const placement=validateAssetPlacement(params.assetPlacement),snapshot=record.snapshot as Snapshot;
+    if(placement.scope==='document'&&(snapshot.bounds.left!==0||snapshot.bounds.top!==0||snapshot.bounds.right!==snapshot.width||snapshot.bounds.bottom!==snapshot.height))throw editAnalysisHistoryError();
+  }
   return context;
 }
 function assetTransparencyWarning(image:Raster):string|undefined {
@@ -49,7 +56,9 @@ async function validateAssetMasks(record:JobRecord,snapshot:Snapshot,read:ReadBi
   let selection:Uint8Array,protection:Uint8Array;
   try{selection=await read(`${record.id}-subject-mask.bin`);protection=await read(`${record.id}-protection-mask.bin`);}catch{throw editAnalysisHistoryError();}
   if(!(selection instanceof Uint8Array)||!(protection instanceof Uint8Array)||selection.length!==size||protection.length!==size)throw editAnalysisHistoryError();
-  for(let p=0;p<size;p++)if(snapshot.mask[p]!==Math.round(selection[p]*(255-protection[p])/255))throw editAnalysisHistoryError();
+  const placement=selectionAssetContext(record)==='subject-v1'?validateAssetPlacement((record.params as any).assetPlacement):undefined;
+  if(placement&&!selection.some(value=>value>0))throw editAnalysisHistoryError();
+  for(let p=0;p<size;p++)if(snapshot.mask[p]!== (placement?assetPlacementValue(selection[p],protection[p],placement.occlusion):Math.round(selection[p]*(255-protection[p])/255)))throw editAnalysisHistoryError();
 }
 function smallAssetGeometry(record:JobRecord,outputBytes:number,retainedBytes:number){
   const snapshot=record.snapshot as Snapshot,b=snapshot.bounds,model=(record.params as any).modelSize;
@@ -129,7 +138,7 @@ export function preflightEditAnalysisCandidate(record:JobRecord,retainedBytes=0)
 }
 /** Every contextual asset, including a native small capture, must fit the later candidate peak. */
 export function preflightSelectionAssetCandidate(record:JobRecord,retainedBytes=0):void {
-  if(selectionAssetContext(record)!=='selection-v1')throw editAnalysisHistoryError();
+  if(!selectionAssetContext(record))throw editAnalysisHistoryError();
   assertTaskNames(record);
   const geometry=(record.snapshot as Snapshot).captureGeometry;
   if(geometry!==undefined&&geometry.kind!=='edit-analysis')throw editAnalysisHistoryError();
@@ -172,7 +181,7 @@ async function editAnalysisInputs(record:JobRecord,bytes:Uint8Array,read:ReadBin
 }
 
 /** Native strips receive a transformed target before any source-alpha baking. */
-export async function prepareEditAnalysisApplication(record:JobRecord,bytes:Uint8Array,read:ReadBinary,retainedBytes=0):Promise<{snapshot:Snapshot;image:Raster;preserveAlpha:boolean;assetContext?:'selection-v1';subjectMask?:Uint8Array;protectionMask?:Uint8Array}>{
+export async function prepareEditAnalysisApplication(record:JobRecord,bytes:Uint8Array,read:ReadBinary,retainedBytes=0):Promise<{snapshot:Snapshot;image:Raster;preserveAlpha:boolean;assetContext?:AssetContext;subjectMask?:Uint8Array;protectionMask?:Uint8Array}>{
   if(candidateOutputKind(record)==='lighting-layers')throw editAnalysisHistoryError();
   if(record.blend!==undefined){
     blendGeometry(record,retainedBytes,bytes.byteLength);const raw=decodeBlendOutput(record,bytes),input=await blendInputs(record,read,raw,bytes.byteLength,retainedBytes);
@@ -231,6 +240,29 @@ async function blendInputs(record:JobRecord,read:ReadBinary,raw?:Raster,outputBy
 export async function loadCandidateSource(record:JobRecord,read:ReadBinary,retainedBytes=0):Promise<Raster>{
   if(record.blend!==undefined)return (await blendInputs(record,read,undefined,0,retainedBytes)).source;
   assertTaskNames(record);return decodePng(await read(`${record.id}-source.png`));
+}
+export async function prepareAssetCompositePreview(record:JobRecord,bytes:Uint8Array,read:ReadBinary,retainedBytes=0):Promise<Raster>{
+  if(!selectionAssetContext(record))throw editAnalysisHistoryError();
+  const budget=retainedBytes+1280*1280*16;
+  let source:Raster,raw:Raster,mask:Uint8Array,maskWidth:number,maskHeight:number;
+  if((record.snapshot as Snapshot).captureGeometry?.kind==='edit-analysis'){
+    const input=await editAnalysisInputs(record,bytes,read,budget,false);
+    source=input.source;raw=input.raw;mask=input.mask;maskWidth=raw.width;maskHeight=raw.height;
+  }else{
+    let savedSource:Uint8Array|undefined;
+    const prepared=await prepareCandidate(record,bytes,async name=>{const data=await read(name);if(name===`${record.id}-source.png`)savedSource=data;return data;},budget);
+    if(!savedSource||!prepared.snapshot)throw editAnalysisHistoryError();
+    source=decodePng(savedSource);raw=prepared.image;mask=prepared.snapshot.mask;maskWidth=source.width;maskHeight=source.height;
+  }
+  const scale=Math.min(1,1280/Math.max(source.width,source.height)),width=Math.max(1,Math.round(source.width*scale)),height=Math.max(1,Math.round(source.height*scale));
+  const base=resize(source,width,height),overlay=resize(raw,width,height),effective=resampleGray(mask,maskWidth,maskHeight,width,height);
+  const baseMax=rasterMax(base),overlayMax=rasterMax(overlay),rgba=new Uint8Array(width*height*4);
+  for(let pixel=0;pixel<effective.length;pixel++){
+    const offset=pixel*4,overAlpha=overlay.rgba[offset+3]/overlayMax*effective[pixel]/255,baseAlpha=base.rgba[offset+3]/baseMax,alpha=overAlpha+baseAlpha*(1-overAlpha);
+    for(let channel=0;channel<3;channel++)rgba[offset+channel]=alpha?Math.round((overlay.rgba[offset+channel]/overlayMax*overAlpha+base.rgba[offset+channel]/baseMax*baseAlpha*(1-overAlpha))/alpha*255):0;
+    rgba[offset+3]=Math.round(alpha*255);
+  }
+  return {width,height,rgba};
 }
 async function deriveBlendApplication(input:Awaited<ReturnType<typeof blendInputs>>,raw:Raster,signal?:AbortSignal){
   assertBlendLightingCapture({snapshot:input.snapshot,image:input.source,selectionMask:new Uint8Array(),protectionMask:new Uint8Array()});
@@ -328,15 +360,15 @@ export async function prepareLightingLayerApplication(record:JobRecord,bytes:Uin
   return {snapshot,fields,source:inputs.source,mask:inputs.mask};
 }
 /** Reload the original UUID for either native geometry; never reuse display pixels as apply authority. */
-export async function prepareSelectionAssetApplication(record:JobRecord,bytes:Uint8Array,read:ReadBinary,retainedBytes=0):Promise<{snapshot:Snapshot;image:Raster;preserveAlpha:false;assetContext:'selection-v1'}>{
-  if(selectionAssetContext(record)!=='selection-v1')throw editAnalysisHistoryError();
+export async function prepareSelectionAssetApplication(record:JobRecord,bytes:Uint8Array,read:ReadBinary,retainedBytes=0):Promise<{snapshot:Snapshot;image:Raster;preserveAlpha:false;assetContext:AssetContext}>{
+  const assetContext=selectionAssetContext(record);if(!assetContext)throw editAnalysisHistoryError();
   if((record.snapshot as Snapshot).captureGeometry?.kind==='edit-analysis'){
     const prepared=await prepareEditAnalysisApplication(record,bytes,read,retainedBytes);
-    return {snapshot:prepared.snapshot,image:prepared.image,preserveAlpha:false,assetContext:'selection-v1'};
+    return {snapshot:prepared.snapshot,image:prepared.image,preserveAlpha:false,assetContext};
   }
   const prepared=await prepareCandidate(record,bytes,read,retainedBytes);
   if(prepared.warning)throw new DiagnosticError('invalid-output','output',prepared.warning);
-  return {snapshot:prepared.snapshot!,image:prepared.image,preserveAlpha:false,assetContext:'selection-v1'};
+  return {snapshot:prepared.snapshot!,image:prepared.image,preserveAlpha:false,assetContext};
 }
 /** One read-only restoration/composition path for Results and the independent history preview. */
 export async function prepareCandidate(record:JobRecord,bytes:Uint8Array,read:ReadBinary,retainedBytes=0):Promise<PreparedCandidate> {

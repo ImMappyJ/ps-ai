@@ -7,6 +7,41 @@ import UPNG from 'upng-js';
 import {planNativeCaptureMemory} from '../src/imaging/budget';
 const {prepareCandidate}=preparation;
 
+test('asset composite preview uses placement once without changing raw output or saved planes',async()=>{
+  const sample=fixture();Object.assign(sample.record.params as any,{assetContext:'subject-v1',assetPlacement:{version:'subject-v1',scope:'context',occlusion:'front'}});
+  sample.files[`${id}-mask.bin`]=new Uint8Array([255,127,255,255]);
+  const bytes=encodePng(sample.output),original=bytes.slice(),planes=sample.files[`${id}-mask.bin`].slice();
+  const render=(preparation as any).prepareAssetCompositePreview;assert.equal(typeof render,'function');
+  const preview=await render(sample.record,bytes,sample.read);
+  assert.equal(preview.width,4);assert.equal(preview.height,1);
+  assert.deepEqual([...preview.rgba.slice(0,4)],[200,30,80,64]);
+  assert.deepEqual([...preview.rgba.slice(12,16)],[30,70,140,255]);
+  assert.deepEqual(bytes,original);assert.deepEqual(sample.files[`${id}-mask.bin`],planes);
+  sample.files[`${id}-mask.bin`][0]=0;await assert.rejects(render(sample.record,bytes,sample.read));
+});
+
+for(const occlusion of ['front','behind'])test(`subject asset ${occlusion} keeps independent placement and original RGBA through history`,async()=>{
+  const sample=fixture();
+  Object.assign(sample.record.params as any,{assetContext:'subject-v1',assetPlacement:{version:'subject-v1',scope:'context',occlusion}});
+  const expected=new Uint8Array(occlusion==='front'?[255,127,255,255]:[255,63,127,0]);
+  sample.files[`${id}-mask.bin`]=expected;
+  const prepared=await preparation.prepareSelectionAssetApplication(sample.record,encodePng(sample.output),sample.read);
+  assert.equal(prepared.assetContext,'subject-v1');
+  assert.deepEqual(prepared.snapshot.mask,expected);
+  assert.deepEqual(prepared.image,sample.output);
+  sample.files[`${id}-mask.bin`]=new Uint8Array([0,64,128,255]);
+  await assert.rejects(preparation.prepareSelectionAssetApplication(sample.record,encodePng(sample.output),sample.read));
+});
+
+test('subject assets require exact versioned placement metadata and cannot grant it to legacy history',async()=>{
+  for(const placement of [undefined,{version:'subject-v1',scope:'context',occlusion:'auto'},{version:'subject-v1',scope:'document',occlusion:'front'}]){
+    const sample=fixture();Object.assign(sample.record.params as any,{assetContext:'subject-v1',assetPlacement:placement});
+    await assert.rejects(prepareCandidate(sample.record,encodePng(sample.output),sample.read));
+  }
+  const legacy=fixture();(legacy.record.params as any).assetPlacement={version:'subject-v1',scope:'context',occlusion:'front'};
+  await assert.rejects(prepareCandidate(legacy.record,encodePng(legacy.output),legacy.read));
+});
+
 const id='92000000-1111-4111-8111-111111111111';
 function fixture(){
   const source:Raster={width:4,height:1,rgba:new Uint8Array([20,40,60,0,20,40,60,64,20,40,60,128,20,40,60,255])};

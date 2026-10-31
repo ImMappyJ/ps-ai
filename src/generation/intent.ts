@@ -9,8 +9,8 @@ export function intent(workspace:Workspace,mode:string,prompt:string,hasReferenc
   if(mode!=='remove'&&mode!=='blend'&&!prompt.trim())throw new Error('请描述希望生成或修改的内容');
   if(mode==='reference'&&!hasReference)throw new Error('角色参考辅助需要选择一张参考图');
   const kind:OutputKind=workspace==='t2i'?'t2i':mode==='effect'||mode==='atmosphere'?'asset':'edit';
-  if(assetContext!==undefined&&(assetContext!=='selection-v1'||kind!=='asset'))throw new Error('不支持的素材上下文');
-  if(assetContext==='selection-v1'&&!guide)throw new Error('参考当前图片生成素材需要范围辅助图');
+  if(assetContext!==undefined&&(!['selection-v1','subject-v1'].includes(assetContext)||kind!=='asset'))throw new Error('不支持的素材上下文');
+  if(assetContext!==undefined&&!guide)throw new Error('参考当前图片生成素材需要范围辅助图');
   if(hasReference&&kind!=='edit')throw new Error('参考图用于编辑路径；生成独立素材或文字生图前请清除参考图');
   let text=mode==='remove'?'':structuredRelight&&mode==='relight'?prompt:prompt.trim();
   if(kind==='edit') {
@@ -24,6 +24,10 @@ export function intent(workspace:Workspace,mode:string,prompt:string,hasReferenc
       else {const slot=guide?3:2;text+=` <image${slot}> 是${usage}参考图，仅参考指定内容，保留原人物面部、姿态与未选区域。`;return {kind,prompt:text,referenceSlot:slot};}
     }
   }else if(kind==='asset'){
+    if(assetContext==='subject-v1'){
+      const source=bindings==='semantic'?'来源图':'<image1>',subject=bindings==='semantic'?'主体参照图':'<image2>',placement=bindings==='semantic'?'素材放置图':'<image3>';
+      text=`以 ${source} 参考构图、主体位置、尺度、透视和光线，生成独立透明素材：${text}。 ${subject} 标出参照主体，不是素材放置范围。 ${placement} 标出素材放置范围，白色允许放置，黑色不放置，灰色表示羽化。素材可分布在主体周围；只输出素材，人物和原背景不进入结果，不要重绘主体或画出辅助图。`;
+    }
     if(assetContext==='selection-v1'){
       const source=bindings==='semantic'?'来源图':'<image1>',scope=bindings==='semantic'?'范围图':'<image2>';
       text=`以 ${source} 作为当前图片参考，匹配指定位置、尺度、透视、色调和光线，生成独立可合成的透明特效/氛围素材：${text}。只输出素材，参考图片中的人物和背景不进入结果。 ${scope} 是与来源图对齐的范围图，用于指定素材放置的位置和范围，白色允许放置，黑色不放置，灰色表示羽化；不要在结果中画出辅助图或蒙版。`;

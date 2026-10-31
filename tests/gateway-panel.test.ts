@@ -9,10 +9,10 @@ test('selection asset capability is required before any upload or generation POS
   }finally{await h.close();}}
 });
 
-test('supported gateway selection assets send paired source and guide for new-document output',async()=>{
-  const h=await panelHarness({settings:{...settings,gatewayModel:'gpt-image-2.5-sunburst'},gateway:{provider:'openai',assetContexts:['selection-v1']}});try{
-    await h.wait();h.click('tab-cosplay');h.el('resolution').value='512';h.el('guide').checked=false;h.el('destination').value='document';h.change('destination');h.click('generate');await h.wait();
-    assert.equal(h.gatewayPosts.length,1);const request=h.gatewayPosts[0].request;assert.equal(request.assetContext,'selection-v1');assert.equal(request.kind,'asset');assert.equal(request.seed,0);assert.equal(request.reference,undefined);assert.ok(request.source);assert.ok(request.guide);assert.equal(h.uploads.length,2);assert.doesNotMatch(request.prompt,/<image[123]>/);assert.equal((h.records()[0].params as any).destination,'document');
+for(const context of ['selection-v1','subject-v1'] as const)test(`supported gateway ${context} assets send their declared inputs for new-document output`,async()=>{
+  const h=await panelHarness({settings:{...settings,gatewayModel:'gpt-image-2.5-sunburst'},gateway:{provider:'openai',assetContexts:[context]}});try{
+    await h.wait();h.click('tab-cosplay');h.el('asset-input').value=context;h.change('asset-input');h.el('resolution').value='512';h.el('guide').checked=false;h.el('destination').value='document';h.change('destination');h.click('generate');await h.wait();
+    assert.equal(h.gatewayPosts.length,1);const request=h.gatewayPosts[0].request;assert.equal(request.assetContext,context);assert.equal(request.kind,'asset');assert.equal(request.seed,0);assert.equal(!!request.reference,context==='subject-v1');assert.ok(request.source);assert.ok(request.guide);assert.equal(h.uploads.length,context==='subject-v1'?3:2);assert.doesNotMatch(request.prompt,/<image[123]>/);assert.equal((h.records()[0].params as any).destination,'document');
   }finally{await h.close();}
 });
 test('gateway background modes retain provider guide uploads while disabling source silhouette restoration',async()=>{

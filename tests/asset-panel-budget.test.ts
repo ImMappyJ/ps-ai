@@ -21,9 +21,9 @@ test('unbounded native16 contextual assets reject an unaffordable candidate peak
   }finally{await h.close();}
 });
 
-test('affordable unbounded native16 contextual assets still save native source and upload paired sRGB8 inputs',async()=>{
+test('affordable unbounded native16 subject assets save native source and upload three sRGB8 inputs',async()=>{
   const source={width:256,height:256,rgba:new Uint16Array(256*256*4).fill(65535)},smallOutput={width:256,height:256,rgba:Uint8Array.from({length:256*256*4},(_,i)=>[80,100,220,128][i%4])};source.rgba[0]=12345;source.rgba[3]=65534;const h=await panelHarness({source,output:smallOutput});try{
-    await h.wait();h.click('tab-cosplay');h.el('resolution').value='256';h.click('generate');await h.wait();assert.equal(h.posts.length,1,JSON.stringify(h.errors));assert.equal(h.uploads.length,2);const record=h.records()[0];assert.equal(record.state,'ready');assert.equal((record.snapshot as any).captureGeometry,undefined);assert.equal((record.snapshot as any).nativeDepth,16);
+    await h.wait();h.click('tab-cosplay');h.el('resolution').value='256';h.click('generate');await h.wait();assert.equal(h.posts.length,1,JSON.stringify(h.errors));assert.equal(h.uploads.length,3);const record=h.records()[0];assert.equal(record.state,'ready');assert.equal((record.snapshot as any).captureGeometry,undefined);assert.equal((record.snapshot as any).nativeDepth,16);
     const saved=decodePng(h.files[`${record.id}-source.png`] as Uint8Array);assert.ok(saved.rgba instanceof Uint16Array);assert.equal(saved.rgba[0],12345);assert.equal(saved.rgba[3],65534);for(const input of h.uploads)assert.ok(input.image.rgba instanceof Uint8Array);assert.equal(h.errors.length,0);
   }finally{await h.close();}
 });

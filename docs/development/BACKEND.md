@@ -116,7 +116,11 @@ Key 按平台加密保存在 UXP secureStorage，服务只在内存持有。cred
 
 `kind` 为 `t2i`、`edit`、`asset`。`mode` 沿用插件的十一种模式，`relight` 和 `blend` 均属于 `edit`。编辑必须提供来源图；范围辅助与参考图按需加入。发给平台的顺序固定为来源、辅助、参考，缺省项不占位置。平台意图不自动写入图片编号，由适配器绑定实际角色。百炼／Gemini 以灰度辅助图提示范围；OpenAI 将它转为独立 mask（alpha=255-gray），images 只保留来源和参考。最终范围仍由 Photoshop 选区与保护区约束。
 
-参考图片素材保留 `kind: asset`，增加 `assetContext: selection-v1`，必须同时携带 source 和 guide，禁止额外 reference。模型的可选 `assetContexts` 必须声明该版本；未声明、未知版本或在其他 kind 使用均在上传前拒绝。无标记素材保持纯文字含义，不得夹带图像。新捕获将原生位深来源与 sRGB8 送模图分开，保存原始选区、保护区及有效蒙版。回填保留输出自身 alpha，只施加一次原生有效蒙版，重新核对保存的 UUID，不重新提交。
+**0.6.0 主体素材：** `kind: asset`、`mode: effect`、`assetContext: subject-v1` 要求 3 个同坐标输入：source（来源）、guide（原始主体 S）、reference（有效放置 E，非用户外部参考）。平台必须声明 subject-v1 且 maxInputImages >= 3，否则上传前拒绝。OpenAI 把 3 图送入 images，用 reference 放置图而非主体 guide 生成原生 mask；补边仍受保护。
+
+params 保存 `assetPlacement: {version: subject-v1, scope: context|document, occlusion: front|behind}`。冻结区域 R 为主体外接矩形加边距或整张画布；R 内 front 的 E=1-P，behind 的 E=(1-S)*(1-P)，R 外为零。subject-mask.bin 保存 S，protection-mask.bin 保存 P，mask.bin 保存 E；读回逐像素校验，不推断旧历史的新权限。`purpose: subject-asset` 即使选全画布也要求主体选区，不是 Relight 的无选区 document scope。保留输出 alpha，不乘原图 alpha、不对齐或匹配上下文色彩；层蒙版应用 E 一次。最长边 1280px 合成预览不能成为应用或导出数据。新路径仅有离线验证；下述原生和真实样本证据属于 selection-v1，不代表新三图模型质量／安装面板验收。
+
+旧选区参考素材保留 `kind: asset`，增加 `assetContext: selection-v1`，必须同时携带 source 和 guide，禁止额外 reference。模型的可选 `assetContexts` 必须声明该版本；未声明、未知版本或在其他 kind 使用均在上传前拒绝。无标记素材保持纯文字含义，不得夹带图像。新捕获将原生位深来源与 sRGB8 送模图分开，保存原始选区、保护区及有效蒙版。回填保留输出自身 alpha，只施加一次原生有效蒙版，重新核对保存的 UUID，不重新提交。
 
 ComfyUI 按来源、范围图排序，保留现有 LoadImage 倒置 MASK 到 alpha 的直接连接。百炼 2.1 发送两图及独立素材语义；百炼 3.0 与 Gemini 不声明该能力。OpenAI 使用 edits，images 中为来源，范围图转独立原生蒙版 alpha=255-gray；来源与蒙版同变换、补边受保护，显式透明输出并逆裁。离线测试覆盖请求几何、原始输出保留和原 UUID 恢复。真实 ComfyUI 样本出现来源残留或范围图被画入，视觉验收未通过；平台真实验收等待 API Key。存在透明像素只是必要条件，不能证明素材质量。
 

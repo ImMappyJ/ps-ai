@@ -22,7 +22,7 @@ First choose an existing or new environment, select the GGUF or native Safetenso
 2. **Select and describe.** Open a copy, choose a mode, select a range and use **Preview selection**. Orange is editable, blue is protected, gray is context. For backgrounds, select the subject to keep without inverting.
 3. **Compare and apply.** Generate 1–4 candidates, inspect structure, edges and color, then apply as a new layer or save a PNG. Keep the source unchanged during generation. Recover the original task from History after a disconnection.
 
-Create follows **Choose a task → Source and range → Generate and output**; expand protection, references and extra settings as needed. All eleven modes are in the [user guide](usage/USER_GUIDE.en.md).
+Create follows **Choose a task → Source and range → Generate and output**; expand protection, references and extra settings as needed. All modes are in the [user guide](usage/USER_GUIDE.en.md).
 
 ## Requirements
 

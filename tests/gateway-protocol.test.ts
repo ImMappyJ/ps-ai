@@ -7,6 +7,15 @@ const capabilities=(patch:Record<string,unknown>={})=>({protocol:'ps-ai/1',provi
 const asset={model:model.id,kind:'asset',mode:'effect',prompt:'  independent blue lightning; literal <image9>  ',seed:0,width:512,height:512,outputDepth:8};
 const source=id+'-source.png',guide=id+'-guide.png',reference=id+'-reference.png';
 
+test('subject assets require three aligned roles and an explicit three-input capability',()=>{
+  const caps=validateCapabilities(capabilities({assetContexts:['selection-v1','subject-v1']}));
+  const request={...asset,assetContext:'subject-v1',source,guide,reference};
+  assert.deepEqual(validateGeneration(request,caps),request);
+  for(const role of ['source','guide','reference'])assert.throws(()=>validateGeneration({...request,[role]:undefined},caps),/input/);
+  assert.throws(()=>validateGeneration(request,validateCapabilities(capabilities({assetContexts:['selection-v1']}))),/support.*asset context/i);
+  assert.throws(()=>validateCapabilities(capabilities({maxInputImages:2,assetContexts:['subject-v1']})),/capabilit/);
+});
+
 test('Image Blending is an edit gateway operation with source and semantic prompt text intact',()=>{
   const caps=validateCapabilities({protocol:'ps-ai/1',provider:'openai',configured:true,cancellation:'none',progress:'stages',models:[{id:'gpt-image-1.5',label:'GPT',operations:['edit','asset'],maxInputImages:3,outputDepths:[8],seedMax:0,minPixels:1,maxPixels:4194304,maxAspectRatio:3}]});
   const id='11111111-1111-4111-8111-111111111111',prompt='match environmental light; retain literal <image9>';

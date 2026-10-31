@@ -707,6 +707,16 @@
       "installedWorkbench": "b3548bd4: intensity 1 to 3.2, one workbench Undo back to 1, zero editing-time POSTs; other sliders/termination paths and drag latency not established"
     },
     "contextAssets": {
+      "subjectPlacement": {
+        "marker": "subject-v1",
+        "metadata": "assetPlacement: {version: subject-v1, scope: context|document, occlusion: front|behind}",
+        "inputs": "source = current composite; guide = raw subject; reference = effective placement, all aligned sRGB8; no user reference image",
+        "mask": "front = 1-P; behind = (1-S)*(1-P), within frozen context rectangle or full canvas; raw S and P preserved at native coordinates",
+        "capability": "Explicit subject-v1 plus maxInputImages >= 3; reject before upload; OpenAI native mask uses placement, not subject",
+        "preview": "Raw asset or bounded saved-source composite; export and apply never use display pixels",
+        "validation": "Offline only; installed controls, real-model quality and native apply/undo acceptance pending",
+        "limitations": "No automatic matting, source subtraction, arbitrary second selection or front/back ring decomposition; transparency does not prove isolation"
+      },
       "marker": "selection-v1",
       "inputs": "Paired current visible source and effective grayscale guide; native source depth separate from sRGB8 model input",
       "capability": "Optional assetContexts; missing declaration rejects before upload",
