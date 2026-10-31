@@ -4,23 +4,23 @@
 
 本版本通道：**{{CHANNEL}}**。标签对应源码：[{{SOURCE_SHA}}]({{SOURCE_URL}})。[该版本提交记录]({{COMMITS_URL}})；实际变更与贡献者由下方 GitHub 生成信息和比较链接补充。
 
-### 0.6.0 的主要变化
+### 0.6.1 的主要变化
 
-- **AI 素材统一入口**：将特效与氛围整合为“AI 素材”，提供物体／粒子和光效／氛围预设。
-- **参考主体，独立放置**：主体参照与素材活动范围分开，支持主体周围／整张画布、前景叠加／主体遮挡；蝴蝶等素材不再被正向主体蒙版裁掉。保留原图层、素材透明度和可编辑放置蒙版，并提供仅素材／叠加预览；旧历史不改变语义。
-- **Qwen 2.1 双加载路线**：兼容的 `.gguf` 主模型使用 `UnetLoaderGGUF`，兼容的 `.safetensors` 独立扩散权重使用 ComfyUI 内置 `UNETLoader(weight_dtype=default)`；原生路线不需要 GGUF 扩展。
-- **按能力而不是固定文件选模型**：主模型、视觉／文本编码器、VAE 是三个组件角色，可以复用已有兼容文件；扫描保留明确选择，不自动换回 GGUF。扩展名、作者或列表可见性都不是兼容证明。
-- **连接提示不再夸大**：显示所选加载路线和“节点已检查”，明确未验证当前权重；改变模型会使旧检查失效。检查不上传图片、不触发生成。
-- **安全、可复现的验收工具**：P0 必须指定配置与新输出目录，只有 `--run` 才提交；配置、图、8/16 位解码一致，先检查完整节点契约，保存原 UUID 后提交，失联不重复生成。
-- **双语从零教程同步**：区分已有／新装环境、GGUF／原生路线、示例组合／必需能力；保留云端 API 入口与未测范围。既有无原图选择器的色彩副本策略、历史、选区和撤销契约不变。
+- **大图溶图自动控制分析内存**：根据候选准备预算选择并保存分析尺寸，减少大照片在读取来源时因固定分析尺寸触发 `image-budget` 的情况。保留原生尺寸的选区／保护蒙版，以及用户选择的模型分辨率和输出位深。
+- **普通编辑向外渐变融合**：在选区外增加渐变蒙版，默认 8 个原图像素，可调 0–64，设为 0 关闭。只用于普通编辑；溶图光影组、溶图 AI 重绘、布光、AI 素材和其他模式不启用。保护区继续生效，结果仍为带可编辑蒙版的新图层。
+- **大范围普通编辑分段处理**：把候选准备也计入预算；需要时使用有界分析图和原生尺寸分段写入，避免仅来源读取可行、候选处理却超额。
+- **历史与输出校验加固**：保存新的融合参数、原始选区与保护蒙版；重载时核对尺寸、来源、位深和蒙版关系。旧历史保持原行为；输出位深不符会在读取原图或解码前拒绝。
+- **双语说明同步**：补充融合范围、预算行为和色彩支持边界。保留 0.6.0 的兼容 GGUF／Safetensors 加载路线与统一 AI 素材流程。
 
-开发验收：固定 `qwen_image_2.1_int8_convrot.safetensors` 配现有 Qwen3-VL INT8 编码器及 Qwen 2.1 RGBA VAE 已完成真实推理；精确哈希、运行时与范围见兼容清单。后端含既有本地修改，不等于全新官方 Portable 复现。Photoshop 27 独立 API 检查通过小型 RGB8/16 的真实输出、可编辑蒙版、原始／范围外像素保护、单次撤销及注入取消回滚。
+开发验证：实现提交通过 1073 项离线测试、类型检查、生产构建和 PR 打包 CI；正式包再由发布流水线完成测试、构建和归档校验。本次没有重新运行真实推理、安装后的面板交互或 Photoshop 原生照片验收；过去的宿主与推理记录仍以兼容清单中各自的日期和范围为准。
 
-发布验收：2026-10-31，用户在收到 `44c2fd7b` Portable 候选后反馈“测试成功”，批准合并并发布正式版。该反馈作为本次发布依据；没有逐项测试记录，不将其扩展为所有模式、CCX、升级或全新机器均已验收。正式包由合并后的源码经发布流水线重新构建，构建标识与候选包不同。
+发布依据：2026-11-01，用户在实现 PR 合并后明确要求发布新版本。这是发布授权，不是新版照片、蒙版边缘或安装验收通过的反馈。0.6.0 的用户候选测试记录单独保留，不扩展为本次新功能的验收。
 
 ### 已知限制
 
-本次发布为正式通道，但不保证所有模型组合和使用场景。平台真实 Key、其他宿主／系统、全模式安装与长期稳定性不是离线测试或本次用户反馈的保证。旧 `selection-v1` 图片＋选区素材的五个真实 ComfyUI 样本视觉检查失败；这不是新 `subject-v1` 三图流程的测试结论，新流程仍需检查是否残留主体或背景。溶图的有限 Qwen 对照中真人变化仍弱；光影层对真实照片和原图细节的视觉保真仍需人工检查。请检查原始输出，不把透明像素、成功回填或受控样本当作视觉质量通过。
+保留 512 MB 图像内存预算、4500 万文档像素、边长与 PNG 解码保护；不能保证任意大图片都能处理。本次没有新增色彩空间支持：现有 RGB／已解析配置文件的灰度 8/16 位路径继续保留，模型输入仍为 sRGB8；溶图光影提取仍要求已标记的 sRGB RGB8/16 和可编辑范围不透明，CMYK、Lab 和 32 位 HDR 等仍不支持。向外渐变可以缓和接缝，但不能保证消除生成内容的色差。
+
+本次发布为正式通道，但不保证所有模型组合和使用场景。新大图路径、蒙版边缘、真实照片光影保真和安装交互仍需实际检查。平台真实 Key、其他宿主／系统、全模式安装与长期稳定性不由离线测试保证。旧 `selection-v1` 素材的五个真实 ComfyUI 样本视觉检查失败，这不是 `subject-v1` 三图流程的测试结论；有限 Qwen 溶图对照中真人变化仍弱。请检查原始输出，不把透明像素或成功回填当作视觉质量通过。
 
 - [CCX 插件包]({{CCX_URL}})：通过 Adobe Creative Cloud 桌面应用安装；双击无反应时，使用同版本环境工具的 `scripts/install-ccx.ps1 -PackagePath`。不要用 Photoshop 的“打开”导入。
 - [Portable 插件包]({{PORTABLE_URL}})：解压后将完整 `PS-AI-FOR-ME` 文件夹复制到实际 Photoshop 安装目录的 `Plug-ins`，清单直接位于该文件夹下。
@@ -37,23 +37,23 @@ manifest 的最低宿主为 Photoshop **{{HOST_MINIMUM}}**。现有人工记录�
 
 Release channel: **{{CHANNEL}}**. Tagged source: [{{SOURCE_SHA}}]({{SOURCE_URL}}). [Commits at this source]({{COMMITS_URL}}); GitHub-generated changes, contributors and the actual comparison link follow below.
 
-### Main changes in 0.6.0
+### Main changes in 0.6.1
 
-- **Unified AI assets**: effects and atmosphere share one entry, with object/particle and lighting/atmosphere prompt presets.
-- **Reference the subject, place assets independently**: separate subject guidance from placement; choose the surrounding area or full canvas and front overlay or subject occlusion. Butterflies are no longer clipped by a positive subject mask. Keep original layers, asset alpha and an editable placement mask, with asset-only/composite previews. Historical tasks keep their original semantics.
-- **Two Qwen 2.1 loader routes**: compatible `.gguf` diffusion weights use `UnetLoaderGGUF`; compatible standalone `.safetensors` diffusion weights use built-in `UNETLoader(weight_dtype=default)`, without the GGUF extension.
-- **Capability-based model choice**: diffusion, vision/text encoder and VAE are three component roles, not three mandatory filenames. Reuse compatible existing files; scanning preserves explicit choices without silently switching back to GGUF. Format, author and inventory visibility do not prove compatibility.
-- **Honest connection evidence**: the panel shows the selected route and Nodes checked, explicitly excluding weight validation. Model changes invalidate previous checks. Checking uploads no images and starts no inference.
-- **Explicit, safe P0 validation**: settings and a new output directory are required; only `--run` submits. Configuration, graph and 8/16-bit decoding agree, complete node contracts are checked first, and persisted original UUIDs prevent automatic resubmission after a lost response.
-- **Updated beginner guides**: bilingual existing/new-environment and GGUF/native choices separate example combinations from required capabilities. Cloud API setup and acceptance limits remain explicit. Existing no-picker color copies, history, selections and Undo contracts are preserved.
+- **Adaptive analysis memory for large Blend sources**: choose and persist analysis dimensions within the candidate-preparation budget, reducing `image-budget` capture failures caused by fixed analysis sizes. Native selection/protection masks, requested model resolution and output depth remain intact.
+- **Outward gradient masks for ordinary editing**: add an outward transition of 8 native pixels by default, adjustable from 0 to 64; 0 disables it. Only ordinary edit mode uses this behavior. Blend lighting, Blend AI redraw, Relight, AI assets and other modes are excluded. Protection remains effective and the result retains an editable layer mask.
+- **Bounded processing for large ordinary edits**: account for candidate preparation as well as capture, using a bounded analysis raster and native-size strip writing when necessary.
+- **Stronger history and output validation**: persist the new transition settings, raw selection and protection planes, then validate dimensions, source, depth and mask relationships when reloading. Legacy history retains its behavior. Output depth mismatches reject before source reads or decoding.
+- **Updated bilingual guidance**: document transition scope, budgeting and color limits, retaining the compatible GGUF/Safetensors routes and unified AI assets introduced in 0.6.0.
 
-Development validation: the pinned `qwen_image_2.1_int8_convrot.safetensors` with the existing Qwen3-VL INT8 encoder and Qwen 2.1 RGBA VAE completed real inference; see the compatibility manifest for exact hashes, runtime and scope. The backend has preexisting local modifications, not a clean official Portable reproduction. Standalone Photoshop 27 API checks passed real output on small RGB8/16 sources, editable masks, original/outside-pixel preservation, one Undo and injected cancellation rollback.
+Development validation: the implementation passed 1073 offline tests, type checking, a production build and PR package CI. The release workflow tests, rebuilds and verifies the final archives. No new live inference, installed-panel interaction or native Photoshop photo acceptance was performed for these changes. Earlier host and inference evidence retains the dates and scope recorded in the compatibility manifest.
 
-Release acceptance: on 2026-10-31, after receiving the `44c2fd7b` Portable candidate, the user reported successful testing and authorized merging and a stable release. This report supports the release decision; no case-by-case record was supplied, so it does not establish every mode, CCX, upgrade or clean-machine acceptance. The release workflow rebuilds the merged source; final build identity differs from the candidate.
+Release basis: on 2026-11-01, the user explicitly requested a new release after the implementation PR was merged. This authorizes publication; it is not a new photo, mask-edge or installation acceptance report. The 0.6.0 candidate test remains a separate historical record.
 
 ### Known limits
 
-This is a stable-channel release, not a guarantee of every model combination or scenario. Offline tests and this user report do not establish live platform keys, every host/system, all-mode installation acceptance or long-term stability. Five historical `selection-v1` ComfyUI image-plus-selection asset samples failed visual inspection; that is not a test verdict for the new `subject-v1` three-image flow, which still needs inspection for subject/background residue. Portrait changes remained weak in the limited Qwen blending comparison. Real-photo lighting layers and original-detail fidelity still need human inspection. Transparent pixels, successful application and controlled samples do not prove visual quality.
+The 512 MB image-memory budget, 45-million-pixel document cap, side-length and PNG decode guards remain. Arbitrarily large images are not guaranteed to fit. This release adds no new color-space support: existing RGB and resolved-profile Grayscale 8/16-bit paths remain, with sRGB8 model inputs. Blend lighting still requires tagged sRGB RGB8/16 with opaque editable coverage. CMYK, Lab, 32-bit HDR and other unsupported modes remain excluded. Outward gradients can soften seams but cannot guarantee removal of generated color differences.
+
+This is a stable-channel release, not a guarantee of every model combination or scenario. New large-source paths, mask edges, photographic lighting fidelity and installation interactions still need actual inspection. Offline tests do not establish live platform keys, every host/system, all-mode installation acceptance or long-term stability. Five historical `selection-v1` ComfyUI asset samples failed visual inspection, which is not a verdict for the `subject-v1` three-image flow. Portrait changes remained weak in limited Qwen Blend comparisons. Transparent pixels and successful application do not prove visual quality.
 
 - [CCX plugin]({{CCX_URL}}): install through Adobe Creative Cloud desktop. If double-clicking does nothing, use `scripts/install-ccx.ps1 -PackagePath` from the matching environment tools. Photoshop File → Open does not install plugins.
 - [Portable plugin]({{PORTABLE_URL}}): extract and copy the entire `PS-AI-FOR-ME` folder into the actual Photoshop `Plug-ins` directory, with its manifest directly inside that folder.

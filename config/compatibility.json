@@ -2,6 +2,15 @@
   "schemaVersion": 1,
   "preset": "qwen-image-2.1-gguf-q4-experimental",
   "releaseAcceptance": {
+    "version": "0.6.1",
+    "date": "2026-11-01",
+    "basis": "User explicitly requested a new release after the implementation PR was merged; this is publication authorization, not a new native visual acceptance report",
+    "implementationCommit": "7f060d130589fe1322e45d38073f7503a0e9b2f7",
+    "validation": "1073 offline tests, TypeScript checks, production build and implementation PR package CI passed. Release archives are rebuilt and verified by the release workflow.",
+    "scope": "Adaptive analysis budgets for large Blend sources and outward gradient masks only for ordinary edit mode. Existing 512 MB memory, 45 MP document, side-length, output decode and color guards remain. No new color-space support, private-photo reproduction, installed-panel test or native visual acceptance is claimed.",
+    "finalArtifacts": "Consult release-manifest.json for final tagged source, workflow identity, sizes and digests"
+  },
+  "previousReleaseAcceptance": {
     "version": "0.6.0",
     "date": "2026-10-31",
     "basis": "User reported successful testing after the Portable candidate handoff and explicitly authorized merge and stable release",
@@ -10,7 +19,7 @@
     "scope": "User report without a case-by-case test record; does not establish every mode, model, CCX installation, upgrade, clean-machine or platform acceptance",
     "finalArtifacts": "Rebuilt by the release workflow from the merged source; consult release-manifest.json for final source and digests"
   },
-  "status": "0.6.0 stable release; Windows Photoshop 27.0 tested, broader host stability unverified",
+  "status": "0.6.1 stable release; new large-Blend and ordinary-edit edge behavior has offline coverage. Existing Windows Photoshop 27.0 evidence remains scoped to its recorded cases; broader host stability is unverified",
   "photoshop": {
     "tested": "27.0",
     "minimumManifest": "27.0",
@@ -121,7 +130,7 @@
   },
   "sourceModelRoutes": {
     "date": "2026-10-31",
-    "status": "Available in 0.6.0 stable; 0.5.2 remains GGUF-only. Exact INT8 native combination has bounded real inference and Photoshop API evidence below. See releaseAcceptance for the separate user-reported test; broader acceptance remains unverified.",
+    "status": "Available since 0.6.0 stable; 0.5.2 remains GGUF-only. Exact INT8 native combination has bounded real inference and Photoshop API evidence below. See previousReleaseAcceptance for the separate 0.6.0 user-reported test; broader acceptance remains unverified.",
     "baselinePolicy": "Existing backend, gguf, nodes, models and workflow.loader fields retain the recorded GGUF baseline and file hashes. Node author and filename are not compatibility allowlists.",
     "settingsSchemaVersion": 1,
     "routes": [
@@ -209,7 +218,7 @@
         "cancellation": "Atomic /api/jobs/{id}/cancel reached cancelled; no global interrupt or resubmission",
         "limits": "Owned local task, not installed UI or arbitrary network/host failure acceptance"
       },
-      "releaseGate": "These bounded checks alone do not authorize release. The later user-reported candidate test and stable-release authorization are recorded separately in releaseAcceptance."
+      "releaseGate": "These bounded checks alone do not authorize release. The later 0.6.0 user-reported candidate test and stable-release authorization are recorded separately in previousReleaseAcceptance; current publication authorization is in releaseAcceptance."
     },
     "evidenceLevels": [
       "File visibility in the correct loader inventory",
@@ -723,7 +732,7 @@
         "mask": "front = 1-P; behind = (1-S)*(1-P), within frozen context rectangle or full canvas; raw S and P preserved at native coordinates",
         "capability": "Explicit subject-v1 plus maxInputImages >= 3; reject before upload; OpenAI native mask uses placement, not subject",
         "preview": "Raw asset or bounded saved-source composite; export and apply never use display pixels",
-        "validation": "Offline coverage and separate user-reported successful candidate test in releaseAcceptance; no case-by-case installed-control, real-model quality or native apply/undo record for this new path",
+        "validation": "Offline coverage and separate 0.6.0 user-reported successful candidate test in previousReleaseAcceptance; no case-by-case installed-control, real-model quality or native apply/undo record for this new path",
         "limitations": "No automatic matting, source subtraction, arbitrary second selection or front/back ring decomposition; transparency does not prove isolation"
       },
       "marker": "selection-v1",

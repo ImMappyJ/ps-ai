@@ -6,13 +6,13 @@
 
 局部换材质、移除杂物、换背景、改服装，或为画面重新布光。先比较候选，再应用为带可编辑蒙版的新图层；原图层保留，一次撤销可撤回一次应用。
 
-[下载 0.6.0 正式版](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.6.0) · [图文教程](docs/usage/USER_GUIDE.md) · [从零配置 ComfyUI](docs/setup/COMFYUI.md#beginner) · [连接云平台](docs/setup/PLATFORMS.md)
+[下载 0.6.1 正式版](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.6.1) · [图文教程](docs/usage/USER_GUIDE.md) · [从零配置 ComfyUI](docs/setup/COMFYUI.md#beginner) · [连接云平台](docs/setup/PLATFORMS.md)
 
 <p align="center"><a href="assets/guide/workflow-overview.png"><img src="assets/guide/workflow-overview.png" width="960" alt="PS-AI 概览：当前 Photoshop 创作面板实拍，以及已有真实布光和换背景输出"></a></p>
 
 上图是组合概览：左为发行准备时在 Photoshop 中使用独立 Preview 演示标识的创作面板实拍，右为已有真实 Qwen-Image 2.1 输出与本地合成预览，非单张宿主截图。新界面仅预览并填写草稿，没有提交新的生成。布光示例使用 `3F3F3F.webp` 与生成房间，光效还原 1／细节保护 0.65；效果对比非 Photoshop 回填实拍，见[布光教程](docs/usage/USER_GUIDE.md#relight)。
 
-> **版本说明：**本页对应 **0.6.0 正式版**，支持兼容的 GGUF／Safetensors 主模型和统一 AI 素材流程；旧 0.5.2 包仍仅支持 GGUF。用户于 2026-10-31 反馈候选包测试成功并批准发布，但不代表所有模式、安装方式及全新机器均已验收；云平台真实 Key 出图仍待验证。请核对“设置”中的版本／构建标识，下方截图保留各自的历史说明。
+> **版本说明：**本页对应 **0.6.1 正式版**，新增大图溶图分析预算优化和仅普通编辑使用的向外渐变蒙版；保留兼容的 GGUF／Safetensors 主模型和统一 AI 素材流程，旧 0.5.2 包仍仅支持 GGUF。新行为已通过离线测试，真实照片、安装后的面板和边缘效果仍待验收；内存保护与现有色彩支持范围不变。0.6.0 的用户候选测试记录不扩展为本次新功能的验收，云平台真实 Key 出图仍待验证。请核对“设置”中的版本／构建标识，下方截图保留各自的历史说明。
 
 首次本地使用先选已有环境或新装环境，再按插件构建选择 GGUF 或原生 Safetensors 路线、复用匹配的三个模型角色；步骤见[从零配置 ComfyUI](docs/setup/COMFYUI.md#beginner)。指定原生 INT8 组合已完成真实推理与 PNG 检查，并以真实输出通过小型 RGB8/16 及一例大图的限定 Photoshop API 检查；这不代表已安装面板、照片回填或所有组合验收，见[实测范围](docs/setup/COMFYUI.md#native-tested)。
 
