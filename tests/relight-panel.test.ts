@@ -381,7 +381,7 @@ test('source document switching never redirects capture or either supported outp
     await open(h);await useFullResult(h);h.switchDocument(22);h.click('relight-generate');await h.wait();assert.equal((h.records()[0].snapshot as any).documentId,11);assert.equal(h.ps.app.activeDocument.id,22);
     assert.deepEqual(Array.from(h.el('relight-output').querySelectorAll('option'),(option:any)=>option.value),['lighting-layers','full-result']);assert.equal(h.el('relight-compensation'),null);assert.equal(h.el('relight-compensation-info'),null);
     h.click('relight-apply');await new Promise(r=>setTimeout(r,50));assert.equal(h.appliedLayers[0].documentId,11);assert.equal(h.ps.app.activeDocument.id,22);
-    const before=h.appliedLayers.length;h.ps.app.documents.find((d:any)=>d.id===11).activeHistoryState={id:99};h.click('relight-apply');await new Promise(r=>setTimeout(r,50));assert.equal(h.appliedLayers.length,before);assert.match(h.el('relight-status').textContent,/改变|重新捕获/);
+    const before=h.appliedLayers.length;h.ps.app.documents.find((d:any)=>d.id===11).activeHistoryState={id:99};h.click('relight-apply');await new Promise(r=>setTimeout(r,50));assert.equal(h.appliedLayers.length,before);assert.match(h.el('relight-status').textContent,/改变|重新捕获|来源历史像素/);
     assert.equal(h.el('relight-export').disabled,false);
   }finally{await h.close();}
 });

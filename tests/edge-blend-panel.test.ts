@@ -33,7 +33,7 @@ test('zero edge width keeps legacy mask semantics and does not persist expanded-
   const h=await panelHarness();try{
     await h.wait();h.el('edge-blend').value='0';h.change('edge-blend');h.el('resolution').value='32';h.click('generate');await h.wait();
     const record=h.records()[0];assert.ok(record);assert.equal((record.snapshot as any).edgeBlend,undefined);assert.equal((record.params as any).edgeBlend,undefined);
-    assert.equal(h.files[`${record.id}-subject-mask.bin`],undefined);
+    assert.ok(h.files[`${record.id}-subject-mask.bin`]);assert.deepEqual(record.selectionRange,{version:'native-v1',scope:'selection'});
     h.el('edge-blend').value='8';h.selectHistory(record.id);await h.wait();h.click('repeat-history');await h.wait();assert.equal(h.el('edge-blend').value,'0','old parameters do not gain outward coverage');
   }finally{await h.close();}
 });

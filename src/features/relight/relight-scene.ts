@@ -100,6 +100,7 @@ export function createRelightScene(binding:RelightSource,lightId:string):Relight
   return validateRelightScene({schemaVersion:1,parameterVersion:1,source:binding,lights:[defaultLight(lightId)],ambient:{intensity:.15,color:'#FFFFFF'},
     existingLighting:'reshape',shadow:{strength:.5,softness:.6},preserveContent:'strict',supplement:''});
 }
+export function validateRelightSupplement(value:unknown):string {return text(value,RELIGHT_LIMITS.maxSupplement,'supplement',true);}
 export function validateRelightScene(value:unknown):RelightScene {
   const v=object(value,sceneKeys,'scene');
   if(v.schemaVersion!==1||v.parameterVersion!==1)throw new Error('Unsupported relight schema or parameter version; use a compatible build');
@@ -108,7 +109,7 @@ export function validateRelightScene(value:unknown):RelightScene {
   const a=object(v.ambient,['intensity','color'],'ambient'),s=object(v.shadow,['strength','softness'],'shadow');
   return {schemaVersion:1,parameterVersion:1,source:source(v.source),lights,ambient:{intensity:number(a.intensity,0,4,'ambient intensity'),color:hex(a.color)},
     existingLighting:choice(v.existingLighting,['preserve','reshape'],'existing lighting intent'),shadow:{strength:number(s.strength,0,1,'shadow strength'),softness:number(s.softness,0,1,'shadow softness')},
-    preserveContent:choice(v.preserveContent,['strict','balanced'],'content preservation'),supplement:text(v.supplement,8000,'supplement',true)};
+    preserveContent:choice(v.preserveContent,['strict','balanced'],'content preservation'),supplement:validateRelightSupplement(v.supplement)};
 }
 /** Exactly the settings the semantic compiler consumes; editor-only fields are deliberately absent. */
 function lightIntent(l:RelightLight):Record<string,unknown> {
