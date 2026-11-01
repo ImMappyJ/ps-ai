@@ -33,6 +33,22 @@ function host() {
 }
 function snap():Snapshot {return {documentId:11,width:100,height:80,profile:'sRGB IEC61966-2.1',mode:'rgb',depth:8,historyId:91,sessionId:'session-a',bounds:{left:40,top:30,right:42,bottom:32},mask:new Uint8Array([255,128,0,255]),sourceHash:'fixture'};}
 
+test('native capture rejects disjoint, touching and empty clipping bases without reading outside layer pixels',async()=>{
+  for(const bounds of [{left:90,top:70,right:100,bottom:80},{left:74,top:0,right:100,bottom:80},{left:0,top:0,right:0,bottom:0}]){
+    const h=host();h.doc.layers[0].boundsNoEffects=bounds;
+    h.ps.imaging.getPixels=async(o:any)=>{assert.equal(o.layerID,undefined,'disjoint base must not reach Imaging API');return {imageData:{width:1,height:1,components:4,componentSize:8,getData:async()=>new Uint8Array([20,30,40,128]),dispose(){}},sourceBounds:{left:40,top:30,right:41,bottom:31},level:0};};
+    const c=await h.adapter.capture(0,undefined,11,8);assert.equal(c.snapshot.clipBaseLayerId,undefined);assert.ok(c.image.rgba.some((v,i)=>i%4===3&&v===128));assert.equal(h.doc.layers.length,1);
+  }
+});
+
+test('native capture does not suppress an intersecting base read error or infer missing bounds as empty',async()=>{
+  for(const bounds of [undefined,{left:0,top:0,right:100,bottom:80},{left:NaN,top:0,right:100,bottom:80}]){
+    const h=host();h.doc.layers[0].boundsNoEffects=bounds;
+    h.ps.imaging.getPixels=async(o:any)=>{if(o.layerID!==undefined)throw Error('base read failed');return {imageData:{width:1,height:1,components:4,componentSize:8,getData:async()=>new Uint8Array([20,30,40,128]),dispose(){}},sourceBounds:{left:40,top:30,right:41,bottom:31},level:0};};
+    await assert.rejects(h.adapter.capture(0,undefined,11,8),/base read failed/);
+  }
+});
+
 test('capture reports a required selection and oversized scope before requesting source-file access',async()=>{
   for(const oversized of [false,true]){
     const h=host();h.doc.colorProfileName='';let reads=0;

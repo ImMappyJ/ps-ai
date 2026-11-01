@@ -30,6 +30,28 @@ test('native16 alpha scan detects a 65534 edge omitted by the bounded raster and
   const c=await h.adapter.capture(0,undefined,7,8,{analysisResolution:32} as any);assert.equal((c.snapshot as any).requiresClipping,true);assert.equal(c.snapshot.clipBaseLayerId,1);
   assert.ok(h.calls.filter(c=>c[0]==='pixels'&&!c[1].targetSize).some(c=>c[1].layerID===1));
 });
+
+for(const depth of [8,16] as const)test(`bounded capture skips a disjoint clipping-base strip at native${depth} without weakening transparency checks`,async()=>{
+  const h=host(6000,3000,depth),read=h.ps.imaging.getPixels;
+  h.original.boundsNoEffects={left:10,top:2500,right:20,bottom:2600};
+  h.ps.imaging.getPixels=async(o:any)=>{if(o.layerID!==undefined)throw Error('No pixels in the requested area');return read(o);};
+  const c=await h.adapter.capture(0,undefined,7,8,{edgeBlend:'auto',analysisResolution:32});
+  assert.equal(c.snapshot.captureGeometry?.kind,'edit-analysis');assert.equal(c.snapshot.requiresClipping,false);assert.equal(c.snapshot.clipBaseLayerId,undefined);
+  assert.ok(c.image.rgba.some(v=>v>0));assert.ok(h.resources.every(r=>r.disposed));
+  h.alpha(()=>Math.floor(h.max/2));
+  const partial=await h.adapter.capture(0,undefined,7,8,{edgeBlend:'auto',analysisResolution:32});
+  assert.equal(partial.snapshot.requiresClipping,true);assert.equal(partial.snapshot.clipBaseLayerId,undefined);
+  await assert.rejects(h.adapter.applyEditAnalysis(partial.snapshot,{width:1,height:1,rgba:new Uint8Array([10,20,30,255])},'Unsafe',{preserveAlpha:true}),/半透明/);
+  assert.deepEqual(h.doc.layers,[h.original]);assert.ok(h.resources.every(r=>r.disposed));
+});
+
+test('bounded capture propagates intersecting clipping-base read failures',async()=>{
+  const h=host(6000,3000),read=h.ps.imaging.getPixels;
+  h.original.boundsNoEffects={left:0,top:0,right:6000,bottom:3000};
+  h.ps.imaging.getPixels=async(o:any)=>{if(o.layerID!==undefined)throw Error('intersecting layer read failed');return read(o);};
+  await assert.rejects(h.adapter.capture(0,undefined,7,8,{analysisResolution:32}),/intersecting layer read failed/);
+  assert.ok(h.resources.every(r=>r.disposed));
+});
 test('native16 strip apply retains source alpha once, pins history and preserves earlier strips',async()=>{
   const h=host(800,500,16),s=h.snapshot();(s as any).requiresClipping=true;s.clipBaseLayerId=1;h.alpha(()=>32768);
   const id=await (h.adapter as any).applyEditAnalysis(s,{width:2,height:2,rgba:new Uint16Array([50000,50000,50000,16384,50000,50000,50000,16384,50000,50000,50000,16384,50000,50000,50000,16384])},'Candidate',{preserveAlpha:true});
