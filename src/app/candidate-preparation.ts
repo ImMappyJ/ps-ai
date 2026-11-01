@@ -105,6 +105,18 @@ async function restoreSnapshot(record:JobRecord,read:ReadBinary):Promise<Snapsho
   if(saved.backgroundComposite!==undefined&&saved.backgroundComposite!=='subject-background-v1')throw backgroundHistoryError();
   try{const snapshot={...saved,mask:await read(`${record.id}-mask.bin`)};await validateEdgeBlendMasks(record,snapshot,read);return snapshot;}catch(error){if(saved.backgroundComposite)throw backgroundHistoryError();throw error;}
 }
+/** Reload the exact native mask for read-only source verification, including bounded previews. */
+export async function loadCandidateSnapshot(record:JobRecord,read:ReadBinary,retainedBytes=0):Promise<Snapshot> {
+  assertTaskNames(record);const s=record.snapshot as Snapshot|undefined,b=s?.bounds;
+  if(!s||!b||!Object.values(b).every(Number.isSafeInteger)||b.left<0||b.top<0||b.right>s.width||b.bottom>s.height)throw editAnalysisHistoryError();
+  const width=b.right-b.left,height=b.bottom-b.top;checkDocumentSize(s.width,s.height);checkDocumentSize(width,height);
+  // The proof only needs the saved application mask. Full candidate preparation
+  // still validates raw/protection formulas before any Photoshop write.
+  planEditApplyMemory(s.width,s.height,s.nativeDepth??8,0,width*height,retainedBytes);
+  const mask=await read(`${record.id}-mask.bin`);
+  if(!(mask instanceof Uint8Array)||mask.length!==width*height||!mask.some(v=>v>0))throw editAnalysisHistoryError();
+  return {...s,mask};
+}
 async function restoreBackgroundMasks(record:JobRecord,snapshot:Snapshot,source:Raster,read:ReadBinary){
   let subject:Uint8Array,protection:Uint8Array;
   try{subject=await read(`${record.id}-subject-mask.bin`);protection=await read(`${record.id}-protection-mask.bin`);}catch{throw backgroundHistoryError();}

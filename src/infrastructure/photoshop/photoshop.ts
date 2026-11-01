@@ -23,6 +23,7 @@ export interface SelectionRange {documentId:number;sessionId:string;width:number
 interface ColorCopyProvenance {sessionId:string;workingCopyOf:number;origin:string;colorReason:SourceColorReason;colorState:string}
 export class PhotoshopAdapter {
   private applications=new Map<string,{documentId:number;historyId:number;layerId:number;sourceIdentity:string}>();
+  private sourceProofs=new Map<string,{key:string;state:string;historyId:number}>();
   private maskKeys=new WeakMap<Uint8Array,number>();
   private colorCopies=new Map<number,ColorCopyProvenance>();
   constructor(public ps:any,public sessionId:string,private checkpoint:(stage:string)=>Promise<void>=async()=>{},private readSourceColor:SourceColorReader=async()=>undefined){}
@@ -476,7 +477,8 @@ export class PhotoshopAdapter {
     const doc=Array.from(this.ps.app.documents as any[]).find((d:any)=>d.id===s.documentId);
     if(!doc)throw new Error('来源文档已关闭，候选已保留');
     const own=this.applications.get(this.key(s));
-    const historyMatches=doc.activeHistoryState.id===s.historyId||(own&&own.historyId===doc.activeHistoryState.id&&Array.from(doc.layers as any[]).some((l:any)=>l.id===own.layerId));
+    const proof=this.sourceProofs.get(this.sourceIdentity(s));
+    const historyMatches=doc.activeHistoryState.id===s.historyId||(own&&own.historyId===doc.activeHistoryState.id&&Array.from(doc.layers as any[]).some((l:any)=>l.id===own.layerId))||(proof&&proof.key===this.key(s)&&proof.state===this.sourceState(doc));
     if(doc.width!==s.width||doc.height!==s.height||!this.profiled(doc)||doc.colorProfileName!==s.profile||doc.mode!==s.mode||doc.bitsPerChannel!==s.depth||!historyMatches)throw new Error('来源文档尺寸、颜色或内容状态已改变，请重新捕获');
     return doc;
   }
@@ -495,8 +497,65 @@ export class PhotoshopAdapter {
     const doc=Array.from(this.ps.app.documents as any[]).find((d:any)=>d.id===snapshot.documentId);if(!doc)return 'unavailable';
     if(doc.width!==snapshot.width||doc.height!==snapshot.height||!this.profiled(doc)||doc.colorProfileName!==snapshot.profile||doc.mode!==snapshot.mode||doc.bitsPerChannel!==snapshot.depth)return 'changed';
     if(doc.activeHistoryState.id===snapshot.historyId)return 'current';
+    const proof=this.sourceProofs.get(this.sourceIdentity(snapshot));if(proof&&proof.historyId===doc.activeHistoryState.id&&proof.state===this.sourceState(doc))return 'current';
     if(allowOwned){const identity=this.sourceIdentity(snapshot);if([...this.applications.values()].some(a=>a.documentId===doc.id&&a.historyId===doc.activeHistoryState.id&&a.sourceIdentity===identity&&Array.from(doc.layers as any[]).some((l:any)=>l.id===a.layerId)))return 'current';}
     return 'changed';
+  }
+  /** Explicit, read-only proof. A different history ID alone is not a pixel edit. */
+  async verifyCandidateSource(snapshot:Snapshot,options:{retainedBytes?:number;signal?:AbortSignal;onProgress?:(done:number,total:number)=>void}={}):Promise<void> {
+    if(options.signal?.aborted)throw new DiagnosticError('cancelled','apply','来源检查已取消');
+    const b=snapshot.bounds,width=b?.right-b?.left,height=b?.bottom-b?.top;
+    checkDocumentSize(snapshot.width,snapshot.height);checkDocumentSize(width,height);
+    if(!(snapshot.mask instanceof Uint8Array)||snapshot.mask.length!==width*height||!snapshot.mask.some(v=>v>0))throw new Error('历史候选的原生蒙版无效');
+    const key=this.key(snapshot,true),identity=this.sourceIdentity(snapshot);
+    try{this.validate(snapshot);return;}catch{/* A changed history requires proof, never an assumed rebind. */}
+    if(this.sourceAvailability(snapshot)==='unavailable')throw new Error('来源会话已结束或文档已关闭；候选仍可导出');
+    const doc=Array.from(this.ps.app.documents as any[]).find(d=>d.id===snapshot.documentId);
+    if(!doc||doc.width!==snapshot.width||doc.height!==snapshot.height||!this.profiled(doc)||doc.colorProfileName!==snapshot.profile||doc.mode!==snapshot.mode||doc.bitsPerChannel!==snapshot.depth||![this.ps.constants.DocumentMode.RGB,this.ps.constants.DocumentMode.GRAYSCALE].includes(doc.mode))throw new Error('来源文档尺寸、颜色或内容状态已改变，请重新捕获');
+    const depth=doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8;
+    if(![this.ps.constants.BitsPerChannelType.EIGHT,this.ps.constants.BitsPerChannelType.SIXTEEN].includes(doc.bitsPerChannel)||snapshot.nativeDepth!==undefined&&snapshot.nativeDepth!==depth)throw new Error('来源位深已改变，请重新读取');
+    planEditApplyMemory(doc.width,doc.height,depth,0,0,options.retainedBytes??0);
+    const expectedState=this.sourceState(doc);
+    await this.ps.core.executeAsModal(async(context:any)=>{
+      if(this.sourceState(doc)!==expectedState)throw new Error('来源在检查期间已改变，请重新检查');
+      const state=this.sourceState(doc),current=doc.activeHistoryState.id,own=this.applications.get(key);
+      const owned=own&&Array.from(doc.layers as any[]).some(l=>l.id===own.layerId)?own:undefined;
+      const baseline=owned?.historyId??snapshot.historyId;
+      const hasHistory=(id:number)=>Number.isSafeInteger(id)&&id>0&&Array.from((doc.historyStates??[]) as any[]).some(h=>h?.id===id);
+      const guard=()=>{
+        if(context.isCancelled||options.signal?.aborted)throw new DiagnosticError('cancelled','apply','来源检查已取消');
+        if(!Array.from(this.ps.app.documents as any[]).some(d=>d.id===doc.id)||this.sourceState(doc)!==state)throw new Error('来源在检查期间已改变，请重新检查');
+        if(!hasHistory(snapshot.historyId)||!hasHistory(baseline)||!hasHistory(current))throw new Error('Photoshop 已无法读取此候选的原始来源历史像素；请复用选区重新生成，原候选仍可导出');
+      };
+      guard();let done=0;const total=doc.width*doc.height;
+      for(const strip of imageStrips({left:0,top:0,right:doc.width,bottom:doc.height})){
+        guard();const before=await this.proofStrip(doc,strip,depth,baseline);guard();
+        const after=await this.proofStrip(doc,strip,depth,current);guard();
+        if(before.length!==after.length||before.some((value,index)=>value!==after[index]))throw new Error('来源图像像素已改变，请复用选区重新生成；旧候选仍可导出');
+        done+=(strip.right-strip.left)*(strip.bottom-strip.top);options.onProgress?.(done,total);
+      }
+      guard();
+      if(owned)this.applications.set(key,{...owned,historyId:current});
+      this.sourceProofs.set(identity,{key,state,historyId:current});
+    },{commandName:'ps-ai 检查历史来源像素'});
+  }
+  /** Compare native ICC/depth, never the lossy sRGB model or working raster. */
+  private async proofStrip(doc:any,bounds:Bounds,depth:8|16,historyId:number):Promise<Uint8Array|Uint16Array> {
+    const gray=doc.mode===this.ps.constants.DocumentMode.GRAYSCALE;
+    const result=await this.ps.imaging.getPixels({documentID:doc.id,historyStateID:historyId,sourceBounds:bounds,colorSpace:gray?'Grayscale':'RGB',colorProfile:doc.colorProfileName,componentSize:depth,applyAlpha:false}),data=result.imageData;
+    if(!data)throw new Error('历史来源像素不可读取');
+    try{
+      const actual=result.sourceBounds,components=gray?[1,2]:[3,4];
+      if((result.level??0)!==0||data.componentSize!==depth||!components.includes(data.components)||!actual||!Object.values(actual).every(Number.isSafeInteger)||actual.left<bounds.left||actual.top<bounds.top||actual.right>bounds.right||actual.bottom>bounds.bottom||actual.right<=actual.left||actual.bottom<=actual.top||data.width!==actual.right-actual.left||data.height!==actual.bottom-actual.top||data.width*data.height>IMAGE_BUDGETS.stripPixels)throw new Error('历史来源像素尺寸、位深或坐标不符');
+      const values=await data.getData({chunky:true,fullRange:true});
+      if(Object.prototype.toString.call(values)!==(depth===16?'[object Uint16Array]':'[object Uint8Array]')||values.length!==data.width*data.height*data.components)throw new Error('历史来源原生像素缓冲区无效');
+      const rgba=depth===16?new Uint16Array(data.width*data.height*4):new Uint8Array(data.width*data.height*4),max=depth===16?65535:255;
+      for(let p=0;p<data.width*data.height;p++){
+        for(let c=0;c<3;c++)rgba[p*4+c]=values[p*data.components+(gray?0:c)];
+        rgba[p*4+3]=data.components===(gray?2:4)?values[(p+1)*data.components-1]:max;
+      }
+      return actual.left===bounds.left&&actual.top===bounds.top&&actual.right===bounds.right&&actual.bottom===bounds.bottom?rgba:expandPixels({width:data.width,height:data.height,rgba},actual,bounds).rgba;
+    }finally{data.dispose();}
   }
   /** Read-only submission check, stricter than the owned-layer apply exception. */
   assertSourceCurrent(snapshot:Snapshot):void {

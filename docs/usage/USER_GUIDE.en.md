@@ -57,7 +57,7 @@ Settings JSON transfers addresses, model mappings and language, without keys, mo
 | Portrait · [Relighting](#relight) | Current selection, or explicitly choose Entire image, then arrange lights |
 | Portrait · [Image Blending](#blend) | Select the foreground already placed in a visible environment |
 
-To protect faces or text, select them and use **Set protection**, then select the edit area (the reference subject for default AI assets). Protection is subtracted with feathers retained. Ordinary editing context does not enlarge the apply boundary. Prepare selections again after changing documents or reusing parameters.
+To protect faces or text, select them and use **Set protection**, then select the edit area (the reference subject for default AI assets). Protection is subtracted with feathers retained. Ordinary editing context does not enlarge the apply boundary. After changing documents, prepare a new selection; history can restore its own range in the original document during the same plugin session.
 
 **Edge blending in current source (published 0.6.1 packages retain the older local-edit-only behavior):** local object/material editing, costume/prop repair and character reference editing share an outward gradient mask. Automatic width uses 15% of the shorter native selection side, clamped to 8–512 px. Disable automatic width to set 0–1024 px manually; 0 disables blending. Inspect the orange transition in the range preview before generating. Selection interiors retain their coverage, protection is subtracted last, and the Photoshop selection stays unchanged. The fade softens boundaries but cannot remove a color cast throughout the result; “Match unselected context colors” remains a separate preference. Blend lighting/redraw, relighting, backgrounds and assets do not use it. New tasks save the resolved width and versioned raw/effective/protection planes; old history keeps its exact saved formula. Parameter reuse restores its saved radius, or 0 for markerless tasks, with automatic width off.
 
@@ -178,12 +178,17 @@ This screenshot loads an existing real scene candidate in the branch's final run
 | --- | --- |
 | Click / check records | Click for details, check for bulk clearing; 20 per page, Select all covers every page in the current filter |
 | Load candidates | Read local results without generation; the original source still determines apply permission |
-| Reuse parameters | Reuse descriptions/settings, then prepare selection, protection and references again |
+| Restore this saved selection | Restore that record's raw selection and protection in its original document during this plugin session; keep current parameters |
+| Reuse parameters and selection | Restore descriptions/settings and the saved range, then read current pixels; inspect the preview and select reference images again before generating |
 | Recover task | Switch to its saved backend type/address, then query the original UUID without resubmission |
 | Cancel | Cancel the current task and stop later candidates; started cloud requests may still complete and be billed |
 | Clear checked history | Confirm deletion of local records/plugin candidate files; Photoshop documents, layers, exports, settings and lighting drafts remain |
 
 Unresolved tasks stay visible. Repeated failed status reads retain unknown state and the original ID for later recovery; unknown does not mean remote failure. Only unknown tasks allow a second confirmation to **Stop local tracking**. This does not cancel remote work or billing; generating again can duplicate it. Clearing history also does not cancel or clear the backend. Retry interrupted local cleanup with **Retry local cleanup**.
+
+**History range reuse in current source (not included in published 0.6.1 packages):** new captured tasks save their own native selection, feathers and protection. Browsing history does not restore anything. Whole-image relighting keeps its full-canvas scope without creating a Photoshop selection. Old records without a verifiable raw selection remain usable for parameters and export; another document or plugin session requires a new selection. Clearing a record also clears its saved planes.
+
+If cancelling or changing the selection leaves an old candidate showing **Check source**, click it to compare the entire document against the surviving Photoshop history baseline, at native depth and ICC. When the check passes, click Apply again; the candidate uses its saved effective mask, regardless of the current selection. Actual pixel changes, missing history, a closed/reopened source or a new plugin session keep application blocked. Reuse the range to generate again where available, or export the old candidate. No automatic history rewind or inference occurs. This path passed Photoshop 27 API checks with owned sRGB8, ProPhoto RGB16 and transparent fixtures, including feathers, protection, owned-layer replacement and single Undo; installed-panel and photographic quality acceptance remain separate.
 
 <a id="source-color"></a>
 

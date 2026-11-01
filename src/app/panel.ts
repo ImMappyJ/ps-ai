@@ -20,7 +20,7 @@ import {RelightSession,RelightDraftStore,relightTaskMetadata,type FrozenRelightS
 import {RelightWorkbench,type RelightResult} from '../features/relight/relight-workbench';
 import {validateRelightExtractionSettings,type RelightExtractionSettings} from '../features/relight/relight-layers';
 import {blendTaskMetadata,validateBlendTaskMetadata,withBlendProcessing,assertBlendLightingCapture,type BlendTaskMetadata} from '../features/blend/blend-session';
-import {compileRelightScene,validateRelightScene,type RelightScene,type RelightCapabilities} from '../features/relight/relight-scene';
+import {compileRelightScene,validateRelightScene,validateRelightSupplement,type RelightScene,type RelightCapabilities} from '../features/relight/relight-scene';
 import {PanelViews,OperationFeedback,ResultNavigation,CandidatePreview,SourceCaption,captureSizeSummary,localValidationMessage,isSourceCaptureDiagnostic,createCandidateCard,setCandidateCardState,displayPreview as preview} from './panel-view';import type {OperationContext,PanelPage,CaptureSizeDetails} from './panel-view';
 import {HistoryTable,historyTaskType,historyPrompt,historyState,historySource,historyDate} from './history-table';
 import {prepareCandidate,prepareLightingLayerApplication,prepareEditAnalysisApplication,prepareSelectionAssetApplication,preflightEditAnalysisCandidate,preflightSelectionAssetCandidate,preflightEdgeBlendCandidate,historyOutputName,loadCandidateSource,type PreparedCandidate} from './candidate-preparation';
@@ -28,6 +28,8 @@ import {planRelightMemory,downsampleSnapshotMask,resampleGray} from '../imaging/
 import {observeRelightSource} from './relight-source-monitor';
 import {suggestModelMappings} from '../diagnostics/model-discovery';
 import {HistoryPreview} from './history-preview';
+import {historySelectionScope,readHistorySelection} from './history-selection';
+import {loadCandidateSnapshot} from './candidate-preparation';
 declare const require:(name:string)=>any;
 const ps=require('photoshop'),uxp=require('uxp'),store=new Storage(uxp);
 let sourceColorReader:ReturnType<typeof createSourceColorReader>;
@@ -262,7 +264,7 @@ function candidateUi(){
 }
 function invalidateCapture(){invalidateBlendProcessing();capture=undefined;const visible=el('selection-previews').style.display!=='none';el('selection-previews').style.display='none';if(visible)sourceCaption.show('范围参数已改变，请重新预览选区');}
 function setWorkspace(value:Workspace,mode=modes[value][0][0]){if(mode==='atmosphere'){mode='effect';el('asset-preset').value='atmosphere';}if(workspace!==value||el('mode').value!==mode)invalidateCapture();workspace=value;const select=el('mode');select.innerHTML='';for(const [id,label] of modes[value])option(select,id,label);select.value=mode;for(const w of ['local','cosplay','t2i'])el(`tab-${w}`).className=w===value?'active':'';if(value==='t2i')el('destination').value='document';else el('destination').value='selection';inputUi();}
-function lock(value:boolean){busy=value;for(const id of ['generate','capture','restore-selection','protect','clear-protection','reference','reference-assume-srgb','clear-reference','tab-local','tab-cosplay','tab-t2i','mode','prompt','output-depth','usage','guide','preserve-alpha','align-subject','match-color','destination','count','steps','resolution','seed','lock-seed','margin','p0','recover','load-history','repeat-history','apply','new-document','connect','scan-models','save-settings','import-settings','export-settings','model-unet','model-clip','model-vae','backend-url','backend-kind','gateway-model','api-key','save-key','clear-key','stop-relay','language','auto-view-results','open-setup','close-setup','setup-connect','setup-check','setup-example','relight-scope','remember-source-access','forget-source-access'])el(id).disabled=value;candidateUi();renderSetup();inputUi();relightWorkbench?.refreshAvailability();}
+function lock(value:boolean){busy=value;for(const id of ['generate','capture','restore-selection','protect','clear-protection','reference','reference-assume-srgb','clear-reference','tab-local','tab-cosplay','tab-t2i','mode','prompt','output-depth','usage','guide','preserve-alpha','align-subject','match-color','destination','count','steps','resolution','seed','lock-seed','margin','p0','recover','load-history','restore-history-selection','repeat-history','apply','new-document','connect','scan-models','save-settings','import-settings','export-settings','model-unet','model-clip','model-vae','backend-url','backend-kind','gateway-model','api-key','save-key','clear-key','stop-relay','language','auto-view-results','open-setup','close-setup','setup-connect','setup-check','setup-example','relight-scope','remember-source-access','forget-source-access'])el(id).disabled=value;candidateUi();renderSetup();inputUi();relightWorkbench?.refreshAvailability();}
 function showGatewayModels(selected=settings.gatewayModel??DEFAULT_GATEWAY_MODEL){const select=el('gateway-model');select.innerHTML='';for(const id of new Set([selected,...(gatewayCatalogBase===el('backend-url').value?gatewayCatalog?.models.map(m=>m.id)??[]:[])]))option(select,id,id);select.value=selected;}
 function showSettings(available?:Record<'unet'|'clip'|'vae',string[]>,value=settings) {for(const key of ['unet','clip','vae'] as const){const select=el(`model-${key}`);select.innerHTML='';for(const name of new Set([value.models[key],...(available?.[key]??[])]))option(select,name,name);select.value=value.models[key];}displayedConnection=connectionId(value);draftConnections=value.connections;el('backend-kind').value=displayedConnection;el('backend-url').value=value.baseUrl;el('output-depth').value=String(value.outputDepth??8);el('auto-view-results').checked=value.autoViewResults!==false;showGatewayModels(value.gatewayModel??(isPlatform(displayedConnection)?PLATFORMS[displayedConnection].model:DEFAULT_GATEWAY_MODEL));el('api-key').value='';void keyStatus();inputUi();}
 async function saveSettings(value:unknown){const next=rememberConnection(validateSettings(value));await store.json('settings.json',next);settings=next;client=backendClient(settings);coordinator=new JobCoordinator(client,store);settingsReady=true;restoreSettingsLanguage();showSettings();await refreshHistory();connection('待检查');status(t(settings.backend==='gateway'?'平台配置已保存；请连接检查模型与 Key。':"模型配置已保存，请连接检查；文件名可迁移，模型权重需在后端准备"));}
@@ -345,6 +347,31 @@ async function copyDiagnostic():Promise<void> {
   }
 }
 function activeDocumentId():number|undefined{return ps.app.documents.length?ps.app.activeDocument?.id:undefined;}
+function historyRangeAvailable(record:JobRecord):boolean {
+  const s=record.snapshot as Snapshot|undefined,doc=ps.app.documents.length?ps.app.activeDocument:undefined;
+  return !!s&&!!historySelectionScope(record)&&s.sessionId===adapter.sessionId&&doc?.id===s.documentId&&doc.width===s.width&&doc.height===s.height&&doc.mode===s.mode&&doc.bitsPerChannel===s.depth;
+}
+async function restoreHistoryRange(record:JobRecord):Promise<'selection'|'document'> {
+  return withImagePixels(async()=>{
+  if(!historyRangeAvailable(record))throw new Error(t('此历史选区需在本次会话的原文档中恢复；请切回原文档或重新圈选。'));
+  clearCapturePreview();
+  const saved=await readHistorySelection(record,name=>store.readBinary(name),retainedImageBytes(true));
+  if(!historyRangeAvailable(record))throw new Error(t('来源在检查期间已改变，请重新检查'));
+  if(saved.scope==='selection')await adapter.restoreSelection(saved.range);
+  protection=saved.protection.mask.some(v=>v>0)?saved.protection:undefined;
+  inputUi();return saved.scope;
+  });
+}
+async function reuseHistoryRange(record:JobRecord,relight=false):Promise<void> {
+  // Parameters remain useful after a restart or when another document is active.
+  // Never restore a different document's range or implicit reference consent.
+  protection=undefined;reference=undefined;el('reference-assume-srgb').checked=false;
+  el('reference-info').textContent=t('未选择参考图');clearCapturePreview();
+  if(!historyRangeAvailable(record)){status(t('参数已恢复；此历史选区需在本次会话的原文档中恢复，否则请重新圈选。'));return;}
+  const scope=await restoreHistoryRange(record);
+  if(relight){el('relight-scope').value=scope;status(t('历史选区与保护区已恢复；请点击复用光影参数，读取当前原图。'));}
+  else {await captureArea((record.snapshot as Snapshot).documentId);status(t('参数、原选区和保护区已恢复，并读取当前像素；参考图请重新选择，检查预览后再生成。'));}
+}
 function captureSizes(snapshot:Pick<Snapshot,'width'|'height'|'bounds'|'captureGeometry'>,model?:{width:number;height:number},output?:{width:number;height:number}):CaptureSizeDetails|undefined {
   const geometry=snapshot.captureGeometry;if(!geometry)return;
   return {documentWidth:snapshot.width,documentHeight:snapshot.height,nativeWidth:snapshot.bounds.right-snapshot.bounds.left,nativeHeight:snapshot.bounds.bottom-snapshot.bounds.top,workWidth:geometry.width,workHeight:geometry.height,...(geometry.kind==='blend-analysis'?{blendAnalysis:true}:{}),...(model?{modelWidth:model.width,modelHeight:model.height}:{}),...(output?{outputWidth:output.width,outputHeight:output.height}:{})};
@@ -605,6 +632,8 @@ function historyUi(){
   if(el('view-history').style.display!=='none'&&(!narrow||historyDetail))historyPreview.show(record);
   el('next-pending').style.display=pending.length>1?'block':'none';el('next-pending').disabled=busy;
   el('recover').disabled=busy||!record;el('load-history').disabled=busy||!record?.outputFile;el('repeat-history').disabled=busy||!record?.params;
+  el('restore-history-selection').disabled=busy||!record||!historyRangeAvailable(record);
+  if(record?.snapshot)el('history-details').textContent+='\n'+t(historySelectionScope(record)?'此历史保留原选区与保护区；仅本次会话的原文档可恢复。':'此历史未保存可恢复的原选区；参数与候选仍可读取。');
   el('cancel').disabled=busy?!taskActive:!record||!blocksGeneration(record);
   el('cancel').textContent=t((busy||!record?client instanceof GatewayClient:record.backend==='gateway')?'停止后续候选':'取消本任务');
   el('history-cancel').disabled=busy||!record||!blocksGeneration(record);el('history-cancel').textContent=t(record?.backend==='gateway'?'停止后续候选':'取消本任务');
@@ -928,8 +957,8 @@ async function generate(frozenRelight?:FrozenRelightSubmission,onRelightJob?:(id
       }
       if(snapshot){
         await store.binary(`${id}-mask.bin`,snapshot.mask);await store.binary(`${id}-source.png`,encodePng(captured!.image));
-        if(context||blendMetadata||snapshot.edgeBlend||snapshot.backgroundComposite==='subject-background-v1'){
-          const raw=context||blendMetadata||snapshot.edgeBlend?captured!.selectionMask:captured!.subjectMask;
+        {
+          const raw=captured!.subjectMask??captured!.selectionMask;
           if(!raw)throw new Error(t('背景历史的蒙版数据缺失或损坏，无法安全重建候选；原始输出已保留'));
           await store.binary(`${id}-subject-mask.bin`,raw);await store.binary(`${id}-protection-mask.bin`,captured!.protectionMask);
         }
@@ -950,6 +979,7 @@ async function generate(frozenRelight?:FrozenRelightSubmission,onRelightJob?:(id
       const {mask:ignored,...metadata}=snapshot??{mask:undefined};
       current={id,clientId,baseUrl:settings.baseUrl,state:'created',createdAt:new Date().toISOString(),graph,...(generationRequest?{backend:'gateway' as const,request:generationRequest}:{}),userPrompt,params:{workspace,mode,steps,resolution,seed,outputDepth:depth,guide,margin,usage,destination,outputKind:request.kind,...(snapshot?.edgeBlend?{edgeBlend:snapshot.edgeBlend.radius}:{}),...(context?{assetContext:context}:{}),...(placement?{assetPlacement:placement}:{}),...(asset?{assetPreset:el('asset-preset').value}:{}),modelSize,preserveAlpha:behavior.preserveAlpha,alignSubject:behavior.alignSubject,matchColor:behavior.matchColor},snapshot:snapshot?metadata:undefined,template:generationRequest?GATEWAY_TEMPLATE:templateForDepth(depth),...(generationRequest?{providerModel:generationRequest.model}:{models:{...settings.models}})};
       if(captured?.documentName)current.sourceName=captured.documentName;
+      if(snapshot)current.selectionRange={version:'native-v1',scope:frozenRelight?.scope??'selection'};
       if(referenceName&&ref?.colorReason==='assumed-srgb')(current.params as any).referenceColorReason='assumed-srgb';
       if(blendMetadata)current.blend=blendMetadata;
       if(frozenRelight&&relightCaps){current.relight={...relightTaskMetadata(frozenRelight,id,relightCaps,modelSize!,depth,seed),...(relightConflictResolution?{conflictResolution:relightConflictResolution}:{})};onRelightJob?.(id);}
@@ -990,6 +1020,13 @@ async function apply(jobId?:string,checkOnly=false){
     assertLightingComposite(c);if(c.warning)throw new DiagnosticError('invalid-output','output',c.warning);
     if(!c.snapshot)throw new Error(t('此候选没有来源选区，请使用新文档查看'));
     if(jobId&&relightSession&&(c.job.relight as RelightTaskMetadata|undefined)?.scene.source.snapshotId!==relightSession.editor.snapshot().source.snapshotId)throw new DiagnosticError('source-changed','apply',t('此结果属于旧来源快照，仅可查看或导出；请对当前来源重新生成'));
+    await withImagePixels(async()=>{
+      // Do not retain a full native plane in bounded candidate previews.
+      capture=undefined;const retained=retainedImageBytes(true),snapshot=await loadCandidateSnapshot(c.job,name=>store.readBinary(name),retained);
+      if(adapter.sourceAvailability(snapshot)==='unavailable')assertCandidateSource(c);
+      try{await adapter.verifyCandidateSource(snapshot,{retainedBytes:retained+snapshot.mask.byteLength,onProgress:(done,total)=>taskPhase(t('核对原生来源像素 {0} / {1}',done,total),Math.round(done/total*100))});}
+      catch(error){if(error instanceof DiagnosticError||diagnostic(error,'apply').code==='image-budget')throw error;throw new DiagnosticError('source-changed','apply',errorText(error instanceof Error?error.message:String(error)));}
+    });
     assertCandidateSource(c);
     if(checkOnly){status(t('来源检查通过；请再次明确应用候选。'));return;}
     let layerId:number;
@@ -1041,8 +1078,8 @@ function on(id:string,action:()=>Promise<void>){el(id).addEventListener('click',
   // Ignore already queued clicks after a control is locked. A skipped action
   // must not create a feedback owner or clear an earlier diagnostic.
   if(el(id).disabled)return;
-  const stage:Stage=['apply','new-document','opacity'].includes(id)?'apply':['capture','restore-selection','protect','reference','open-relight','relight-reuse-history','diagnostic-primary'].includes(id)?'capture':['scan-models','setup-check'].includes(id)?'environment':['recover','generate','setup-example','cancel','history-cancel'].includes(id)?'inference':['load-history','export','export-ai-reference','zoom'].includes(id)?'output':'connection';
-  const page:PanelPage=['connect','scan-models','save-settings','import-settings','export-settings','setup-connect','setup-check','setup-example','save-key','clear-key','stop-relay'].includes(id)?'settings':['recover','load-history','repeat-history','history-cancel','clear-history','confirm-clear-history','retry-history-cleanup'].includes(id)?'history':['generate','capture','restore-selection','protect','reference','open-relight','relight-reuse-history'].includes(id)?'create':views.current;
+  const stage:Stage=['apply','new-document','opacity'].includes(id)?'apply':['capture','restore-selection','restore-history-selection','repeat-history','protect','reference','open-relight','relight-reuse-history','diagnostic-primary'].includes(id)?'capture':['scan-models','setup-check'].includes(id)?'environment':['recover','generate','setup-example','cancel','history-cancel'].includes(id)?'inference':['load-history','export','export-ai-reference','zoom'].includes(id)?'output':'connection';
+  const page:PanelPage=['connect','scan-models','save-settings','import-settings','export-settings','setup-connect','setup-check','setup-example','save-key','clear-key','stop-relay'].includes(id)?'settings':['recover','load-history','restore-history-selection','repeat-history','history-cancel','clear-history','confirm-clear-history','retry-history-cleanup'].includes(id)?'history':['generate','capture','restore-selection','protect','reference','open-relight','relight-reuse-history'].includes(id)?'create':views.current;
   if(id==='connect')views.show('settings');
   void guarded(()=>action(),{feature:id==='diagnostic-primary'&&el(id).getAttribute('data-color-recovery')?'recover-color':id,page,stage});
 });}
@@ -1210,13 +1247,14 @@ on('export-ai-reference',()=>configure(async()=>{
 on('new-document',()=>configure(async()=>{const c=selected();await adapter.newDocument(c.image,`ps-ai ${c.job.id.slice(0,8)}`);}));
 el('opacity').addEventListener('change',()=>void guarded(()=>configure(async()=>{if(!applied)throw new Error(t("请先应用一个候选"));await adapter.opacity(applied.documentId,applied.layerId,Number(el('opacity').value));})));
 on('load-history',async()=>{if(busy)return;const id=historyTable.selectedId,operation=activeOperation;lock(true);try{const record=(await store.history()).find(r=>r.id===id);if(!record?.outputFile)throw new Error(t("此记录尚未保存候选，请恢复任务"));if(operation)operation.taskId=record.id;const candidate=await addCandidate(record,await store.readBinary(historyOutputName(record)));views.show('results');if(candidate.lightingState==='reference-only')await guarded(async local=>{local.taskId=record.id;assertLightingComposite(candidate);},{page:'results',feature:'load-history',stage:'lighting-extraction'});}finally{lock(false);}});
+on('restore-history-selection',async()=>{if(busy)return;const id=historyTable.selectedId;lock(true);try{const record=(await store.history()).find(r=>r.id===id);if(!record)throw new Error(t('请选择历史记录'));if(activeOperation){activeOperation.taskId=id;activeOperation.documentId=(record.snapshot as Snapshot)?.documentId;}const scope=await restoreHistoryRange(record);status(t(scope==='document'?'此历史使用整张画布，不需要 Photoshop 选区；保护区已恢复。':'已恢复此历史的原选区与保护区；当前参数保持不变。'));}finally{lock(false);}});
 on('repeat-history',async()=>{
   if(busy)return;const id=historyTable.selectedId;lock(true);
   try{const r=(await store.history()).find(r=>r.id===id);if(!r)throw new Error(t("请选择历史记录"));const p=r.params as any;
     if(settings.backend==='gateway'&&p.outputDepth===16)throw new Error(t('此历史为 16 位输出，请切回 ComfyUI 后恢复参数；当前平台配置保留 8 位'));views.show('create');
-    if(p.mode==='relight'){const metadata=r.relight as RelightTaskMetadata|undefined;relightReuse=metadata?validateRelightScene(metadata.scene):undefined;relightReuseDescription=metadata?undefined:String(r.userPrompt??'');setWorkspace('cosplay','relight');el('relight-reuse-history').style.display='block';status(t('历史光影参数已准备，请明确点击复用到当前原图；旧候选仍可读取、应用或导出'));return;}
+    if(p.mode==='relight'){const metadata=r.relight as RelightTaskMetadata|undefined,reuse=metadata?validateRelightScene(metadata.scene):undefined,description=metadata?undefined:validateRelightSupplement(String(r.userPrompt??''));relightReuse=reuse;relightReuseDescription=description;setWorkspace('cosplay','relight');el('relight-reuse-history').style.display='block';await reuseHistoryRange(r,true);return;}
     if(['effect','atmosphere'].includes(p.mode)&&p.assetContext!==undefined&&!['selection-v1','subject-v1'].includes(p.assetContext))throw new Error(t('素材输入方式无效，请重新选择'));
-    setWorkspace(p.workspace,p.mode);if(supportsEdgeBlend(p.mode)){el('edge-blend-auto').checked=false;el('edge-blend').value=String(p.edgeBlend??0);}if(p.mode==='blend')el('blend-output-kind').value=r.blend?validateBlendTaskMetadata(r.blend,r.id).outputKind:'full-result';if(assetMode()){el('asset-input').value=p.assetContext??'text';el('asset-preset').value=p.assetPreset??(p.mode==='atmosphere'?'atmosphere':'objects');if(p.assetContext==='subject-v1'){const placement=validateAssetPlacement(p.assetPlacement);el('asset-scope').value=placement.scope;el('asset-occlusion').value=placement.occlusion;el('asset-margin').value=p.margin*100;}invalidateCapture();}if(p.mode!=='remove')el('prompt').value=r.userPrompt;for(const name of ['steps','resolution','seed','destination'])el(name).value=p[name];el('output-depth').value=String(p.outputDepth??8);el('usage').value=['服装','道具','材质','场景'].includes(p.usage)?p.usage:'服装';el('guide').checked=p.guide;el('preserve-alpha').checked=p.preserveAlpha!==false;el('align-subject').checked=p.alignSubject!==false;el('match-color').checked=p.matchColor===true;el('margin').value=p.margin*100;el('lock-seed').checked=true;inputUi();status(t("参数已恢复；参考图和保护区请重新指定，提交时重新捕获"));
+    setWorkspace(p.workspace,p.mode);if(supportsEdgeBlend(p.mode)){el('edge-blend-auto').checked=false;el('edge-blend').value=String(p.edgeBlend??0);}if(p.mode==='blend')el('blend-output-kind').value=r.blend?validateBlendTaskMetadata(r.blend,r.id).outputKind:'full-result';if(assetMode()){el('asset-input').value=p.assetContext??'text';el('asset-preset').value=p.assetPreset??(p.mode==='atmosphere'?'atmosphere':'objects');if(p.assetContext==='subject-v1'){const placement=validateAssetPlacement(p.assetPlacement);el('asset-scope').value=placement.scope;el('asset-occlusion').value=placement.occlusion;el('asset-margin').value=p.margin*100;}invalidateCapture();}if(p.mode!=='remove')el('prompt').value=r.userPrompt;for(const name of ['steps','resolution','seed','destination'])el(name).value=p[name];el('output-depth').value=String(p.outputDepth??8);el('usage').value=['服装','道具','材质','场景'].includes(p.usage)?p.usage:'服装';el('guide').checked=p.guide;el('preserve-alpha').checked=p.preserveAlpha!==false;el('align-subject').checked=p.alignSubject!==false;el('match-color').checked=p.matchColor===true;el('margin').value=p.margin*100;el('lock-seed').checked=true;inputUi();await reuseHistoryRange(r);
   }finally{lock(false);}
 });
 on('p0',async()=>{if(busy)return;lock(true);const trace:string[]=[];try{const report=await runHostProbe(ps,adapter,trace);await store.json('p0-host-report.json',report);status(t("P0 宿主往返通过：选区外/保护区像素、原图层、蒙版、异文档与一次撤销"));}catch(error){await store.json('p0-host-report.json',{passed:false,date:new Date().toISOString(),trace,error:error instanceof Error?error.message:String(error),stack:error instanceof Error?error.stack:undefined});throw error;}finally{lock(false);}});
@@ -1241,5 +1279,5 @@ function interactionEnded():void {pointerActive=false;queueResultNavigation();}
 document.addEventListener('pointerdown',()=>{pointerActive=true;});
 document.addEventListener('pointerup',interactionEnded);document.addEventListener('pointercancel',interactionEnded);
 document.addEventListener('focusout',queueResultNavigation);document.addEventListener('close',queueResultNavigation);document.addEventListener('psai-interaction-idle',queueResultNavigation);
-window.addEventListener('blur',interactionEnded);window.addEventListener('focus',()=>{renderDiagnostic();workflowUi();});document.addEventListener('focusin',()=>{renderDiagnostic();workflowUi();});window.addEventListener('resize',()=>historyUi());
-uxp.entrypoints.setup({panels:{psai:{show(){panelVisible=true;void initializePanel();renderDiagnostic();workflowUi();queueResultNavigation();},hide(){panelVisible=false;pointerActive=false;if(historyRevealTimer){clearTimeout(historyRevealTimer);historyRevealTimer=undefined;}},destroy(){panelVisible=false;pointerActive=false;historyPreview.invalidate();candidatePreview.retain([]);if(navigationTimer)clearTimeout(navigationTimer);if(copyTimer)clearTimeout(copyTimer);}}}});
+window.addEventListener('blur',interactionEnded);window.addEventListener('focus',()=>{historyUi();renderDiagnostic();workflowUi();});document.addEventListener('focusin',()=>{historyUi();renderDiagnostic();workflowUi();});window.addEventListener('resize',()=>historyUi());
+uxp.entrypoints.setup({panels:{psai:{show(){panelVisible=true;void initializePanel();historyUi();renderDiagnostic();workflowUi();queueResultNavigation();},hide(){panelVisible=false;pointerActive=false;if(historyRevealTimer){clearTimeout(historyRevealTimer);historyRevealTimer=undefined;}},destroy(){panelVisible=false;pointerActive=false;historyPreview.invalidate();candidatePreview.retain([]);if(navigationTimer)clearTimeout(navigationTimer);if(copyTimer)clearTimeout(copyTimer);}}}});
