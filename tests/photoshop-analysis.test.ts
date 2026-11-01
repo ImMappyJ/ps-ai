@@ -90,7 +90,7 @@ test('ordinary edit edge blend freezes an outward native mask but preserves raw 
   h.ps.imaging.getSelection=async()=>({sourceBounds:{...h.doc.selection.bounds},imageData:{width:3,height:3,componentSize:8,components:1,getData:async()=>new Uint8Array(9).fill(128),dispose(){}}});
   const protection={documentId:7,width:9,height:9,bounds:{left:0,top:0,right:9,bottom:9},mask:new Uint8Array(81),sessionId:'analysis-session'};protection.mask[4*9+2]=255;
   const c=await h.adapter.capture(0,protection,7,8,{edgeBlend:3});
-  assert.deepEqual(c.snapshot.edgeBlend,{version:'outward-v1',radius:3});
+  assert.deepEqual(c.snapshot.edgeBlend,{version:'outward-v2',radius:3});
   assert.equal(c.selectionMask[4*9+6],0);assert.ok(c.snapshot.mask[4*9+6]>0);assert.equal(c.snapshot.mask[4*9+2],0);
   assert.deepEqual(h.doc.selection.bounds,{left:3,top:3,right:6,bottom:6});
   for(const purpose of ['blend-analysis','relight-analysis','subject-asset'] as const)await assert.rejects(h.adapter.capture(0,undefined,7,8,{purpose,edgeBlend:3}),/策略/);
@@ -100,6 +100,16 @@ test('ordinary edit edge blend freezes an outward native mask but preserves raw 
 test('ordinary edge capture moves a native-fit RGB16 region to bounded analysis before candidate validation would overflow',async()=>{
   const h=host(3000,3000,16),c=await h.adapter.capture(0,undefined,7,8,{edgeBlend:8,analysisResolution:1024});
   assert.equal(c.snapshot.captureGeometry?.kind,'edit-analysis');assert.equal(c.snapshot.mask.length,9_000_000);
-  assert.deepEqual(c.snapshot.edgeBlend,{version:'outward-v1',radius:8});
+  assert.deepEqual(c.snapshot.edgeBlend,{version:'outward-v2',radius:8});
   assert.ok(c.image.width*c.image.height<=1048576);assert.ok(c.image.rgba instanceof Uint16Array);assert.equal(c.image.rgba[0],12345);
+});
+
+test('automatic wide edge capture resolves native selection size and reserves context beyond the fade',async()=>{
+  const h=host(2000,1600,8);h.doc.selection.bounds={left:600,top:500,right:1400,bottom:1100};
+  h.ps.imaging.getSelection=async()=>({sourceBounds:{...h.doc.selection.bounds},imageData:{width:800,height:600,components:1,componentSize:8,getData:async()=>new Uint8Array(800*600).fill(128),dispose(){}}});
+  const c=await h.adapter.capture(0,undefined,7,8,{edgeBlend:'auto',analysisResolution:128});
+  assert.deepEqual(c.snapshot.edgeBlend,{version:'outward-v2',radius:90});
+  assert.deepEqual(c.snapshot.bounds,{left:478,top:378,right:1522,bottom:1222});
+  assert.equal(c.snapshot.mask[0],0);assert.equal(c.selectionMask[0],0);
+  assert.deepEqual(h.doc.selection.bounds,{left:600,top:500,right:1400,bottom:1100});
 });

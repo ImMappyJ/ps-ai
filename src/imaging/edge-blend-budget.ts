@@ -1,16 +1,17 @@
 import {checkDocumentSize,IMAGE_BUDGETS,ImageBudgetError,planNativeCaptureMemory,planEditAnalysisMemory,planEditApplyMemory,type RelightMemoryPlan} from './budget';
 import {checkSize,makeMapping} from './image';
+import type {EdgeBlend} from '../features/editing/edge-blend';
 
 interface Size {width:number;height:number}
 const bpp=(depth:8|16)=>depth===16?8:4;
 /** Four live native planes: saved effective, raw, protection and the verified result. */
-export function planEdgeBlendCandidate(width:number,height:number,depth:8|16,source:Size,model:Size,outputDepth:8|16,outputBytes:number,retainedBytes=0){
+export function planEdgeBlendCandidate(width:number,height:number,depth:8|16,source:Size,model:Size,outputDepth:8|16,outputBytes:number,retainedBytes=0,version:EdgeBlend['version']='outward-v1'){
   checkDocumentSize(width,height);checkSize(source.width,source.height);checkSize(model.width,model.height);
   if(![8,16].includes(depth)||![8,16].includes(outputDepth)||source.width>width||source.height>height||!Number.isSafeInteger(outputBytes)||outputBytes<0)throw new ImageBudgetError('边缘融合内存估算无效');
-  return planEditApplyMemory(width,height,depth,source.width*source.height*bpp(depth)*2+model.width*model.height*bpp(outputDepth)*3+outputBytes,width*height*4,retainedBytes);
+  return planEditApplyMemory(width,height,depth,source.width*source.height*bpp(depth)*2+model.width*model.height*bpp(outputDepth)*3+outputBytes,width*height*4+(version==='outward-v2'?width*4:0),retainedBytes);
 }
 /** A native capture may fit while verifying and preparing its result does not. */
-export function planEdgeBlendCapture(width:number,height:number,depth:8|16,resolution=1024,outputDepth:8|16=8,retainedBytes=0):RelightMemoryPlan|undefined {
+export function planEdgeBlendCapture(width:number,height:number,depth:8|16,resolution=1024,outputDepth:8|16=8,retainedBytes=0,version:EdgeBlend['version']='outward-v1'):RelightMemoryPlan|undefined {
   checkDocumentSize(width,height);
   const model=makeMapping({left:0,top:0,right:width,bottom:height},resolution),pixels=width*height,png=model.width*model.height*bpp(outputDepth)+model.height+65_536;
   const peak=(source:Size,native:boolean)=>{
@@ -18,7 +19,7 @@ export function planEdgeBlendCapture(width:number,height:number,depth:8|16,resol
     // Capture's three planes + recovery cache + one ready candidate mask.
     // Bounded recovery shares the capture's raw plane; native recovery copies it.
     const live=retainedBytes+pixels*(native?5:4)+n*(bpp(depth)+Math.max(bpp(depth),bpp(outputDepth)))+png;
-    return planEdgeBlendCandidate(width,height,depth,source,model,outputDepth,png,live).estimatedPeakBytes;
+    return planEdgeBlendCandidate(width,height,depth,source,model,outputDepth,png,live,version).estimatedPeakBytes;
   };
   try{planNativeCaptureMemory(width,height,depth,retainedBytes);peak({width,height},true);return;}catch(error){if(!(error instanceof ImageBudgetError))throw error;}
   const capture=planEditAnalysisMemory(width,height,depth,resolution,retainedBytes);
