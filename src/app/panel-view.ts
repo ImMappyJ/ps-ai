@@ -3,7 +3,7 @@ import {t,english} from '../localization/i18n';
 import type {Stage} from '../diagnostics/diagnostics';
 
 export type PanelPage='create'|'results'|'history'|'settings';
-export interface OperationContext {id:string;sequence:number;page:PanelPage;feature:string;stage:Stage;taskId?:string;successfulTaskId?:string;documentId?:number;mode?:string;startedAt:number}
+export interface OperationContext {id:string;sequence:number;page:PanelPage;feature:string;stage:Stage;taskId?:string;successfulTaskId?:string;documentId?:number;mode?:string;connection?:string;skipped?:boolean;startedAt:number}
 type SourceContext=Pick<OperationContext,'mode'|'documentId'>;
 const CAPTURE_CAUSES=['selection-required','empty-range','no-document','source-profile','source-unavailable','source-changed','image-budget'];
 const SOURCE_CAPTURE_FEATURES=['capture','restore-selection','protect','generate','open-relight','relight-reuse-history','diagnostic-primary','recover-color','relight-reread','relight-prepare'];
@@ -20,7 +20,24 @@ export class OperationFeedback {
   fail(operation:OperationContext,value:any):boolean {const key=this.key(operation);if(this.owners.get(key)!==operation)return false;this.errors.set(key,{operation,diagnostic:value});return true;}
   private sameSource(left:SourceContext,right:SourceContext):boolean {return left.mode===right.mode&&left.documentId===right.documentId;}
   private captureCause(value:{operation:OperationContext;diagnostic:any}):boolean{return isSourceCaptureDiagnostic(value.operation,value.diagnostic);}
-  succeed(operation:OperationContext):void {if(['generate','recover'].includes(operation.feature)&&(!operation.taskId||operation.successfulTaskId!==operation.taskId))return;const key=this.key(operation),error=this.errors.get(key);if(this.owners.get(key)===operation&&(!error||error.operation.sequence<operation.sequence&&this.sameSource(error.operation,operation)))this.errors.delete(key);}
+  dismiss(operation:OperationContext):boolean {const key=this.key(operation);if(this.errors.get(key)?.operation!==operation)return false;return this.errors.delete(key);}
+  succeed(operation:OperationContext):void {
+    if(operation.skipped||this.owners.get(this.key(operation))!==operation)return;
+    if(['generate','recover'].includes(operation.feature)&&(!operation.taskId||operation.successfulTaskId!==operation.taskId))return;
+    for(const [key,error] of this.errors){
+      const previous=error.operation;
+      if(previous.page!==operation.page||previous.sequence>=operation.sequence||!this.sameSource(previous,operation)||previous.connection!==operation.connection)continue;
+      const sameAction=previous.feature===operation.feature;
+      // Both actions prove the initial setup connection. Merely opening setup,
+      // saving settings or passing the initial handshake proves no later check.
+      const checkedConnection=operation.page==='settings'&&['connect','setup-check'].includes(operation.feature)&&previous.feature==='setup-connect'&&error.diagnostic.stage==='connection';
+      if(!sameAction&&!checkedConnection)continue;
+      // A fresh completed generation supersedes an older generation attempt;
+      // operations on saved candidates must still belong to the same UUID.
+      if(previous.taskId&&operation.feature!=='generate'&&previous.taskId!==operation.taskId)continue;
+      this.errors.delete(key);
+    }
+  }
   /** A verified fresh capture resolves range causes only for the source that was actually read. */
   resolveCapture(operation:OperationContext,source:SourceContext=operation):void {if(this.owners.get(this.key(operation))!==operation)return;for(const [key,value] of this.errors)if(this.captureCause(value)&&value.operation.page===operation.page&&value.operation.sequence<operation.sequence&&this.sameSource(value.operation,source))this.errors.delete(key);}
   forPage(page:PanelPage,source?:SourceContext):{operation:OperationContext;diagnostic:any}|undefined {return [...this.errors.values()].filter(value=>value.operation.page===page&&(!source||!this.captureCause(value)||this.sameSource(value.operation,source))).sort((a,b)=>b.operation.sequence-a.operation.sequence)[0];}

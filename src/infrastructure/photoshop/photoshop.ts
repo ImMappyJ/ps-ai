@@ -9,12 +9,13 @@ import {validateRelightLayerFields,renderRelightLayerStrip,type RelightLayerFiel
 import {sha256} from '@noble/hashes/sha2.js';
 import {planBlendMemory} from '../../imaging/blend-budget';
 import {planEdgeBlendCapture} from '../../imaging/edge-blend-budget';
-import {outwardBlendMask,type EdgeBlend} from '../../features/editing/edge-blend';
+import {edgeBlendMask,automaticEdgeRadius,MAX_EDGE_RADIUS,type EdgeBlend} from '../../features/editing/edge-blend';
 import {assetPlacementMask,validateAssetPlacement,type AssetPlacement} from '../../features/assets/asset-placement';
 import type {AssetContext} from '../backends/gateway-protocol';
 export interface Snapshot {documentId:number;width:number;height:number;profile:string;mode:string;depth:unknown;nativeDepth?:8|16;historyId:number;sessionId:string;bounds:Bounds;mask:Uint8Array;sourceHash:string;sourceLayerIds?:number[];clipBaseLayerId?:number;requiresClipping?:boolean;colorReason?:SourceColorReason;backgroundComposite?:'subject-background-v1';blendOpaqueScope?:boolean;edgeBlend?:EdgeBlend;captureGeometry?:{kind:'relight-analysis'|'edit-analysis'|'blend-analysis';width:number;height:number}}
 export interface Capture {snapshot:Snapshot;image:Raster;selectionMask:Uint8Array;protectionMask:Uint8Array;subjectMask?:Uint8Array;workingCopyOf?:number;documentName?:string}
-export interface CaptureOptions {context?:'selection'|'document';selection?:'edit'|'subject-background'|'document';preserveNativeDepth?:boolean;purpose?:'relight-analysis'|'blend-analysis'|'selection-asset'|'subject-asset';assetPlacement?:AssetPlacement;analysisResolution?:number;retainedBytes?:number;edgeBlend?:number}
+export interface ReferenceRaster extends Raster {colorReason?:'assumed-srgb'}
+export interface CaptureOptions {context?:'selection'|'document';selection?:'edit'|'subject-background'|'document';preserveNativeDepth?:boolean;purpose?:'relight-analysis'|'blend-analysis'|'selection-asset'|'subject-asset';assetPlacement?:AssetPlacement;analysisResolution?:number;retainedBytes?:number;edgeBlend?:number|'auto'}
 export interface EditAnalysisApplyOptions {preserveAlpha:boolean;assetContext?:AssetContext;subjectMask?:Uint8Array;protectionMask?:Uint8Array;signal?:AbortSignal;onProgress?:(done:number,total:number)=>void;retainedBytes?:number}
 export interface Protection {documentId:number;width:number;height:number;bounds:Bounds;mask:Uint8Array;sessionId:string}
 /** Geometry only: restoring it grants no permission to apply an old candidate. */
@@ -152,29 +153,44 @@ export class PhotoshopAdapter {
     for(let i=0;i<data.width*data.height;i++){for(let c=0;c<3;c++)rgba[i*4+c]=Math.round(Math.min(1,Math.max(0,values[i*data.components+c]/max))*target);rgba[i*4+3]=data.components===4?Math.round(Math.min(1,Math.max(0,values[i*4+3]/max))*target):target;}
     return {width:data.width,height:data.height,rgba};
   }
-  async importReference(file:any,retainedBytes=0):Promise<Raster> {
+  async importReference(file:any,retainedBytes=0,options:{assumeSrgb?:boolean}={}):Promise<ReferenceRaster> {
+    // UXP can stringify rejections at the modal boundary. Preserve only the
+    // actual callback failure, never infer trusted codes from arbitrary strings.
+    let failure:{error:unknown}|undefined;
     return this.ps.core.executeAsModal(async(context:any)=>{
-      const previous=this.activeDocument(),existing=new Set(Array.from(this.ps.app.documents as any[]).map((d:any)=>d.id));
-      const doc=await this.ps.app.open(file),owned=!existing.has(doc.id);let data:any,copy:any;
-      if(owned)await context.hostControl.registerAutoCloseDocument(doc.id);
       try {
+      const previous=this.activeDocument(),existing=new Set(Array.from(this.ps.app.documents as any[]).map((d:any)=>d.id));
+      const doc=await this.ps.app.open(file),owned=!existing.has(doc.id);let data:any,copy:any,state:string|undefined,image:ReferenceRaster;
+      const cancelled=()=>{if(context.isCancelled)throw new DiagnosticError('cancelled','capture','参考图读取已取消');};
+      try {
+        if(owned)await context.hostControl.registerAutoCloseDocument(doc.id);
+        cancelled();
         checkSize(doc.width,doc.height);
         this.checkDocumentFormat(doc);
         planNativeCaptureMemory(doc.width,doc.height,doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,retainedBytes);
-        const state=this.sourceState(doc),color=await this.savedColor(doc,file);
-        if(state!==this.sourceState(doc))throw new Error('来源文档尺寸、颜色或内容状态已改变，请重新捕获');
+        state=this.sourceState(doc);const color=await this.savedColor(doc,file,options.assumeSrgb===true);
+        const check=()=>{cancelled();if(state!==this.sourceState(doc))throw new Error('来源文档尺寸、颜色或内容状态已改变，请重新捕获');};check();
         if(color)copy=await this.colorCopy(doc,context);
+        check();
         const source=copy??doc;
         const bounds={left:0,top:0,right:doc.width,bottom:doc.height};
         const result=await this.ps.imaging.getPixels({documentID:source.id,sourceBounds:bounds,colorSpace:'RGB',colorProfile:'sRGB IEC61966-2.1',componentSize:doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,applyAlpha:false});
-        data=result.imageData;return expandPixels(await this.rgbData(data),result.sourceBounds,bounds,result.level??0);
+        data=result.imageData;check();const raster=expandPixels(await this.rgbData(data),result.sourceBounds,bounds,result.level??0);check();
+        image={...raster,...(color?.reason==='assumed-srgb'?{colorReason:'assumed-srgb' as const}:{})};
       } finally {
-        data?.dispose();
-        if(copy){await copy.closeWithoutSaving();await context.hostControl.unregisterAutoCloseDocument(copy.id);}
-        if(owned){await doc.closeWithoutSaving();await context.hostControl.unregisterAutoCloseDocument(doc.id);}
-        if(previous&&Array.from(this.ps.app.documents as any[]).some((d:any)=>d.id===previous.id))this.ps.app.activeDocument=previous;
+        try{data?.dispose();}finally{
+          try{if(copy){await copy.closeWithoutSaving();await context.hostControl.unregisterAutoCloseDocument(copy.id);}}finally{
+            try{if(owned){await doc.closeWithoutSaving();await context.hostControl.unregisterAutoCloseDocument(doc.id);}}finally{
+              if(previous&&Array.from(this.ps.app.documents as any[]).some((d:any)=>d.id===previous.id))this.ps.app.activeDocument=previous;
+            }
+          }
+        }
       }
-    },{commandName:'ps-ai 读取并转换参考图'});
+      cancelled();
+      if(!owned&&(!Array.from(this.ps.app.documents as any[]).some(d=>d.id===doc.id)||state!==this.sourceState(doc)))throw new Error('来源文档尺寸、颜色或内容状态已改变，请重新捕获');
+      return image;
+      }catch(error){failure={error};throw error;}
+    },{commandName:'ps-ai 读取并转换参考图'}).catch((error:unknown)=>{throw failure?failure.error:error;});
   }
   private document():any {
     const doc=this.activeDocument();if(!doc)throw new Error('请先打开 Photoshop 文档');
@@ -196,7 +212,7 @@ export class PhotoshopAdapter {
   }
   private captureBounds(doc:any,margin:number,fullContext:boolean,whole:boolean,analysis=false,edgeBlend=0):Bounds {
     const selection=whole?{left:0,top:0,right:doc.width,bottom:doc.height}:this.bounds(doc,analysis);
-    const pad=Math.max(32,edgeBlend,Math.round(Math.min(selection.right-selection.left,selection.bottom-selection.top)*margin));
+    const pad=edgeBlend+Math.max(32,Math.round(Math.min(selection.right-selection.left,selection.bottom-selection.top)*margin));
     const bounds=fullContext?{left:0,top:0,right:doc.width,bottom:doc.height}:{left:Math.max(0,selection.left-pad),top:Math.max(0,selection.top-pad),right:Math.min(doc.width,selection.right+pad),bottom:Math.min(doc.height,selection.bottom+pad)};
     (analysis?checkDocumentSize:checkSize)(bounds.right-bounds.left,bounds.bottom-bounds.top);return bounds;
   }
@@ -299,7 +315,7 @@ export class PhotoshopAdapter {
   async capture(margin=.15,protection?:Protection,expectedDocumentId=this.activeDocument()?.id,outputDepth:8|16=8,options:CaptureOptions={},beforeCommit?:(capture:Capture)=>void):Promise<Capture> {
     if(!Number.isFinite(margin)||margin<0||margin>1)throw new Error('上下文边距无效');
     if(!options||typeof options!=='object'||Array.isArray(options)||Object.keys(options).some(k=>!['context','selection','preserveNativeDepth','purpose','assetPlacement','analysisResolution','retainedBytes','edgeBlend'].includes(k))||options.context!==undefined&&!['selection','document'].includes(options.context)||options.selection!==undefined&&!['edit','subject-background','document'].includes(options.selection)||options.selection==='document'&&options.context==='selection'||options.preserveNativeDepth!==undefined&&typeof options.preserveNativeDepth!=='boolean'||options.purpose!==undefined&&!['relight-analysis','blend-analysis','selection-asset','subject-asset'].includes(options.purpose)||options.purpose==='relight-analysis'&&options.selection==='subject-background'||options.analysisResolution!==undefined&&(!Number.isInteger(options.analysisResolution)||options.analysisResolution<32||options.analysisResolution>2048||options.analysisResolution%32)||options.retainedBytes!==undefined&&(!Number.isSafeInteger(options.retainedBytes)||options.retainedBytes<0)||![8,16].includes(outputDepth))throw new Error('捕获策略无效');
-    if(options.edgeBlend!==undefined&&(!Number.isInteger(options.edgeBlend)||options.edgeBlend<0||options.edgeBlend>64||options.edgeBlend>0&&(options.purpose!==undefined||options.context==='document'||options.selection!==undefined&&options.selection!=='edit')))throw new Error('捕获策略无效');
+    if(options.edgeBlend!==undefined&&(options.edgeBlend!=='auto'&&(!Number.isInteger(options.edgeBlend)||options.edgeBlend<0||options.edgeBlend>MAX_EDGE_RADIUS)||options.edgeBlend!==0&&(options.purpose!==undefined||options.context==='document'||options.selection!==undefined&&options.selection!=='edit')))throw new Error('捕获策略无效');
     const blend=options.purpose==='blend-analysis',analysis=options.purpose==='relight-analysis'||blend,subjectAsset=options.purpose==='subject-asset',asset=options.purpose==='selection-asset'||subjectAsset;
     if(!subjectAsset&&options.assetPlacement!==undefined)throw new Error('捕获策略无效');
     const placement=subjectAsset?validateAssetPlacement(options.assetPlacement):undefined;
@@ -311,9 +327,10 @@ export class PhotoshopAdapter {
     const expected=this.document();
     if(expected.id!==expectedDocumentId)throw new Error('活动文档已切换，请在来源文档重新生成');
     // Selection/scope errors must precede asynchronous request-only file access.
-    const initialBounds=this.captureBounds(expected,margin,fullContext,whole,true,options.edgeBlend),nativeDepth=expected.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8;
+    const edgeRadius=options.edgeBlend==='auto'?automaticEdgeRadius(this.bounds(expected,true)):options.edgeBlend??0,edge:EdgeBlend|undefined=edgeRadius?{version:'outward-v2',radius:edgeRadius}:undefined;
+    const initialBounds=this.captureBounds(expected,margin,fullContext,whole,true,edgeRadius),nativeDepth=expected.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8;
     let memory=blend?planBlendMemory(initialBounds.right-initialBounds.left,initialBounds.bottom-initialBounds.top,nativeDepth,options.analysisResolution,outputDepth,options.retainedBytes):analysis?planRelightMemory(initialBounds.right-initialBounds.left,initialBounds.bottom-initialBounds.top,nativeDepth,undefined,options.retainedBytes):undefined,editAnalysis=false;
-    if(options.edgeBlend){memory=planEdgeBlendCapture(initialBounds.right-initialBounds.left,initialBounds.bottom-initialBounds.top,nativeDepth,options.analysisResolution,outputDepth,options.retainedBytes);editAnalysis=!!memory;}
+    if(edge){memory=planEdgeBlendCapture(initialBounds.right-initialBounds.left,initialBounds.bottom-initialBounds.top,nativeDepth,options.analysisResolution,outputDepth,options.retainedBytes,edge.version);editAnalysis=!!memory;}
     else if(!analysis)try{planNativeCaptureMemory(initialBounds.right-initialBounds.left,initialBounds.bottom-initialBounds.top,nativeDepth,options.retainedBytes);}catch(error){if(!(error instanceof ImageBudgetError))throw error;memory=planEditAnalysisMemory(initialBounds.right-initialBounds.left,initialBounds.bottom-initialBounds.top,nativeDepth,options.analysisResolution,options.retainedBytes);editAnalysis=true;}
     const bounded=!!memory;
     const selectionState=whole?undefined:JSON.stringify(expected.selection.bounds);
@@ -321,7 +338,7 @@ export class PhotoshopAdapter {
     return this.ps.core.executeAsModal(async(context:any)=>{
       let doc=this.document();const original=doc;
       if(doc.id!==expectedDocumentId)throw new Error('活动文档已切换，请在来源文档重新生成');
-      const bounds=this.captureBounds(doc,margin,fullContext,whole,true,options.edgeBlend);
+      const bounds=this.captureBounds(doc,margin,fullContext,whole,true,edgeRadius);
       if(state!==this.sourceState(doc))throw new Error('来源文档尺寸、颜色或内容状态已改变，请重新捕获');
       if(!whole&&selectionState!==JSON.stringify(doc.selection.bounds))throw new Error('来源或选区已改变，请重新读取原图；原有布光配置已保留');
       const guard=()=>{if(context.isCancelled)throw new DiagnosticError('cancelled','capture','原图读取已取消');if(state!==this.sourceState(original)||!whole&&selectionState!==JSON.stringify(original.selection.bounds))throw new Error('来源或选区已改变，请重新读取原图；原有布光配置已保留');};
@@ -336,9 +353,9 @@ export class PhotoshopAdapter {
           const left=Math.max(bounds.left,protection.bounds.left),right=Math.min(bounds.right,protection.bounds.right),width=bounds.right-bounds.left;
           if(right>left)for(let y=Math.max(bounds.top,protection.bounds.top);y<Math.min(bounds.bottom,protection.bounds.bottom);y++)protectionMask.set(protection.mask.subarray((y-protection.bounds.top)*pw+left-protection.bounds.left,(y-protection.bounds.top)*pw+right-protection.bounds.left),(y-bounds.top)*width+left-bounds.left);
         }
-        if(!subjectAsset&&!options.edgeBlend)mask=effectiveMask(mask,protectionMask);
+        if(!subjectAsset&&!edge)mask=effectiveMask(mask,protectionMask);
       }
-      if(options.edgeBlend)mask=outwardBlendMask(selectionMask,bounds.right-bounds.left,bounds.bottom-bounds.top,options.edgeBlend,protectionMask);
+      if(edge)mask=edgeBlendMask(selectionMask,bounds.right-bounds.left,bounds.bottom-bounds.top,edge,protectionMask);
       if(placement)mask=assetPlacementMask(selectionMask,protectionMask,placement.occlusion);
       if(!background&&!mask.some(v=>v>0))throw new Error('编辑范围完全被保护区覆盖');
       if(background&&editAnalysis&&mask===subjectMask)mask=new Uint8Array(mask.length);
@@ -368,7 +385,7 @@ export class PhotoshopAdapter {
           await this.checkpoint('capture.pixels.getData');
           // The background matte must see native alpha, even for an 8-bit
           // provider: 65534 must not round up to an opaque, protected core.
-          const captureDepth=asset||options.edgeBlend||options.preserveNativeDepth||bounded?(doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8):background&&doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:outputDepth;
+          const captureDepth=asset||edge||options.preserveNativeDepth||bounded?(doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8):background&&doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:outputDepth;
           const read=await this.rgbData(data,captureDepth);
           image=memory?mapCaptureRaster(read,result.sourceBounds,bounds,result.level??0,memory.width,memory.height,editAnalysis?IMAGE_BUDGETS.editPixels:IMAGE_BUDGETS.analysisPixels):expandPixels(read,result.sourceBounds,bounds,result.level??0);
         } finally {data.dispose();await this.checkpoint('capture.pixels.disposed');}
@@ -391,7 +408,7 @@ export class PhotoshopAdapter {
         const visible=(layers:any[])=>{for(const layer of Array.from(layers)){if(layer.visible===false||layer.opacity===0)continue;if(Number.isSafeInteger(layer.id)&&layer.id>0)sourceLayerIds.push(layer.id);if(layer.layers)visible(layer.layers);}};
         visible(doc.layers);
         const colorReason=color?.reason??this.capturedColorReason(doc);
-        const snapshot:Snapshot={documentId:doc.id,width:doc.width,height:doc.height,profile:doc.colorProfileName,mode:doc.mode,depth:doc.bitsPerChannel,nativeDepth:doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,historyId:doc.activeHistoryState.id,sessionId:this.sessionId,bounds,mask,sourceHash:(hash>>>0).toString(16),sourceLayerIds,...(options.edgeBlend?{edgeBlend:{version:'outward-v1' as const,radius:options.edgeBlend}}:{}),...(memory?{captureGeometry:{kind:blend?'blend-analysis' as const:editAnalysis?'edit-analysis' as const:'relight-analysis' as const,width:memory.width,height:memory.height}}:{}),...(editAnalysis||blend?{requiresClipping:nativeScan!.requiresClipping}:{}),...(blend?{blendOpaqueScope:nativeScan!.opaqueScope}:{}),...(clipBaseLayerId===undefined?{}:{clipBaseLayerId}),...(colorReason?{colorReason}:{}),...(background?{backgroundComposite:'subject-background-v1' as const}:{})};
+        const snapshot:Snapshot={documentId:doc.id,width:doc.width,height:doc.height,profile:doc.colorProfileName,mode:doc.mode,depth:doc.bitsPerChannel,nativeDepth:doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,historyId:doc.activeHistoryState.id,sessionId:this.sessionId,bounds,mask,sourceHash:(hash>>>0).toString(16),sourceLayerIds,...(edge?{edgeBlend:edge}:{}),...(memory?{captureGeometry:{kind:blend?'blend-analysis' as const:editAnalysis?'edit-analysis' as const:'relight-analysis' as const,width:memory.width,height:memory.height}}:{}),...(editAnalysis||blend?{requiresClipping:nativeScan!.requiresClipping}:{}),...(blend?{blendOpaqueScope:nativeScan!.opaqueScope}:{}),...(clipBaseLayerId===undefined?{}:{clipBaseLayerId}),...(colorReason?{colorReason}:{}),...(background?{backgroundComposite:'subject-background-v1' as const}:{})};
         const captured:Capture={snapshot,image,selectionMask,protectionMask,...(typeof doc.name==='string'?{documentName:doc.name}:{}),...(subjectMask?{subjectMask}:{}),...(copy?{workingCopyOf:original.id}:{})};
         beforeCommit?.(captured);pixelGuard();
         if(copy){await context.hostControl.unregisterAutoCloseDocument(copy.id);copyUnregistered=true;}

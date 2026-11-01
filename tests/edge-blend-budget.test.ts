@@ -18,3 +18,9 @@ test('small edge capture stays native and impossible reservations reject without
   assert.throws(()=>planEdgeBlendCapture(7008,4672,16,2048,16,256_000_000),/预算|内存/);
   assert.throws(()=>planEdgeBlendCapture(9001,5000,8),/4500/);
 });
+
+test('v2 budgets only bounded row precision buffers and still supports 45MP bounded capture',()=>{
+  const old=planEdgeBlendCandidate(3000,3000,16,{width:256,height:256},{width:256,height:256},8,262144),wide=planEdgeBlendCandidate(3000,3000,16,{width:256,height:256},{width:256,height:256},8,262144,0,'outward-v2');
+  assert.equal(wide.estimatedPeakBytes-old.estimatedPeakBytes,3000*4);
+  assert.ok(planEdgeBlendCapture(5000,9000,16,768,8,0,'outward-v2'));
+});

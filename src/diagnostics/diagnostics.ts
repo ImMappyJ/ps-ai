@@ -65,7 +65,7 @@ const legacy:Partial<Record<DiagnosticCode,string[]>>={
   'image-budget':['区域须为有效尺寸且不超过 1600 万像素'],
   'decode-failed':['需要有效 PNG 图片','RGBA 缓冲区尺寸错误']
 };
-export function diagnostic(error:unknown,stage:Stage,hasPending=false,context:{mode?:string;selectionScope?:string}={}){
+export function diagnostic(error:unknown,stage:Stage,hasPending=false,context:{mode?:string;selectionScope?:string;feature?:string}={}){
   // Reconstruct only known enums and bounded aggregates. Error messages/causes
   // may contain host or provider content and are unnecessary for this failure.
   const extraction=error instanceof RelightExtractionError&&(error.reason==='structure-mismatch'||error.reason==='unsupported-boundary')?new RelightExtractionError(error.reason,error.metrics):undefined;
@@ -80,12 +80,15 @@ export function diagnostic(error:unknown,stage:Stage,hasPending=false,context:{m
   const code:DiagnosticCode=explicit&&guidance[explicit]?explicit:normalized??httpCode??(selectionMissing?'selection-required':stage==='apply'?'apply-failed':'unknown');
   const actualStage=extraction?.stage??(error instanceof DiagnosticError?error.stage:stage);
   let [title,action]=guidance[code];
+  const referenceProfile=code==='source-profile'&&context.feature==='reference';
+  if(referenceProfile){title='无法确定参考图色彩空间';action='为参考图副本指定正确配置文件后重新选择；或明确勾选“本次参考图无配置时按 sRGB 近似读取”再选择图片。原文件不会修改，近似读取可能产生色差。';}
+  if(context.feature==='reference'&&['source-changed','source-unavailable','empty-range','selection-required'].includes(code)){title='参考图读取未完成';action='参考图状态已改变或无法读取，请重新选择参考图后重试。';}
   if(code==='selection-required')action=context.mode==='relight'?'请在 Photoshop 重新圈选布光范围，或明确选择“整张图像”后重新读取原图。':context.mode==='background'||context.mode==='scene'?'请在 Photoshop 圈选要保留的主体，再预览范围并重新生成。':context.mode?'请在 Photoshop 重新圈选要修改的区域，再预览选区或恢复上次选区。':action;
   const stages:Record<Stage,string>={connection:'连接',environment:'环境检查',capture:'读取来源',inference:'模型生成',output:'下载候选','lighting-extraction':'本地光影提取',apply:'Photoshop 回填'};
   const detail=redactDiagnostic(extraction?`${extraction.name}: ${message}`:ordinaryError?`${(error as Error).name}: ${message}`:String(error)).slice(0,5000),causes:string[]=[];
   let cause=!extraction&&ordinaryError?(error as Error&{cause?:unknown}).cause:undefined;
   for(let i=0;cause&&i<3;i++){causes.push(redactDiagnostic(cause instanceof Error?`${cause.name}: ${cause.message}`:String(cause)).slice(0,1000));cause=(cause as {cause?:unknown})?.cause;}
-  return {code,stage:actualStage,stageLabel:t(stages[actualStage]),title:t(title),action:t(action),summary:redactDiagnostic(message?errorTextForSummary(message):t(title)).slice(0,240),build:BUILD_ID,
+  return {code,stage:actualStage,stageLabel:t(stages[actualStage]),title:t(title),action:t(action),summary:redactDiagnostic(referenceProfile?t('参考图缺少可用色彩配置，尚未读取或上传。'):message?errorTextForSummary(message):t(title)).slice(0,240),build:BUILD_ID,
     effect:t(actualStage==='lighting-extraction'?'本地光影提取未完成；原始 AI 参考图保留，仅供检查和导出，不能作为光影层应用。':actualStage==='apply'?'应用未完成，候选保留；请检查来源文档和历史记录。':actualStage==='capture'?'捕获未完成，尚未上传此范围。':'此步骤未通过；不要把它视为已完成。'),
     retry:t(actualStage==='lighting-extraction'?'无需重新生成；可检查或导出已保存参考图，恢复只查询原 ID，不会自动重新提交。':hasPending?'先按原 ID 恢复或取消；不要重复提交。':'修正后可重试；生成前仍会重新检查。'),
     detail,...(extraction?{reason:extraction.reason,metrics:extraction.metrics}:{}),...(causes.length?{causes}:{})};

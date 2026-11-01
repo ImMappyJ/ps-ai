@@ -17,7 +17,7 @@ import {sha256} from '@noble/hashes/sha2.js';
 import {validateBlendTaskMetadata,assertBlendSnapshot,assertBlendLightingCapture} from '../features/blend/blend-session';
 import {planBlendCandidateMemory} from '../imaging/blend-budget';
 import {planEdgeBlendCandidate} from '../imaging/edge-blend-budget';
-import {outwardBlendMask,validateEdgeBlend} from '../features/editing/edge-blend';
+import {edgeBlendMask,validateEdgeBlend,supportsEdgeBlend,type EdgeBlend} from '../features/editing/edge-blend';
 
 type ReadBinary=(name:string)=>Promise<Uint8Array>;
 export interface PreparedCandidate {image:Raster;snapshot?:Snapshot;warning?:string;outputKind?:RelightOutputKind;lightingState?:'composite'|'reference-only';lightingFailure?:Error;lightingSummary?:RelightLayerFields['summary']}
@@ -35,20 +35,20 @@ export function historyOutputName(record:JobRecord):string {
 function backgroundHistoryError(){return new DiagnosticError('invalid-output','output',t('背景历史的蒙版数据缺失或损坏，无法安全重建候选；原始输出已保留'));}
 function lightingHistoryError(){return new DiagnosticError('invalid-output','output',t('光影层历史的来源、尺寸、蒙版或输出类型不一致；原始输出已保留'));}
 function editAnalysisHistoryError(){return new DiagnosticError('invalid-output','output',t('大区域历史的来源尺寸、原生蒙版或位深不一致；原始输出已保留'));}
-function edgeBlendContext(record:JobRecord):number|undefined {
+function edgeBlendContext(record:JobRecord):EdgeBlend|undefined {
   const snapshot=record.snapshot as Snapshot|undefined,params=record.params as any;
   if(snapshot?.edgeBlend===undefined){if(params?.edgeBlend!==undefined&&params.edgeBlend!==0)throw editAnalysisHistoryError();return;}
   const edge=validateEdgeBlend(snapshot.edgeBlend);
-  if(params?.mode!=='edit'||params.outputKind!=='edit'||params.edgeBlend!==edge.radius||record.blend||record.relight||params.assetContext||snapshot.backgroundComposite||![8,16].includes(snapshot.nativeDepth!)||snapshot.captureGeometry&&snapshot.captureGeometry.kind!=='edit-analysis')throw editAnalysisHistoryError();
-  return edge.radius;
+  if((edge.version==='outward-v1'?params?.mode!=='edit':!supportsEdgeBlend(params?.mode))||params.outputKind!=='edit'||params.edgeBlend!==edge.radius||record.blend||record.relight||params.assetContext||snapshot.backgroundComposite||![8,16].includes(snapshot.nativeDepth!)||snapshot.captureGeometry&&snapshot.captureGeometry.kind!=='edit-analysis')throw editAnalysisHistoryError();
+  return edge;
 }
 async function validateEdgeBlendMasks(record:JobRecord,snapshot:Snapshot,read:ReadBinary):Promise<void> {
-  const radius=edgeBlendContext(record);if(!radius)return;
+  const edge=edgeBlendContext(record);if(!edge)return;
   const b=snapshot.bounds,width=b.right-b.left,height=b.bottom-b.top;
   let raw:Uint8Array,protection:Uint8Array;
   try{raw=await read(`${record.id}-subject-mask.bin`);protection=await read(`${record.id}-protection-mask.bin`);}catch{throw editAnalysisHistoryError();}
   if(!(raw instanceof Uint8Array)||!(protection instanceof Uint8Array)||raw.length!==width*height||protection.length!==raw.length||snapshot.mask.length!==raw.length||!raw.some(v=>v>0)||!snapshot.mask.some(v=>v>0))throw editAnalysisHistoryError();
-  const expected=outwardBlendMask(raw,width,height,radius,protection);
+  const expected=edgeBlendMask(raw,width,height,edge,protection);
   if(expected.some((v,p)=>v!==snapshot.mask[p]))throw editAnalysisHistoryError();
 }
 /** Only the saved version grants current-image asset semantics; old assets stay text-only. */
@@ -85,7 +85,7 @@ function smallAssetGeometry(record:JobRecord,outputBytes:number,retainedBytes:nu
   if(!b||!Object.values(b).every(Number.isSafeInteger)||b.left<0||b.top<0||b.right>snapshot.width||b.bottom>snapshot.height||![8,16].includes(snapshot.nativeDepth!)||!model||!Number.isSafeInteger(model.width)||!Number.isSafeInteger(model.height)||model.width<1||model.height<1||model.width*model.height>16_000_000)throw editAnalysisHistoryError();
   const width=b.right-b.left,height=b.bottom-b.top;checkDocumentSize(width,height);
   const sourceBytes=width*height*(snapshot.nativeDepth===16?8:4),modelBytes=model.width*model.height*(record.template==='qwen21-local-v3-rgba16'?8:4);
-  if(edgeBlendContext(record))planEdgeBlendCandidate(width,height,snapshot.nativeDepth!,{width,height},model,record.template==='qwen21-local-v3-rgba16'?16:8,outputBytes,retainedBytes);
+  const edge=edgeBlendContext(record);if(edge)planEdgeBlendCandidate(width,height,snapshot.nativeDepth!,{width,height},model,record.template==='qwen21-local-v3-rgba16'?16:8,outputBytes,retainedBytes,edge.version);
   else planEditApplyMemory(width,height,snapshot.nativeDepth!,sourceBytes*2+modelBytes*3+outputBytes,width*height*maskPlanes,retainedBytes);
   return {width,height};
 }
@@ -135,7 +135,7 @@ function editAnalysisGeometry(record:JobRecord,retainedBytes:number,outputBytes:
   // The helper doubles raster bytes for its live/copy peak. Selection assets
   // temporarily verify all three native planes, then retain only the effective
   // application mask. Ordinary browsing reads and releases one plane at a time.
-  if(edge)planEdgeBlendCandidate(width,height,snapshot.nativeDepth!,geometry,model,record.template==='qwen21-local-v3-rgba16'?16:8,outputBytes,retainedBytes);
+  if(edge)planEdgeBlendCandidate(width,height,snapshot.nativeDepth!,geometry,model,record.template==='qwen21-local-v3-rgba16'?16:8,outputBytes,retainedBytes,edge.version);
   else planEditApplyMemory(width,height,snapshot.nativeDepth!,sourceBytes*2+modelBytes*3+outputBytes,width*height*(assetContext||application&&background?3:1),retainedBytes);
   return {snapshot,geometry,params,width,height,background,assetContext};
 }

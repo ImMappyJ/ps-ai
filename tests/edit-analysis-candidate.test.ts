@@ -5,7 +5,9 @@ import {backgroundEditMask} from '../src/imaging/composite';
 import {encodePng,type Raster} from '../src/imaging/image';
 import type {JobRecord} from '../src/generation/jobs';
 import UPNG from 'upng-js';
-import {outwardBlendMask} from '../src/features/editing/edge-blend';
+import {outwardBlendMask,edgeBlendMask} from '../src/features/editing/edge-blend';
+import {planEdgeBlendCandidate} from '../src/imaging/edge-blend-budget';
+import {IMAGE_BUDGETS} from '../src/imaging/budget';
 
 const id='91000000-1111-4111-8111-111111111111';
 function fixture(mode='edit',depth:8|16=8){
@@ -67,6 +69,38 @@ test('edge blend cannot be inferred for markerless history or attached to other 
   for(const mode of ['blend','remove','background']){
     const f=fixture(mode);(f.record.snapshot as any).edgeBlend={version:'outward-v1',radius:2};(f.record.params as any).edgeBlend=2;
     await assert.rejects(preparation.prepareCandidate(f.record,encodePng(f.model),f.read),/历史|边缘|范围/);
+  }
+});
+
+test('wide v2 portrait edit history verifies its saved formula, without granting portrait authority to v1',async()=>{
+  for(const mode of ['costume','reference']){
+    const f=fixture(mode),s=f.record.snapshot as any,p=f.record.params as any;s.edgeBlend={version:'outward-v2',radius:300};p.edgeBlend=300;
+    f.subject.fill(0);f.subject[2*8+3]=255;f.files[`${id}-mask.bin`]=edgeBlendMask(f.subject,8,6,s.edgeBlend,f.protection);
+    const applied=await preparation.prepareEditAnalysisApplication(f.record,encodePng(f.model),f.read);assert.deepEqual(applied.snapshot.mask,f.files[`${id}-mask.bin`]);
+    f.files[`${id}-mask.bin`][2*8+4]=0;await assert.rejects(preparation.prepareCandidate(f.record,encodePng(f.model),f.read),/蒙版|范围|历史/);
+    s.edgeBlend={version:'outward-v1',radius:2};p.edgeBlend=2;await assert.rejects(preparation.prepareCandidate(f.record,encodePng(f.model),f.read),/蒙版|范围|历史/);
+  }
+});
+
+test('bounded v2 preflight reserves row precision at the working-memory boundary',()=>{
+  const f=fixture('costume',16),s=f.record.snapshot as any,p=f.record.params as any,grid={width:256,height:256};
+  Object.assign(s,{width:6000,height:5000,bounds:{left:0,top:0,right:6000,bottom:5000},captureGeometry:{kind:'edit-analysis',...grid},edgeBlend:{version:'outward-v2',radius:300}});
+  Object.assign(p,{edgeBlend:300,modelSize:grid});
+  const pngBytes=grid.width*grid.height*4+grid.height+65536;
+  const legacyPeak=planEdgeBlendCandidate(6000,5000,16,grid,grid,8,pngBytes).estimatedPeakBytes;
+  const retained=IMAGE_BUDGETS.workingBytes-legacyPeak;
+  assert.throws(()=>preparation.preflightEdgeBlendCandidate(f.record,retained),(error:any)=>error.code==='image-budget'&&error.stage==='capture');
+  assert.doesNotThrow(()=>preparation.preflightEdgeBlendCandidate(f.record,retained-6000*4));
+  assert.deepEqual(f.reads,[],'the boundary check must not read or allocate native mask planes');
+});
+
+test('malformed saved version values cannot gain portrait permissions before local reads',async()=>{
+  for(const version of [['outward-v1'],['outward-v2'],{value:'outward-v2'}]){
+    const f=fixture('costume'),s=f.record.snapshot as any,p=f.record.params as any;
+    s.edgeBlend=JSON.parse(JSON.stringify({version,radius:300}));p.edgeBlend=300;
+    assert.throws(()=>preparation.preflightEdgeBlendCandidate(f.record),/参数/);
+    await assert.rejects(preparation.prepareCandidate(f.record,encodePng(f.model),f.read),/参数/);
+    assert.deepEqual(f.reads,[]);
   }
 });
 
