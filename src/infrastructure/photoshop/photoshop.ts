@@ -273,9 +273,17 @@ export class PhotoshopAdapter {
     const layer=Array.from(doc.layers as any[]).find((l:any)=>l.id!==excludeLayerId&&!l.isClippingMask);
     return layer&&layer.visible&&layer.kind===this.ps.constants.LayerKind.NORMAL&&layer.blendMode===this.ps.constants.BlendMode.NORMAL&&layer.opacity===100&&layer.fillOpacity===100?layer:undefined;
   }
+  private outsideLayerPixels(layer:any,bounds:Bounds):boolean {
+    // Only current capture uses DOM bounds. They cannot prove the extent of a
+    // historical layer during apply. Unknown bounds must still reach the API.
+    const b=layer.boundsNoEffects;
+    if(!b||![b.left,b.top,b.right,b.bottom].every(Number.isFinite)||b.right<b.left||b.bottom<b.top)return false;
+    return b.right===b.left||b.bottom===b.top||b.right<=bounds.left||b.left>=bounds.right||b.bottom<=bounds.top||b.top>=bounds.bottom;
+  }
   private async captureClippingBase(doc:any,bounds:Bounds,image:Raster,mask:Uint8Array):Promise<number|undefined> {
     if(!this.needsClipping(image,mask))return;
     const base=this.clippingBase(doc);if(!base)return;
+    if(this.outsideLayerPixels(base,bounds))return;
     const result=await this.ps.imaging.getPixels({documentID:doc.id,layerID:base.id,sourceBounds:bounds,colorSpace:'RGB',colorProfile:'sRGB IEC61966-2.1',componentSize:doc.bitsPerChannel===this.ps.constants.BitsPerChannelType.SIXTEEN?16:8,applyAlpha:false});
     const data=result.imageData;if(!data)return;
     try {
@@ -308,6 +316,10 @@ export class PhotoshopAdapter {
         for(let p=0;p<source.width*source.height;p++)if(mask[start+p]){if(source.rgba[p*4+3]<max)opaqueScope=false;if(source.rgba[p*4+3]>0&&source.rgba[p*4+3]<max)requiresClipping=true;}
         // A semitransparent edge can occupy one native pixel which the work
         // grid never samples. Compare every effective source/base alpha.
+        // PS rejects layer reads wholly outside boundsNoEffects, even though
+        // the composite strip is valid. Capture may continue without a proven
+        // base; partial-alpha apply still requires its existing clipping proof.
+        if(baseMatches&&this.outsideLayerPixels(base,strip))baseMatches=false;
         if(baseMatches){const pixels=await this.sourceStrip(doc,strip,depth,historyId,base.id);guard();for(let p=0;p<source.width*source.height;p++)if(mask[start+p]&&source.rgba[p*4+3]!==pixels.rgba[p*4+3]){baseMatches=false;break;}}
       }
     }
