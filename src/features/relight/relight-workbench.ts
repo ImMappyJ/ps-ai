@@ -7,7 +7,7 @@ import {t,errorText} from '../../localization/i18n';
 import {DiagnosticError,diagnostic} from '../../diagnostics/diagnostics';
 import {validateRelightExtractionSettings,type RelightExtractionSettings} from './relight-layers';
 
-export interface RelightResult {jobId:string;fingerprint:string;sourceSnapshotId?:string;image:Raster;warning?:string;outputKind?:RelightOutputKind;lightingState?:'composite'|'reference-only';lightingFailure?:Error;localExtraction?:RelightExtractionSettings}
+export interface RelightResult {jobId:string;fingerprint:string;sourceSnapshotId?:string;image:Raster;warning?:string;outputKind?:RelightOutputKind;lightingState?:'composite'|'reference-only';lightingFailure?:Error;localExtraction?:RelightExtractionSettings;nativeColor?:boolean}
 function resultLabel(result:RelightResult):string {return relightOutputKind(result)==='lighting-layers'?result.lightingState==='composite'?'光影合成预览':'AI 参考图（提取失败，仅供检查）':'整图重绘';}
 export interface RelightWorkbenchHost {
   uuid():string;save(scene:RelightScene):Promise<void>;loadDraft():Promise<RelightScene|undefined>;
@@ -176,6 +176,20 @@ export class RelightWorkbench {
     this.finishInteraction();this.nativeBusy=true;
     this.afterClose=async()=>{try{await action();}finally{this.nativeBusy=false;}};
     this.dialog.close('native-operation');
+  }
+  /** Candidate preparation may need Photoshop after an asynchronous model result. */
+  withNativeColor<T>(action:()=>Promise<T>):Promise<T> {
+    if(!this.visible)return action();
+    if(this.nativeBusy)return Promise.reject(new Error(t('已有任务正在进行，请等待完成后再生成或应用；可以继续编辑布光')));
+    return new Promise<T>((resolve,reject)=>this.closeForNative(async()=>{
+      let value:T|undefined,error:unknown,failed=false;
+      try{value=await action();}catch(e){error=e;failed=true;}
+      // Reopen before releasing the caller, so result ownership/selection can
+      // publish normally. The pending request and edited scene remain intact.
+      this.nativeBusy=false;this.transitioning=false;
+      try{this.show();}catch(e){error=e;failed=true;}
+      if(failed)reject(error);else resolve(value as T);
+    }));
   }
   private generate():void {
     if(this.pending||this.nativeBusy||this.sourceInvalid||this.scopePending||this.outputPending)return;
@@ -571,10 +585,17 @@ export class RelightWorkbench {
     const result=this.result();if(cancel||!result||result.jobId!==gesture.jobId){if(this.visible)this.refresh();return;}
     const saved=validateRelightExtractionSettings(result.localExtraction);
     if(saved.fidelity===gesture.settings.fidelity&&saved.detailProtection===gesture.settings.detailProtection){if(this.visible)this.refresh();return;}
-    const token=++this.extractionToken,lifecycle=this.lifecycle;
-    const current=()=>this.visible&&this.lifecycle===lifecycle&&this.extractionToken===token&&this.selectedResult===gesture.jobId;
+    const lifecycle=this.lifecycle,native=!!result.nativeColor;
     this.extractionPending=true;this.message(t('正在本地更新光影层…'));this.refresh();
-    void this.host.reextract!(gesture.jobId,gesture.settings,current).then(()=>{if(current()){this.resultImage=undefined;this.message(t('已更新此候选的本地光影层；未重新生成。'));}}).catch(error=>{if(current())this.message(t('本地调整失败，已保留原候选和参数：{0}',errorText(error instanceof Error?error.message:String(error))));}).finally(()=>{this.extractionPending=false;if(this.visible)this.refresh();});
+    const run=async()=>{
+      // Native close cleanup invalidates older extraction tokens; create this
+      // token only after that close has completed.
+      const token=++this.extractionToken,current=()=>(this.visible||native&&this.transitioning)&&this.lifecycle===lifecycle&&this.extractionToken===token&&this.selectedResult===gesture.jobId;
+      try{await this.host.reextract!(gesture.jobId,gesture.settings,current);if(current()){this.resultImage=undefined;this.message(t('已更新此候选的本地光影层；未重新生成。'));}}
+      catch(error){if(current())this.message(t('本地调整失败，已保留原候选和参数：{0}',errorText(error instanceof Error?error.message:String(error))));}
+      finally{this.extractionPending=false;if(this.visible)this.refresh();}
+    };
+    if(native)this.closeForNative(run);else void run();
   }
   private finishInteraction(e?:any,cancel=false):void {this.finishDrag(e,cancel);this.finishSlider(e,cancel);this.finishExtraction(e,cancel);}
   private startDrag(e:any):void {
