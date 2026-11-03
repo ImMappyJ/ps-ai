@@ -94,7 +94,7 @@ test('neutral fields create no empty channels and preserve source detail/native1
 });
 test('the verified Photoshop RGBColorMode identity is supported without accepting arbitrary RGB prefixes',async()=>{
   const source=image(()=>180),s=scene();s.source.documentMode='RGBColorMode';assert.equal((await deriveRelightLayers(source,source,s)).channels.length,0);
-  s.source.documentMode='RGBUnsupported';await assert.rejects(deriveRelightLayers(source,source,s),/sRGB/);
+  s.source.documentMode='RGBUnsupported';await assert.rejects(deriveRelightLayers(source,source,s),/ICC/);
 });
 test('unchanged clipped black and white content stays neutral rather than inventing a shadow or lift',async()=>{
   const source=image((x)=>x<W/2?0:255),fields=await deriveRelightLayers(source,source,scene());assert.equal(fields.channels.length,0);assert.deepEqual(previewRelightLayers(source,fields),source);
@@ -165,7 +165,7 @@ test('genuine low-frequency illumination and colored atmosphere retain source hi
 test('analysis work yields, honors cancellation and refuses non-sRGB numeric field conversion',async()=>{
   const source=image(()=>120),target=image(()=>140);let yields=0;const control=new AbortController();
   await assert.rejects(deriveRelightLayers(source,target,scene(),{signal:control.signal,yieldControl:async()=>{if(++yields===2)control.abort();}}),/取消|cancel/i);assert.ok(yields>=2);
-  const s=scene();s.source.profile='Adobe RGB (1998)';await assert.rejects(deriveRelightLayers(source,target,s),/sRGB/);
+  const s=scene();s.source.profile='Adobe RGB (1998)';await assert.rejects(deriveRelightLayers(source,target,s),/ICC/);
 });
 
 test('native16 texture beside nearly white gradients has finite identity confidence despite filter roundoff',async()=>{

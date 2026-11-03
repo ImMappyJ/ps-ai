@@ -1,3 +1,5 @@
+import {PhotoshopLightingColor} from '../infrastructure/photoshop/lighting-color';
+import {encodeNativePixels,validateNativeLightingSource} from '../imaging/native-lighting';
 import {supportsEdgeBlend} from '../features/editing/edge-blend';
 import {RelayController} from '../infrastructure/backends/relay-controller';import {isPlatform,PLATFORMS} from '../infrastructure/backends/platforms';import type {PlatformId} from '../infrastructure/backends/platforms';import {connectionId,rememberConnection,switchConnection} from '../infrastructure/config/profile';import type {ConnectionId} from '../infrastructure/config/profile';
 import {ComfyClient,uuid,OutputFile} from '../infrastructure/backends/client';import {JobCoordinator,JobRecord,blocksGeneration} from '../generation/jobs';
@@ -33,7 +35,7 @@ import {loadCandidateSnapshot} from './candidate-preparation';
 declare const require:(name:string)=>any;
 const ps=require('photoshop'),uxp=require('uxp'),store=new Storage(uxp);
 let sourceColorReader:ReturnType<typeof createSourceColorReader>;
-const adapter=new PhotoshopAdapter(ps,uuid(),stage=>store.trace(stage),(doc,file)=>sourceColorReader(doc,file));
+const adapter=new PhotoshopAdapter(ps,uuid(),stage=>store.trace(stage),(doc,file)=>sourceColorReader(doc,file),new PhotoshopLightingColor(ps,uxp));
 let settings:BackendSettings=defaultSettings(),settingsReady=false,client:ComfyClient|GatewayClient=new ComfyClient(),coordinator=new JobCoordinator(client,store);
 const relay=new RelayController(uxp),relayTokens=new Map<PlatformId,string>();
 let draftConnections:BackendSettings['connections'],displayedConnection:ConnectionId='comfyui',keyRequest=0;
@@ -93,6 +95,10 @@ let promptKind:'ordinary'|'blend'='ordinary';
 const promptDrafts={ordinary:'',blend:''};
 const relightDrafts=new RelightDraftStore(store);
 let relightWorkbench:RelightWorkbench|undefined,relightSession:RelightSession|undefined,relightMargin=.15,relightReuse:RelightScene|undefined,relightReuseDescription:string|undefined;
+function preparePanelCandidate(record:JobRecord,bytes:Uint8Array):Promise<PreparedCandidate>{
+  const prepare=()=>prepareCandidate(record,bytes,name=>store.readBinary(name),retainedImageBytes(true),adapter.lightingColor);
+  return (record.snapshot as Snapshot|undefined)?.lightingColor&&relightWorkbench?relightWorkbench.withNativeColor(prepare):prepare();
+}
 // A successful recovery copy can outlive a failed read. It grants no snapshot
 // or application rights; only the matching explicit UI action may retry it.
 let pendingColorCapture:{sourceDocumentId:number;documentId:number;colorReason:NonNullable<Snapshot['colorReason']>;workspace:Workspace;mode:string;geometry:{width:number;height:number;mode:unknown;depth:unknown};session?:RelightSession;scope?:RelightScope}|undefined;
@@ -100,7 +106,7 @@ let clearConfirmation:{ids:readonly string[];revision:number;signature:string;un
 let cleanupStatus:HistoryCleanupStatus|undefined,historyNotice='',lastHistoryFocus:string|undefined;
 let pendingDetailReveal=false,historyRevealTimer:ReturnType<typeof setTimeout>|undefined;
 const historyPreview=new HistoryPreview(el('history-preview'),el('history-preview-status'),record=>withImagePixels(async()=>{
-  const name=historyOutputName(record),bytes=await store.readBinary(name),prepared=await prepareCandidate(record,bytes,name=>store.readBinary(name),retainedImageBytes(true));
+  const name=historyOutputName(record),bytes=await store.readBinary(name),prepared=await preparePanelCandidate(record,bytes);
   return {url:await preview(prepared.image,480),warning:prepared.warning,label:lightingPreviewLabel(prepared),lightingFailure:prepared.lightingFailure};
 }));
 const historyTable=new HistoryTable(el('history-browser'),{busy:()=>busy,changed:()=>{detachAcknowledgedId=undefined;clearConfirmation=undefined;historyNotice='';historyUi();},focused:()=>{historyScrollTop=el('history-rows').scrollTop;historyDetail=true;historyUi();},refresh:()=>void guarded(()=>configure(()=>refreshHistory()),{page:'history',feature:'history-refresh'})});
@@ -382,7 +388,7 @@ async function captureArea(expectedDocumentId=activeDocumentId(),showPreview=tru
   return withSourceCapture(()=>withImagePixels(async()=>{
   const mode=el('mode').value,capturedWorkspace=workspace,context=assetContext(),placement=assetPlacement();
   clearCapturePreview();
-  const captured=await adapter.capture(captureMargin(),captureProtection,expectedDocumentId,outputDepth(),{...(supportsEdgeBlend(mode)?{edgeBlend:el('edge-blend-auto').checked===true?'auto' as const:Number(el('edge-blend').value)}:{}),analysisResolution:Number(el('resolution').value),retainedBytes:retainedImageBytes(true),...(context?{purpose:placement?'subject-asset' as const:'selection-asset' as const,preserveNativeDepth:true,...(placement?{assetPlacement:placement,context:placement.scope==='document'?'document' as const:'selection' as const}:{})}:{}),...(isBackgroundMode(mode)?{context:'document' as const,selection:'subject-background' as const}:mode==='blend'?{context:'document' as const,selection:'edit' as const,purpose:'blend-analysis' as const,preserveNativeDepth:true}:{})},beforeCommit);
+  const captured=await adapter.capture(captureMargin(),captureProtection,expectedDocumentId,outputDepth(),{...(supportsEdgeBlend(mode)?{edgeBlend:el('edge-blend-auto').checked===true?'auto' as const:Number(el('edge-blend').value)}:{}),analysisResolution:Number(el('resolution').value),retainedBytes:retainedImageBytes(true),...(context?{purpose:placement?'subject-asset' as const:'selection-asset' as const,preserveNativeDepth:true,...(placement?{assetPlacement:placement,context:placement.scope==='document'?'document' as const:'selection' as const}:{})}:{}),...(isBackgroundMode(mode)?{context:'document' as const,selection:'subject-background' as const}:mode==='blend'?{context:'document' as const,selection:'edit' as const,purpose:'blend-analysis' as const,blendOutput:el('blend-output-kind').value as RelightOutputKind,preserveNativeDepth:true}:{})},beforeCommit);
   const {snapshot:s,image}=captured;
   if(capturedWorkspace!=='t2i'&&mode!=='relight'){const raw=captured.subjectMask??captured.selectionMask;lastSelection={workspace:capturedWorkspace,mode,range:{documentId:s.documentId,sessionId:s.sessionId,width:s.width,height:s.height,mode:s.mode,depth:s.depth,bounds:{...s.bounds},mask:s.captureGeometry?raw:raw.slice()}};}
   if(captureProtection&&captured.workingCopyOf===captureProtection.documentId)captureProtection={...captureProtection,documentId:s.documentId};
@@ -417,10 +423,10 @@ async function restoreSelectionArea(){
   }finally{lock(false);}
 }
 function retainedImageBytes(includeRelight=false):number {
-  const seen=new Set<ArrayBufferLike>();let bytes=0;
+  const seen=new Set<ArrayBufferLike>();let bytes=adapter.lightingColor?.retainedBytes??0;
   const count=(value?:ArrayBufferView)=>{if(value&&!seen.has(value.buffer)){seen.add(value.buffer);bytes+=value.buffer.byteLength;}};
-  if(capture){count(capture.image.rgba);count(capture.snapshot.mask);count(capture.selectionMask);count(capture.protectionMask);count(capture.subjectMask);}
-  if(includeRelight&&relightSession){const c=relightSession.sourceCapture;count(c.image.rgba);count(c.snapshot.mask);count(c.selectionMask);count(c.protectionMask);count(c.subjectMask);}
+  if(capture){count(capture.image.rgba);count(capture.nativeLighting?.nativePixels);count(capture.nativeLighting?.profileBytes);count(capture.snapshot.mask);count(capture.selectionMask);count(capture.protectionMask);count(capture.subjectMask);}
+  if(includeRelight&&relightSession){const c=relightSession.sourceCapture;count(c.image.rgba);count(c.nativeLighting?.nativePixels);count(c.nativeLighting?.profileBytes);count(c.snapshot.mask);count(c.selectionMask);count(c.protectionMask);count(c.subjectMask);}
   count(reference?.rgba);count(lastSelection?.range.mask);
   if(includeRelight||pendingColorCapture)count(protection?.mask);
   for(const c of candidates){count(c.image.rgba);count(c.bytes);count(c.snapshot?.mask);bytes+=c.preview.length*2;}
@@ -430,7 +436,8 @@ function retainedImageBytes(includeRelight=false):number {
 }
 function preflightLightingSource(captured:Capture):void {
   const s=captured.snapshot;
-  if(s.mode!==ps.constants.DocumentMode.RGB||!/^sRGB(?: IEC61966-2\.1)?$/i.test(s.profile.trim()))throw new DiagnosticError('unsupported','capture',t('实验光影层目前需要已标记的 sRGB RGB 8/16 位原文档；其他颜色空间可明确选择整图重绘'));
+  if(s.lightingColor){if(!captured.nativeLighting||s.lightingOpaqueScope!==true)throw new DiagnosticError('unsupported','capture',t('原 ICC 光影范围必须完全不透明，请重新读取来源'));validateNativeLightingSource(captured.nativeLighting,s.lightingColor);}
+  if(s.mode!==ps.constants.DocumentMode.RGB||!s.lightingColor&&!/^sRGB(?: IEC61966-2\.1)?$/i.test(s.profile.trim()))throw new DiagnosticError('unsupported','capture',t('实验光影层目前需要已标记的 sRGB RGB 8/16 位原文档；其他颜色空间可明确选择整图重绘'));
   const mask=downsampleSnapshotMask(s,captured.image.width,captured.image.height),max=rasterDepth(captured.image)===16?65535:255;
   if(mask.some((value,p)=>value>0&&captured.image.rgba[p*4+3]!==max))throw new DiagnosticError('unsupported','capture',t('光影层暂不支持作用范围内的透明/半透明来源；请缩小到不透明区域，或明确使用整图重绘并检查透明度'));
 }
@@ -440,7 +447,7 @@ async function captureRelight(expectedDocumentId=activeDocumentId(),scope:Religh
   if(expectedDocumentId===undefined)throw new Error(t('请先打开 Photoshop 文档并建立选区'));
   const target=Array.from(ps.app.documents as any[]).find(d=>d.id===expectedDocumentId);
   if(!target)throw new Error(t('来源文档已关闭，候选已保留'));
-  if(kind==='lighting-layers')planRelightMemory(target.width,target.height,target.bitsPerChannel===ps.constants.BitsPerChannelType.SIXTEEN?16:8,undefined,retainedImageBytes());
+  if(kind==='lighting-layers'&&/^sRGB(?: IEC61966-2\.1)?$/i.test(target.colorProfileName.trim()))planRelightMemory(target.width,target.height,target.bitsPerChannel===ps.constants.BitsPerChannelType.SIXTEEN?16:8,undefined,retainedImageBytes());
   if(previous!==expectedDocumentId)await ps.core.executeAsModal(async()=>{ps.app.activeDocument=target;},{commandName:'PS-AI relight source'});
   try {
     const start=Date.now(),captured=await adapter.capture(Number(el('margin').value)/100,captureProtection,expectedDocumentId,outputDepth(),{selection:scope==='document'?'document':'edit',preserveNativeDepth:true,analysisResolution:Number(el('resolution').value),retainedBytes:retainedImageBytes(kind!=='lighting-layers'),...(kind==='lighting-layers'?{purpose:'relight-analysis' as const}:{})},beforeCommit);
@@ -452,7 +459,7 @@ async function captureRelight(expectedDocumentId=activeDocumentId(),scope:Religh
   }));
 }
 function relightResults():RelightResult[]{
-  return candidates.flatMap(c=>{const metadata=c.job.relight as RelightTaskMetadata|undefined;if(!metadata||metadata.schemaVersion!==1||!relightSession?.ownsSnapshot(metadata.scene?.source?.snapshotId))return [];return [{jobId:c.job.id,fingerprint:metadata.fingerprint,sourceSnapshotId:metadata.scene.source.snapshotId,image:c.image,warning:c.warning,outputKind:c.outputKind,lightingState:c.lightingState,lightingFailure:c.lightingFailure,localExtraction:metadata.localExtraction}];});
+  return candidates.flatMap(c=>{const metadata=c.job.relight as RelightTaskMetadata|undefined;if(!metadata||metadata.schemaVersion!==1||!relightSession?.ownsSnapshot(metadata.scene?.source?.snapshotId))return [];return [{jobId:c.job.id,fingerprint:metadata.fingerprint,sourceSnapshotId:metadata.scene.source.snapshotId,image:c.image,warning:c.warning,outputKind:c.outputKind,lightingState:c.lightingState,lightingFailure:c.lightingFailure,localExtraction:metadata.localExtraction,nativeColor:!!c.snapshot?.lightingColor}];});
 }
 /** Only a successful, still-owned local extraction may replace this candidate. */
 async function reextractLightingCandidate(jobId:string,value:RelightExtractionSettings,owns:()=>boolean):Promise<void>{
@@ -465,7 +472,7 @@ async function reextractLightingCandidate(jobId:string,value:RelightExtractionSe
     if(!current())return;
     const record:JobRecord={...prior.job,relight:{...(prior.job.relight as RelightTaskMetadata),localExtraction:extraction}};
     const raw=await store.readBinary(historyOutputName(record));if(!current())return;
-    const prepared=await prepareCandidate(record,raw,name=>store.readBinary(name),retainedImageBytes(true));if(!current())return;
+    const prepared=await preparePanelCandidate(record,raw);if(!current())return;
     if(prepared.lightingState!=='composite')throw prepared.lightingFailure??new DiagnosticError('relight-extraction','lighting-extraction',prepared.warning??t('本地光影提取未完成；原始 AI 参考图已保留，请检查参考图和来源的作用范围。'));
     const bytes=encodePng(prepared.image),url=await preview(prepared.image);if(!current())return;
     // Persist only metadata after a complete preview exists. Raw output/source,
@@ -738,7 +745,7 @@ async function stopTracking(confirm=false){
 async function addCandidate(record:JobRecord,bytes:Uint8Array){
   const candidate=await withImagePixels(async()=>{
   await store.trace('candidate.preview',record.id);
-  const prepared=await prepareCandidate(record,bytes,name=>store.readBinary(name),retainedImageBytes(true)),{image,snapshot}=prepared;
+  const prepared=await preparePanelCandidate(record,bytes),{image,snapshot}=prepared;
   // All exported candidates, including standalone assets, declare sRGB explicitly.
   bytes=encodePng(image);
   const c:Candidate={...prepared,job:record,bytes,preview:await preview(image),snapshot:snapshot?.captureGeometry?{...snapshot,mask:new Uint8Array()}:snapshot};
@@ -816,7 +823,7 @@ async function processBlendCandidate(prior:Candidate,revision:number,outputKind:
     if(!owns())return;
     const record:JobRecord={...prior.job,blend:withBlendProcessing(validateBlendTaskMetadata(prior.job.blend,prior.job.id),outputKind,extraction)};
     const raw=await store.readBinary(historyOutputName(record));if(!owns())return;
-    const prepared=await prepareCandidate(record,raw,name=>store.readBinary(name),retainedImageBytes(true));if(!owns())return;
+    const prepared=await preparePanelCandidate(record,raw);if(!owns())return;
     if(outputKind==='lighting-layers'&&prepared.lightingState!=='composite')throw prepared.lightingFailure??new Error(prepared.warning??t('本地光影提取未完成；原始 AI 参考图已保留，请检查参考图和来源的作用范围。'));
     if(record.state==='output-error'){record.state='ready';delete record.detail;}
     const bytes=encodePng(prepared.image),url=await preview(prepared.image);if(!owns())return;
@@ -957,6 +964,7 @@ async function generate(frozenRelight?:FrozenRelightSubmission,onRelightJob?:(id
       }
       if(snapshot){
         await store.binary(`${id}-mask.bin`,snapshot.mask);await store.binary(`${id}-source.png`,encodePng(captured!.image));
+        if(snapshot.lightingColor){const native=captured!.nativeLighting;if(!native)throw new Error('原 ICC 光影缓存缺失');validateNativeLightingSource(native,snapshot.lightingColor);await store.binary(`${id}-lighting-source.bin`,encodeNativePixels(native));await store.binary(`${id}-lighting-profile.bin`,native.profileBytes);}
         {
           const raw=captured!.subjectMask??captured!.selectionMask;
           if(!raw)throw new Error(t('背景历史的蒙版数据缺失或损坏，无法安全重建候选；原始输出已保留'));
@@ -1034,10 +1042,10 @@ async function apply(jobId?:string,checkOnly=false){
       layerId=await withImagePixels(async()=>{
         const blend=c.job.blend!==undefined;
         if(blend)capture=undefined;
-        else {const bounds=c.snapshot!.bounds;planRelightMemory(bounds.right-bounds.left,bounds.bottom-bounds.top,c.snapshot!.nativeDepth??8,undefined,retainedImageBytes());}
+        else if(!c.snapshot!.lightingColor){const bounds=c.snapshot!.bounds;planRelightMemory(bounds.right-bounds.left,bounds.bottom-bounds.top,c.snapshot!.nativeDepth??8,undefined,retainedImageBytes());}
         taskPhase(t('正在提取光影影响场…'));
-        const prepared=await prepareLightingLayerApplication(c.job,await store.readBinary(historyOutputName(c.job)),name=>store.readBinary(name),undefined,blend?retainedImageBytes(true):0);
-        return adapter.applyRelightLayers(prepared.snapshot,prepared.fields,t('PS-AI 光影层 {0}',c.job.id.slice(0,8)),{...(blend?{retainedBytes:retainedImageBytes(true)+prepared.source.rgba.byteLength+prepared.mask.byteLength}:{}),onProgress:(done,total)=>taskPhase(t('写入光影层 {0} / {1}',done,total),Math.round(done/total*100))});
+        const prepared=await prepareLightingLayerApplication(c.job,await store.readBinary(historyOutputName(c.job)),name=>store.readBinary(name),undefined,blend||c.snapshot!.lightingColor?retainedImageBytes(true):0,adapter.lightingColor);
+        return adapter.applyRelightLayers(prepared.snapshot,prepared.fields,t('PS-AI 光影层 {0}',c.job.id.slice(0,8)),{...(blend||c.snapshot!.lightingColor?{retainedBytes:retainedImageBytes(true)+prepared.source.rgba.byteLength+prepared.mask.byteLength}:{}),onProgress:(done,total)=>taskPhase(t('写入光影层 {0} / {1}',done,total),Math.round(done/total*100))});
       });
     }else if(['selection-v1','subject-v1'].includes((c.job.params as any)?.assetContext)){
       layerId=await withImagePixels(async()=>{
@@ -1059,7 +1067,7 @@ async function apply(jobId?:string,checkOnly=false){
     }else if(c.snapshot.edgeBlend){
       layerId=await withImagePixels(async()=>{
         capture=undefined;
-        const prepared=await prepareCandidate(c.job,await store.readBinary(historyOutputName(c.job)),name=>store.readBinary(name),retainedImageBytes(true));
+        const prepared=await preparePanelCandidate(c.job,await store.readBinary(historyOutputName(c.job)));
         if(prepared.warning)throw new Error(prepared.warning);
         const params=c.job.params as any,behavior=editBehavior(params.mode,params,c.job.backend??'comfyui');
         const source=behavior.preserveAlpha?decodePng(await store.readBinary(c.job.id+'-source.png')):undefined;

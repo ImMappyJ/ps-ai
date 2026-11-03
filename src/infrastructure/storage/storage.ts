@@ -25,8 +25,8 @@ interface CleanupJournal {
   metadataPending:boolean;
 }
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const TASK_FILE=/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(source\.png|mask\.bin|output\.png|subject-mask\.bin|protection-mask\.bin)$/i;
-const SUFFIXES=['source.png','mask.bin','output.png','subject-mask.bin','protection-mask.bin'];
+const TASK_FILE=/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(source\.png|mask\.bin|output\.png|subject-mask\.bin|protection-mask\.bin|lighting-source\.bin|lighting-profile\.bin)$/i;
+const SUFFIXES=['source.png','mask.bin','output.png','subject-mask.bin','protection-mask.bin','lighting-source.bin','lighting-profile.bin'];
 const CLEANUP='history-cleanup.json';
 const emptyCleanup=():CleanupJournal=>({schemaVersion:1,removedIds:[],files:[],skippedUnsafeFiles:0,metadataPending:false});
 const taskFiles=(id:string)=>UUID.test(id)?SUFFIXES.map(suffix=>`${id.toLowerCase()}-${suffix}`):[];
@@ -53,7 +53,14 @@ export class Storage {
       await write();
     });
   }
-  async readBinary(name:string):Promise<Uint8Array>{const root=await this.root();return new Uint8Array(await(await root.getEntry(name)).read({format:this.uxp.storage.formats.binary}));}
+  async readBinary(name:string):Promise<Uint8Array>{
+    const root=await this.root(),entry=await root.getEntry(name),native=TASK_FILE.test(name)&&/-lighting-(?:source|profile)\.bin$/i.test(name);
+    const maximum=/-lighting-profile\.bin$/i.test(name)?4*1024*1024:1_048_576*8;
+    const size=native?(await entry.getMetadata()).size:undefined;
+    if(native&&(!Number.isSafeInteger(size)||size<1||size>maximum))throw new Error('原 ICC 缓存文件大小无效或超过预算');
+    const bytes=new Uint8Array(await entry.read({format:this.uxp.storage.formats.binary}));
+    if(native&&bytes.length!==size)throw new Error('原 ICC 缓存文件在读取时改变');return bytes;
+  }
   async json(name:string,data:unknown):Promise<void> {
     const root=await this.root();const temp=await root.createFile(name+'.tmp',{overwrite:true});
     await temp.write(JSON.stringify(data,null,2));await temp.moveTo(root,{newName:name,overwrite:true});

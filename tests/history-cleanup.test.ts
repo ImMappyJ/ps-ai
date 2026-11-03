@@ -57,6 +57,12 @@ function memoryStorage(records:JobRecord[]=[]){
 
 const emptyStatus={removedIds:[],pendingFiles:0,retainedSharedFiles:0,skippedUnsafeFiles:0,metadataPending:false};
 
+test('native lighting sidecars are owned cleanup files and cannot be resurrected after clear',async()=>{
+  const h=memoryStorage([record()]);for(const suffix of ['lighting-source.bin','lighting-profile.bin'])h.put(`${A}-${suffix}`,new Uint8Array([1]).buffer);
+  await h.store.clearHistory([A]);
+  for(const suffix of ['lighting-source.bin','lighting-profile.bin']){assert.equal(h.entries.has(`${A}-${suffix}`),false);await assert.rejects(()=>h.store.binary(`${A}-${suffix}`,new Uint8Array([2])));assert.equal(h.entries.has(`${A}-${suffix}`),false);}
+});
+
 test('clear commits pending and ready IDs, deletes exactly five owned files sequentially, and retains tombstones',async()=>{
   const h=memoryStorage([record(A,'queued'),record(B),record(C)]);h.files(A);h.files(B);h.files(C);
   const result=await h.store.clearHistory([A,B,A,'missing']);
@@ -174,7 +180,7 @@ test('a missing task file is already cleaned and status reads never remove a pen
 test('a directory listing failure after intent commit leaves all unverified files pending for retry',async()=>{
   const h=memoryStorage([record()]);h.files();let injected=false;
   h.beforeWrite(async name=>{if(name==='history-cleanup.json.tmp'&&!injected){injected=true;h.fail('list','root');}});
-  assert.deepEqual(await h.store.clearHistory([A]),{...emptyStatus,removedIds:[A],pendingFiles:5});
+  assert.deepEqual(await h.store.clearHistory([A]),{...emptyStatus,removedIds:[A],pendingFiles:7});
   assert.deepEqual(await h.restart().history(),[]);assert.ok(names(A).every(name=>h.entries.has(name)));
   assert.deepEqual(await h.restart().retryHistoryCleanup(),{...emptyStatus,removedIds:[A]});
 });

@@ -5,6 +5,7 @@ import {validateBlendTaskMetadata,withBlendProcessing,blendTaskMetadata} from '.
 import {encodePng,type Raster} from '../src/imaging/image';
 import {sha256} from '@noble/hashes/sha2.js';
 import type {JobRecord} from '../src/generation/jobs';
+import {nativeLightingIdentity,encodeNativePixels,type NativeLightingSource,type LightingColorService} from '../src/imaging/native-lighting';
 
 const id='76000000-1111-4111-8111-111111111111';
 function fixture(outputKind='lighting-layers',depth:8|16=8){
@@ -22,6 +23,17 @@ function fixture(outputKind='lighting-layers',depth:8|16=8){
   const files:Record<string,Uint8Array>={[`${id}-source.png`]:encodePng(source),[`${id}-mask.bin`]:mask,[`${id}-subject-mask.bin`]:selection,[`${id}-protection-mask.bin`]:protection};
   return {record,source,raw,files,read:async(name:string)=>{if(!files[name])throw Error('Missing '+name);return files[name];}};
 }
+
+test('native ICC history reload binds exact sidecars, converts preview and rejects corrupted native pixels',async()=>{
+  const f=fixture('lighting-layers',16),b=new Uint8Array(160),v=new DataView(b.buffer);v.setUint32(0,160);b[8]=2;b.set(Buffer.from('mntrRGB XYZ '),12);b.set(Buffer.from('acsp'),36);v.setUint32(128,1);b.set(Buffer.from('desc'),132);v.setUint32(136,144);v.setUint32(140,16);
+  const native:NativeLightingSource={width:32,height:32,depth:16,profileName:'test ICC',profileBytes:b,nativePixels:f.source.rgba.slice(),calibration:'a'.repeat(64)};
+  (f.record.snapshot as any).profile='test ICC';(f.record.blend as any).source.profile='test ICC';(f.record.snapshot as any).lightingColor=nativeLightingIdentity(native);
+  f.files[`${id}-lighting-source.bin`]=encodeNativePixels(native);f.files[`${id}-lighting-profile.bin`]=b;
+  let previews=0;const colors:LightingColorService={toLinear:async(s,r)=>Float32Array.from(r?.rgba??s.nativePixels,(v,i)=>i%4===3?v/65535:(v/65535)**2),fromLinear:async(s,p)=>Uint16Array.from(p,(v,i)=>Math.round((i%4===3?v:Math.sqrt(Math.max(0,Math.min(1,v))))*65535)),toSrgb:async(s)=>{previews++;return {width:s.width,height:s.height,rgba:s.nativePixels.slice()};},calibrate:async()=> 'a'.repeat(64)};
+  const prepared=await (prepareCandidate as any)(f.record,encodePng(f.raw),f.read,0,colors);assert.equal(prepared.lightingState,'composite');assert.equal(previews,1);assert.deepEqual(prepared.image.rgba.slice(-4),native.nativePixels.slice(-4),'outside pixel retained before display conversion');
+  const apply=await (prepareLightingLayerApplication as any)(f.record,encodePng(f.raw),f.read,undefined,0,colors);assert.deepEqual(apply.fields.lightingColor,(f.record.snapshot as any).lightingColor);
+  f.files[`${id}-lighting-source.bin`][0]^=1;await assert.rejects(()=>(prepareLightingLayerApplication as any)(f.record,encodePng(f.raw),f.read,undefined,0,colors),/ICC/);
+});
 test('new blend same UUID switches local light extraction and redraw while legacy stays redraw',async()=>{
   const f=fixture(),saved=JSON.stringify(f.record),bytes=encodePng(f.raw);
   assert.equal(candidateOutputKind(f.record),'lighting-layers');

@@ -5,6 +5,8 @@ import {createRelightScene} from '../src/features/relight/relight-scene';
 import {encodePng,type Raster} from '../src/imaging/image';
 import type {JobRecord} from '../src/generation/jobs';
 import {sha256} from '@noble/hashes/sha2.js';
+import {nativeLightingIdentity,encodeNativePixels,type LightingColorService,type NativeLightingSource} from '../src/imaging/native-lighting';
+import {DiagnosticError} from '../src/diagnostics/diagnostics';
 
 const id='89000000-1111-4111-8111-111111111111';
 function fixture(outputKind?:string){
@@ -19,6 +21,18 @@ function fixture(outputKind?:string){
   const files:Record<string,Uint8Array>={[`${id}-source.png`]:encodePng(image),[`${id}-mask.bin`]:new Uint8Array(nativeWidth*nativeHeight).fill(255)};
   return {image,record,files,read:async(name:string)=>{assert.ok(files[name],name);return files[name];}};
 }
+
+for(const code of ['unsupported','cancelled'] as const)test(`native relight ${code} preserves the actual conversion failure without publishing false success`,async()=>{
+  const f=fixture('lighting-layers'),profile=new Uint8Array(160),v=new DataView(profile.buffer);v.setUint32(0,160);profile[8]=2;profile.set(Buffer.from('mntrRGB XYZ '),12);profile.set(Buffer.from('acsp'),36);v.setUint32(128,1);profile.set(Buffer.from('desc'),132);v.setUint32(136,144);v.setUint32(140,16);
+  const native:NativeLightingSource={width:64,height:64,depth:8,profileName:'ProPhoto RGB',profileBytes:profile,nativePixels:f.image.rgba,calibration:'a'.repeat(64)};
+  Object.assign(f.record.snapshot as any,{profile:native.profileName,nativeDepth:8,lightingColor:nativeLightingIdentity(native)});(f.record.relight as any).scene.source.profile=native.profileName;
+  f.files[`${id}-lighting-source.bin`]=encodeNativePixels(native);f.files[`${id}-lighting-profile.bin`]=profile;
+  const error=new DiagnosticError(code,'capture','ProPhoto RGB: opening policy changed embedded ICC'),colors:LightingColorService={calibrate:async()=>{throw error;},toLinear:async()=>{throw Error('unreachable');},fromLinear:async()=>{throw Error('unreachable');},toSrgb:async()=>{throw Error('unreachable');}};
+  const prepare=()=>prepareCandidate(f.record,encodePng(f.image),f.read,0,colors),before=JSON.stringify(f.record);
+  if(code==='cancelled')await assert.rejects(prepare,e=>e===error);
+  else{const result=await prepare();assert.equal(result.lightingState,'reference-only');assert.equal((result.lightingFailure as DiagnosticError).code,'unsupported');assert.equal((result.lightingFailure as DiagnosticError).stage,'lighting-extraction');assert.match(result.lightingFailure!.message,/opening policy changed/);}
+  assert.equal(JSON.stringify(f.record),before);
+});
 
 test('lighting history keeps native mask geometry separate from analysis preview and identifies output type',async()=>{
   const f=fixture('lighting-layers');

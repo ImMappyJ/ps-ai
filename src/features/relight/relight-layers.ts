@@ -1,5 +1,6 @@
 import {resize,rasterMax,type Bounds,type Raster} from '../../imaging/image';
-import {clamp,validateLightingRaster as raster,estimateLightingFields,lightingAmounts,validateLightingExtractionSettings as validateRelightExtractionSettings} from '../../imaging/lighting-fields';
+import {clamp,validateLightingRaster as raster,estimateLightingFields,lightingColorIdentity,validateLightingExtractionSettings as validateRelightExtractionSettings} from '../../imaging/lighting-fields';
+import {validateNativeLightingSource,type NativeLightingIdentity,type NativeLightingSource,type LightingColorService} from '../../imaging/native-lighting';
 import type {LightingFieldsOptions as RelightLayersOptions} from '../../imaging/lighting-fields';
 export {DEFAULT_LIGHTING_EXTRACTION as DEFAULT_RELIGHT_EXTRACTION,validateLightingExtractionSettings as validateRelightExtractionSettings,type LightingExtractionSettings as RelightExtractionSettings,type LightingFieldsOptions as RelightLayersOptions} from '../../imaging/lighting-fields';
 import {IMAGE_BUDGETS} from '../../imaging/budget';
@@ -14,6 +15,7 @@ export interface RelightFieldChannel {
   rgbAmount?:Float32Array;
 }
 interface LightingLayerFieldsBase {
+  lightingColor?:NativeLightingIdentity;
   width:number;height:number;source:RelightSource;
   guide:Float32Array;channels:RelightFieldChannel[];
   summary:{method?:'soft-guided-v1'|'rgb-guided-v2';/** Historical summaries only; new extraction does not compare structure. */structureConfidence?:number;rejectedFraction?:number;clippedFraction:number;warnings:string[];channels:Record<RelightChannelKind,'present'|'not-observed'|'no-rim-light'|'no-reliable-receiver'>};
@@ -57,8 +59,8 @@ function isSrgb(profile:string):boolean{return /^sRGB(?: IEC61966-2\.1)?$/i.test
  * recover physical lighting or remove all broad mismatch artifacts.
  */
 export async function deriveRelightLayers(source:Raster,target:Raster,scene:RelightScene,options:RelightLayersOptions={}):Promise<RelightLayerFields> {
-  raster(source);raster(target);const s=validateRelightScene(scene),extraction=validateRelightExtractionSettings(options.extraction);if(!isSrgb(s.source.profile)||!['rgb','rgbcolor','rgbcolormode'].includes(s.source.documentMode.toLowerCase()))throw new Error('实验光影层目前需要已标记的 sRGB RGB 8/16 位原文档；其他颜色空间可明确选择整图重绘');
-  const {base,width,height,n,sourceMax,support,observed,radius,guide,ratios,pause}=await estimateLightingFields(source,target,{...options,extraction});
+  raster(source);raster(target);const s=validateRelightScene(scene),extraction=validateRelightExtractionSettings(options.extraction),lightingColor=lightingColorIdentity(options,s.source.profile,s.source.documentDepth);if(!lightingColor&&!isSrgb(s.source.profile)||!['rgb','rgbcolor','rgbcolormode'].includes(s.source.documentMode.toLowerCase()))throw new Error('实验光影层需要已验证的原 ICC RGB 8/16 位来源；旧任务请重新读取');
+  const {width,height,n,support,observed,radius,guide,ratios,pause,amountAt}=await estimateLightingFields(source,target,{...options,extraction});
   // Output arrays are allocated only after filtering: four RGB planes (48 B/p),
   // scalar supports (16), ratios (12), guide/edge (8), support (1), model-grid
   // rasters plus optional sRGB8 projection (<=20), source (<=8), raw guide (4):
@@ -84,7 +86,7 @@ export async function deriveRelightLayers(source:Raster,target:Raster,scene:Reli
     }
     const castShare=clamp(receiver)*clamp(1-edge[p]*8);let limited=false;
     for(let c=0;c<3;c++){
-      const {negative,positive,limited:channelLimited}=lightingAmounts(ratios[c][p],base.rgba[p*4+c]/sourceMax,extraction.fidelity);limited ||= channelLimited;
+      const {negative,positive,limited:channelLimited}=amountAt(p,c);limited ||= channelLimited;
       const cast=negative*castShare,rimAmount=positive*rimShare;
       const values={shadow:cast<1?clamp(1-(1-negative)/(1-cast)):0,'cast-shadow':cast,light:rimAmount<1?clamp(1-(1-positive)/(1-rimAmount)):0,'rim-light':rimAmount};
       for(const kind of ['shadow','cast-shadow','light','rim-light'] as const){rgbAmounts[kind][p*3+c]=values[kind];amounts[kind][p]=Math.max(amounts[kind][p],values[kind]);}
@@ -100,7 +102,7 @@ export async function deriveRelightLayers(source:Raster,target:Raster,scene:Reli
   const warnings=['RGB 光影由单张参考的多尺度颜色比率估计，保留原图内容；结构错位仍可能留下宽泛光影伪影，细窄阴影和轮廓光会被柔化。'];
   if(clipped/observed>.01)warnings.push('部分暗部比率或高光超出安全范围，已限制极端增益或输出色域。');
   if(!receiverObserved)warnings.push('没有可靠且获准修改的承影区域，本场景未创建 Cast Shadow。');
-  return {version:'relight-fields-v1',width,height,source:s.source,sceneFingerprint:sceneFingerprint(s),guide,channels,summary:{method:'rgb-guided-v2',clippedFraction:clipped/observed,warnings,channels:states}};
+  return {version:'relight-fields-v1',width,height,source:s.source,sceneFingerprint:sceneFingerprint(s),guide,channels,...(lightingColor?{lightingColor}:{}),summary:{method:'rgb-guided-v2',clippedFraction:clipped/observed,warnings,channels:states}};
 }
 
 export function validateRelightLayerFields(fields:RelightLayerFields):void {
@@ -143,6 +145,10 @@ function colorBlend(base:number[],color:number[]):number[] {
 }
 /** Bounded unmasked local composite. The caller applies the edit mask exactly once. */
 export function previewRelightLayers(source:Raster,fields:RelightLayerFields):Raster {
+  if(fields.lightingColor)throw new Error('原 ICC 数值场不能在 sRGB 像素上预览');
+  return previewEncoded(source,fields);
+}
+function previewEncoded(source:Raster,fields:RelightLayerFields):Raster {
   raster(source);validateRelightLayerFields(fields);const base=source.width===fields.width&&source.height===fields.height?{...source,rgba:source.rgba.slice()}:resize(source,fields.width,fields.height),max=rasterMax(base);
   for(const channel of fields.channels)for(let p=0;p<fields.width*fields.height;p++){
     const a=channel.amount[p];if(!a&&!channel.rgbAmount)continue;
@@ -152,4 +158,11 @@ export function previewRelightLayers(source:Raster,fields:RelightLayerFields):Ra
     }else for(let c=0;c<3;c++){const b=base.rgba[p*4+c]/max,rgb=channel.rgbAmount?channel.rgbAmount[p*3+c]:a;base.rgba[p*4+c]=Math.round(max*(channel.blendMode==='multiply'?b*(1-rgb):1-(1-b)*(1-rgb)));}
   }
   return base;
+}
+/** Blend native numeric fields and the effective mask before converting for display. */
+export async function previewNativeLighting(source:NativeLightingSource,fields:RelightLayerFields,mask:Uint8Array,colors:LightingColorService,signal?:AbortSignal):Promise<Raster>{
+  if(!fields.lightingColor||mask.length!==source.width*source.height)throw new Error('原 ICC 光影预览身份或蒙版无效');validateNativeLightingSource(source,fields.lightingColor);
+  const composite=previewEncoded({width:source.width,height:source.height,rgba:source.nativePixels},fields);
+  for(let p=0;p<mask.length;p++){const a=mask[p]/255;for(let c=0;c<3;c++){const i=p*4+c;composite.rgba[i]=Math.round(source.nativePixels[i]+(composite.rgba[i]-source.nativePixels[i])*a);}composite.rgba[p*4+3]=source.nativePixels[p*4+3];}
+  return colors.toSrgb({...source,nativePixels:composite.rgba},signal);
 }

@@ -18,8 +18,27 @@ import {validateBlendTaskMetadata,assertBlendSnapshot,assertBlendLightingCapture
 import {planBlendCandidateMemory} from '../imaging/blend-budget';
 import {planEdgeBlendCandidate} from '../imaging/edge-blend-budget';
 import {edgeBlendMask,validateEdgeBlend,supportsEdgeBlend,type EdgeBlend} from '../features/editing/edge-blend';
+import {decodeNativePixels,validateNativeLightingSource,type NativeLightingSource,type LightingColorService} from '../imaging/native-lighting';
 
 type ReadBinary=(name:string)=>Promise<Uint8Array>;
+function nativeLightingFailure(error:unknown):DiagnosticError {
+  return new DiagnosticError(error instanceof DiagnosticError?error.code:'relight-extraction','lighting-extraction',error instanceof Error?error.message:String(error));
+}
+function nativeLightingBudget(record:JobRecord,retainedBytes:number,outputBytes:number):void {
+  const s=record.snapshot as Snapshot|undefined;if(!s?.lightingColor)return;
+  const g=s.captureGeometry,b=s.bounds,model=(record.params as any)?.modelSize;
+  if(!g||!model||!b||!s.nativeDepth||!['blend-analysis','relight-analysis'].includes(g.kind))throw new Error('原 ICC 光影历史网格无效');
+  planBlendCandidateMemory({width:b.right-b.left,height:b.bottom-b.top,depth:s.nativeDepth,analysis:g,model,outputDepth:record.template==='qwen21-local-v3-rgba16'?16:8,outputBytes,retainedBytes,nativeLighting:true});
+}
+async function readNativeLighting(record:JobRecord,snapshot:Snapshot,read:ReadBinary,colors?:LightingColorService,signal?:AbortSignal):Promise<NativeLightingSource|undefined>{
+  const id=snapshot.lightingColor;if(!id)return;
+  const g=snapshot.captureGeometry;
+  if(!colors||!g||!['blend-analysis','relight-analysis'].includes(g.kind)||id.profileName!==snapshot.profile||id.depth!==snapshot.nativeDepth||id.width!==g.width||id.height!==g.height)throw new Error('原 ICC 光影历史身份或转换服务不一致；请重新读取来源');
+  const profileBytes=await read(`${record.id}-lighting-profile.bin`),pixels=await read(`${record.id}-lighting-source.bin`);
+  const source:NativeLightingSource={width:id.width,height:id.height,depth:id.depth,profileName:id.profileName,profileBytes,nativePixels:decodeNativePixels(pixels,id.width,id.height,id.depth),calibration:id.calibration};
+  validateNativeLightingSource(source,id);
+  if(await colors.calibrate(profileBytes,id.profileName,id.depth,signal)!==id.calibration)throw new Error('原 ICC 转换校验已改变；请重新读取来源');return source;
+}
 export interface PreparedCandidate {image:Raster;snapshot?:Snapshot;warning?:string;outputKind?:RelightOutputKind;lightingState?:'composite'|'reference-only';lightingFailure?:Error;lightingSummary?:RelightLayerFields['summary']}
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function assertTaskNames(record:JobRecord):void {
@@ -252,7 +271,7 @@ function blendGeometry(record:JobRecord,retainedBytes=0,outputBytes=0){
   const geometry=snapshot.captureGeometry!,b=snapshot.bounds,width=b.right-b.left,height=b.bottom-b.top;checkDocumentSize(width,height);
   if(!Number.isSafeInteger(geometry.width)||!Number.isSafeInteger(geometry.height)||geometry.width<1||geometry.height<1||geometry.width>width||geometry.height>height||geometry.width*geometry.height>IMAGE_BUDGETS.analysisPixels||Math.max(geometry.width,geometry.height)>IMAGE_BUDGETS.analysisSide)throw lightingHistoryError();
   const model=params.modelSize;if(!model||!Number.isSafeInteger(model.width)||!Number.isSafeInteger(model.height)||model.width<1||model.height<1||model.width*model.height>16_000_000)throw lightingHistoryError();
-  planBlendCandidateMemory({width,height,depth:snapshot.nativeDepth!,analysis:geometry,model,outputDepth:record.template==='qwen21-local-v3-rgba16'?16:8,outputBytes,retainedBytes});
+  planBlendCandidateMemory({width,height,depth:snapshot.nativeDepth!,analysis:geometry,model,outputDepth:record.template==='qwen21-local-v3-rgba16'?16:8,outputBytes,retainedBytes,nativeLighting:!!snapshot.lightingColor});
   return {metadata,snapshot,params,geometry,width,height};
 }
 /** New blend records retain exact raw/effective/protection planes; never infer native geometry from PNG. */
@@ -301,12 +320,12 @@ export async function prepareAssetCompositePreview(record:JobRecord,bytes:Uint8A
   }
   return {width,height,rgba};
 }
-async function deriveBlendApplication(input:Awaited<ReturnType<typeof blendInputs>>,raw:Raster,signal?:AbortSignal){
-  assertBlendLightingCapture({snapshot:input.snapshot,image:input.source,selectionMask:new Uint8Array(),protectionMask:new Uint8Array()});
+async function deriveBlendApplication(input:Awaited<ReturnType<typeof blendInputs>>,raw:Raster,signal?:AbortSignal,nativeLighting?:NativeLightingSource,colorService?:LightingColorService){
+  assertBlendLightingCapture({snapshot:input.snapshot,image:input.source,nativeLighting,selectionMask:new Uint8Array(),protectionMask:new Uint8Array()});
   const {deriveBlendLayers}=await import('../features/blend/blend-layers');
-  return deriveBlendLayers(input.source,raw,input.metadata.source,{signal,editMask:input.mask,extraction:input.metadata.localExtraction});
+  return deriveBlendLayers(input.source,raw,input.metadata.source,{signal,editMask:input.mask,extraction:input.metadata.localExtraction,nativeLighting,colorService});
 }
-async function prepareBlendCandidate(record:JobRecord,bytes:Uint8Array,read:ReadBinary,retainedBytes:number):Promise<PreparedCandidate>{
+async function prepareBlendCandidate(record:JobRecord,bytes:Uint8Array,read:ReadBinary,retainedBytes:number,colorService?:LightingColorService):Promise<PreparedCandidate>{
   blendGeometry(record,retainedBytes,bytes.byteLength);
   const raw=decodeBlendOutput(record,bytes),input=await blendInputs(record,read,raw,bytes.byteLength,retainedBytes),outputKind=input.metadata.outputKind;
   if(outputKind==='full-result'){
@@ -334,11 +353,14 @@ async function prepareBlendCandidate(record:JobRecord,bytes:Uint8Array,read:Read
     return {image,snapshot:input.snapshot,outputKind};
   }
   try{
-    const fields=await deriveBlendApplication(input,raw),{previewRelightLayers}=await import('../features/relight/relight-layers'),image=previewRelightLayers(input.source,fields);
+    const nativeLighting=await readNativeLighting(record,input.snapshot,read,colorService),fields=await deriveBlendApplication(input,raw,undefined,nativeLighting,colorService),{previewRelightLayers,previewNativeLighting}=await import('../features/relight/relight-layers');
+    if(nativeLighting)return {image:await previewNativeLighting(nativeLighting,fields,input.mask,colorService!),snapshot:input.snapshot,outputKind,lightingState:'composite',lightingSummary:fields.summary};
+    const image=previewRelightLayers(input.source,fields);
     for(let p=0;p<input.mask.length;p++){const amount=input.mask[p]/255;for(let c=0;c<3;c++){const i=p*4+c;image.rgba[i]=Math.round(input.source.rgba[i]+(image.rgba[i]-input.source.rgba[i])*amount);}image.rgba[p*4+3]=input.source.rgba[p*4+3];}
     return {image,snapshot:input.snapshot,outputKind,lightingState:'composite',lightingSummary:fields.summary};
   }catch(error){
-    const lightingFailure=error instanceof Error?error:new Error(String(error)),warning=t('无法提取可靠的光影层，当前显示 AI 参考图；可另存检查，不能回填：{0}',lightingFailure.message);
+    if((error as any)?.code==='cancelled'||(error as any)?.name==='AbortError')throw error;
+    const lightingFailure=input.snapshot.lightingColor?nativeLightingFailure(error):error instanceof Error?error:new Error(String(error)),warning=t('无法提取可靠的光影层，当前显示 AI 参考图；可另存检查，不能回填：{0}',lightingFailure.message);
     return {image:raw,snapshot:input.snapshot,outputKind,lightingState:'reference-only',lightingFailure,warning};
   }
 }
@@ -384,16 +406,18 @@ async function lightingInputs(record:JobRecord,raw:Raster,snapshot:Snapshot,read
 }
 
 /** Re-derive on demand rather than retain full channel buffers for every candidate. No network IO. */
-export async function prepareLightingLayerApplication(record:JobRecord,bytes:Uint8Array,read:ReadBinary,signal?:AbortSignal,retainedBytes=0){
+export async function prepareLightingLayerApplication(record:JobRecord,bytes:Uint8Array,read:ReadBinary,signal?:AbortSignal,retainedBytes=0,colorService?:LightingColorService){
+  nativeLightingBudget(record,retainedBytes,bytes.byteLength);
   if(candidateOutputKind(record)!=='lighting-layers')throw lightingHistoryError();
   if(record.blend!==undefined){
     blendGeometry(record,retainedBytes,bytes.byteLength);const raw=decodeBlendOutput(record,bytes),input=await blendInputs(record,read,raw,bytes.byteLength,retainedBytes);
-    const fields=await deriveBlendApplication(input,raw,signal);return {snapshot:input.snapshot,fields,source:input.source,mask:input.mask};
+    const nativeLighting=await readNativeLighting(record,input.snapshot,read,colorService,signal),fields=await deriveBlendApplication(input,raw,signal,nativeLighting,colorService);return {snapshot:input.snapshot,fields,source:input.source,mask:input.mask};
   }
   const snapshot=await restoreSnapshot(record,read);if(!snapshot)throw lightingHistoryError();
   const raw=decodeModelPng(bytes,String(record.template??'')),inputs=await lightingInputs(record,raw,snapshot,read);
   const {deriveRelightLayers}=await import('../features/relight/relight-layers');
-  const fields=await deriveRelightLayers(inputs.source,raw,inputs.scene,{signal,editMask:inputs.mask,extraction:inputs.extraction});
+  const nativeLighting=await readNativeLighting(record,snapshot,read,colorService,signal);
+  const fields=await deriveRelightLayers(inputs.source,raw,inputs.scene,{signal,editMask:inputs.mask,extraction:inputs.extraction,nativeLighting,colorService});
   return {snapshot,fields,source:inputs.source,mask:inputs.mask};
 }
 /** Reload the original UUID for either native geometry; never reuse display pixels as apply authority. */
@@ -408,9 +432,10 @@ export async function prepareSelectionAssetApplication(record:JobRecord,bytes:Ui
   return {snapshot:prepared.snapshot!,image:prepared.image,preserveAlpha:false,assetContext};
 }
 /** One read-only restoration/composition path for Results and the independent history preview. */
-export async function prepareCandidate(record:JobRecord,bytes:Uint8Array,read:ReadBinary,retainedBytes=0):Promise<PreparedCandidate> {
+export async function prepareCandidate(record:JobRecord,bytes:Uint8Array,read:ReadBinary,retainedBytes=0,colorService?:LightingColorService):Promise<PreparedCandidate> {
+  nativeLightingBudget(record,retainedBytes,bytes.byteLength);
   const edge=edgeBlendContext(record);
-  if(record.blend!==undefined)return prepareBlendCandidate(record,bytes,read,retainedBytes);
+  if(record.blend!==undefined)return prepareBlendCandidate(record,bytes,read,retainedBytes,colorService);
   const assetContext=selectionAssetContext(record);
   const geometry=(record.snapshot as Snapshot|undefined)?.captureGeometry;
   if(geometry?.kind==='edit-analysis')return prepareEditAnalysisCandidate(record,bytes,read,retainedBytes);
@@ -444,15 +469,18 @@ export async function prepareCandidate(record:JobRecord,bytes:Uint8Array,read:Re
     if(!snapshot)throw lightingHistoryError();
     const inputs=await lightingInputs(record,image,snapshot,read);
     try{
-      const {deriveRelightLayers,previewRelightLayers}=await import('../features/relight/relight-layers');
-      const fields=await deriveRelightLayers(inputs.source,image,inputs.scene,{editMask:inputs.mask,extraction:inputs.extraction}),composite=previewRelightLayers(inputs.source,fields);
+      const {deriveRelightLayers,previewRelightLayers,previewNativeLighting}=await import('../features/relight/relight-layers');
+      const nativeLighting=await readNativeLighting(record,snapshot,read,colorService),fields=await deriveRelightLayers(inputs.source,image,inputs.scene,{editMask:inputs.mask,extraction:inputs.extraction,nativeLighting,colorService});
+      if(nativeLighting)return {image:await previewNativeLighting(nativeLighting,fields,inputs.mask,colorService!),snapshot,outputKind,lightingState:'composite',lightingSummary:fields.summary};
+      const composite=previewRelightLayers(inputs.source,fields);
       // The native group uses this effective mask once. Match that in the bounded preview.
       for(let p=0;p<inputs.mask.length;p++){const amount=inputs.mask[p]/255;for(let c=0;c<3;c++){const i=p*4+c;composite.rgba[i]=Math.round(inputs.source.rgba[i]+(composite.rgba[i]-inputs.source.rgba[i])*amount);}composite.rgba[p*4+3]=inputs.source.rgba[p*4+3];}
       return {image:composite,snapshot,outputKind,lightingState:'composite',lightingSummary:fields.summary};
     }catch(error){
+      if((error as any)?.code==='cancelled'||(error as any)?.name==='AbortError')throw error;
       // A rejected reference stays inspectable/exportable, never an applyable redraw fallback.
       const {RelightExtractionError}=await import('../features/relight/relight-layers');
-      const lightingFailure=error instanceof RelightExtractionError?error:new DiagnosticError('relight-extraction','lighting-extraction',t('本地光影提取未完成；原始 AI 参考图已保留，请检查参考图和来源的作用范围。'));
+      const lightingFailure=error instanceof RelightExtractionError?error:snapshot.lightingColor?nativeLightingFailure(error):new DiagnosticError('relight-extraction','lighting-extraction',t('本地光影提取未完成；原始 AI 参考图已保留，请检查参考图和来源的作用范围。'));
       warning=t('无法提取可靠的光影层，当前显示 AI 参考图；可另存检查，不能回填：{0}',diagnostic(lightingFailure,'lighting-extraction').summary);
       return {image,snapshot,outputKind,lightingState:'reference-only',lightingFailure,warning};
     }

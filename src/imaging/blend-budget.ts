@@ -2,7 +2,7 @@ import {IMAGE_BUDGETS,ImageBudgetError,checkDocumentSize,planEditApplyMemory,typ
 import {makeMapping,checkSize} from './image';
 
 interface Size {width:number;height:number}
-export interface BlendBudgetInput extends Size {depth:8|16;analysis:Size;model:Size;outputDepth:8|16;outputBytes?:number;retainedBytes?:number}
+export interface BlendBudgetInput extends Size {depth:8|16;analysis:Size;model:Size;outputDepth:8|16;outputBytes?:number;retainedBytes?:number;nativeLighting?:boolean}
 const bytesPerPixel=(depth:8|16)=>depth===16?8:4;
 function pngBytes(model:Size,depth:8|16):number {return model.width*model.height*bytesPerPixel(depth)+model.height+65_536;}
 
@@ -15,11 +15,14 @@ export function planBlendCandidateMemory(input:BlendBudgetInput):{estimatedPeakB
   if(!Number.isSafeInteger(outputBytes)||outputBytes<0)throw new ImageBudgetError('溶图输出内存估算无效');
   // The common writer helper doubles its raster argument: source/decoder copies,
   // model transformations and 128 B per analysis pixel for lighting extraction.
-  return planEditApplyMemory(width,height,depth,sourceBytes*2+modelBytes*3+outputBytes+analysis.width*analysis.height*64,width*height*3,retainedBytes);
+  // Extra native encoded8 + linear48 + encoded8 + host staging48 B/p;
+  // doubled by the writer budget, plus two4MiB ICC/file buffers.
+  const nativeReserve=input.nativeLighting?analysis.width*analysis.height*56+4*1024*1024:0;
+  return planEditApplyMemory(width,height,depth,sourceBytes*2+modelBytes*3+outputBytes+analysis.width*analysis.height*64+nativeReserve,width*height*3,retainedBytes);
 }
 
 /** Adapt only the analysis grid. Native masks and the requested model grid stay exact. */
-export function planBlendMemory(width:number,height:number,depth:8|16,resolution=1024,outputDepth:8|16=8,retainedBytes=0):RelightMemoryPlan {
+export function planBlendMemory(width:number,height:number,depth:8|16,resolution=1024,outputDepth:8|16=8,retainedBytes=0,nativeLighting=false):RelightMemoryPlan {
   checkDocumentSize(width,height);
   if(![8,16].includes(depth)||![8,16].includes(outputDepth)||!Number.isSafeInteger(retainedBytes)||retainedBytes<0)throw new ImageBudgetError('溶图位深或已保留内存估算无效');
   const model=makeMapping({left:0,top:0,right:width,bottom:height},resolution),nativePixels=width*height,stripPixels=Math.min(nativePixels,IMAGE_BUDGETS.stripPixels),bpp=bytesPerPixel(depth);
@@ -34,9 +37,9 @@ export function planBlendMemory(width:number,height:number,depth:8|16,resolution
     // Old captures/candidates are in retainedBytes. Reserve the new capture's
     // three native planes and RGBA plus one ready candidate's mask/RGBA/PNG.
     // The selection-recovery cache shares its raw native plane with the capture.
-    const live=retainedBytes+nativePixels*4+n*(bpp+Math.max(bpp,bytesPerPixel(outputDepth)))+pngBytes(model,outputDepth);
-    const candidate=planBlendCandidateMemory({width,height,depth,analysis,model,outputDepth,retainedBytes:live}).estimatedPeakBytes;
-    const capture=Math.max(nativePixels*3+n*128,nativePixels*6+n*bpp*3)+stripPixels*bpp*4+96_000_000+retainedBytes;
+    const live=retainedBytes+nativePixels*4+n*(bpp+Math.max(bpp,bytesPerPixel(outputDepth)))+pngBytes(model,outputDepth)+(nativeLighting?n*bpp+4*1024*1024:0);
+    const candidate=planBlendCandidateMemory({width,height,depth,analysis,model,outputDepth,retainedBytes:live,nativeLighting}).estimatedPeakBytes;
+    const capture=Math.max(nativePixels*3+n*(nativeLighting?240:128),nativePixels*6+n*bpp*3)+stripPixels*bpp*4+96_000_000+retainedBytes+(nativeLighting?8*1024*1024:0);
     return Math.max(capture,candidate);
   };
   const maximum=Math.min(nativePixels,IMAGE_BUDGETS.analysisPixels),minimum=Math.min(maximum,65_536);

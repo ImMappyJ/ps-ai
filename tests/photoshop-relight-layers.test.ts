@@ -6,13 +6,13 @@ import {sha256} from '@noble/hashes/sha2.js';
 function host(depth:8|16=16,width=800,height=500,whole=false){
   const calls:any[]=[],resources:{disposed:boolean}[]=[],original:any={id:1,name:'Original',visible:true},bounds={left:whole?0:13,top:whole?0:7,right:(whole?0:13)+width,bottom:(whole?0:7)+height};let nextId=10;
   const doc:any={id:7,width:whole?width:1000,height:whole?height:700,mode:'rgb',colorProfileName:'sRGB IEC61966-2.1',bitsPerChannel:depth,activeHistoryState:{id:3},layers:[original]};
-  const makeLayer=(options:any)=>{const l:any={id:nextId++,name:options.name,blendMode:options.blendMode,opacity:options.opacity??100,fillOpacity:100,visible:true,pieces:[],move:async(target:any,placement:any)=>{assert.equal(placement,'before');doc.layers=doc.layers.filter((n:any)=>n.id!==l.id);const at=doc.layers.findIndex((n:any)=>n.id===target.id);assert.ok(at>=0);doc.layers.splice(at,0,l);calls.push(['move',l.id,target.id]);},delete:async()=>{doc.layers=doc.layers.filter((n:any)=>n.id!==l.id);calls.push(['delete',l.id]);}};return l;};
+  const makeLayer=(options:any)=>{const l:any={id:nextId++,name:options.name,blendMode:options.blendMode,opacity:options.opacity??100,fillOpacity:100,visible:true,pieces:[],move:async(target:any,placement:any)=>{assert.equal(placement,'before');doc.layers=doc.layers.filter((n:any)=>n.id!==l.id);const at=doc.layers.findIndex((n:any)=>n.id===target.id);assert.ok(at>=0);doc.layers.splice(at,0,l);calls.push(['move',l.id,target.id]);},delete:async()=>{const remove=(layers:any[]):boolean=>{const at=layers.indexOf(l);if(at>=0){layers.splice(at,1,...(l.layers??[]));return true;}return layers.some(n=>n.layers&&remove(n.layers));};assert.ok(remove(doc.layers));calls.push(['delete',l.id]);}};return l;};
   doc.createLayer=async(_kind:any,o:any)=>{const l=makeLayer(o);doc.layers.unshift(l);calls.push(['create',l]);return l;};
   doc.createLayerGroup=async(o:any)=>{const g=makeLayer(o);g.layers=o.fromLayers;doc.layers=doc.layers.filter((l:any)=>!o.fromLayers.includes(l));doc.layers.unshift(g);calls.push(['group',g]);return g;};
   const data=(values:Uint8Array|Uint16Array,w:number,h:number,components:number)=>{const r={disposed:false};resources.push(r);return {width:w,height:h,componentSize:values instanceof Uint16Array?16:8,components,colorProfile:doc.colorProfileName,getData:async()=>values,dispose:()=>{assert.equal(r.disposed,false);r.disposed=true;}};};
   let baseline:any;
   const ps:any={app:{documents:[doc],activeDocument:doc},constants:{DocumentMode:{RGB:'rgb',GRAYSCALE:'gray'},BitsPerChannelType:{EIGHT:8,SIXTEEN:16},LayerKind:{NORMAL:'normal'},BlendMode:{NORMAL:'normal',PASSTHROUGH:'passThrough',MULTIPLY:'multiply',SCREEN:'screen',COLOR:'color'},ElementPlacement:{PLACEBEFORE:'before'}},
-    core:{executeAsModal:async(fn:any)=>{calls.push('modal');return fn({hostControl:{suspendHistory:async()=>{const appearance=new Map<any,unknown>();const visit=(layers:any[])=>{for(const layer of layers){appearance.set(layer,{visible:layer.visible,opacity:layer.opacity});if(layer.layers)visit(layer.layers);}};visit(doc.layers);baseline={layers:[...doc.layers],history:doc.activeHistoryState,appearance};calls.push('suspend');return 1;},resumeHistory:async(_id:number,commit:boolean)=>{calls.push(['resume',commit]);if(commit)doc.activeHistoryState={id:doc.activeHistoryState.id+1};else{doc.layers=baseline.layers;doc.activeHistoryState=baseline.history;for(const [layer,appearance]of baseline.appearance)Object.assign(layer,appearance);}}}});}},
+    core:{executeAsModal:async(fn:any)=>{calls.push('modal');return fn({hostControl:{suspendHistory:async()=>{const appearance=new Map<any,unknown>();const visit=(layers:any[])=>{for(const layer of layers){appearance.set(layer,{visible:layer.visible,opacity:layer.opacity,...(layer.layers?{layers:[...layer.layers]}:{})});if(layer.layers)visit(layer.layers);}};visit(doc.layers);baseline={layers:[...doc.layers],history:doc.activeHistoryState,appearance};calls.push('suspend');return 1;},resumeHistory:async(_id:number,commit:boolean)=>{calls.push(['resume',commit]);if(commit)doc.activeHistoryState={id:doc.activeHistoryState.id+1};else{doc.layers=baseline.layers;doc.activeHistoryState=baseline.history;for(const [layer,appearance]of baseline.appearance)Object.assign(layer,appearance);}}}});}},
     action:{batchPlay:async(c:any[])=>{calls.push(['batch',c]);return c.map(()=>({}));}},imaging:{
       getPixels:async(o:any)=>{if(o.historyStateID!==undefined)assert.equal(o.historyStateID,3,'source validation must always use the frozen original history');const b=o.sourceBounds,w=b.right-b.left,h=b.bottom-b.top,max=depth===16?65535:255,rgba=depth===16?new Uint16Array(w*h*4):new Uint8Array(w*h*4);for(let p=0;p<w*h;p++){rgba[p*4]=depth===16?12345:48;rgba[p*4+1]=rgba[p*4+2]=rgba[p*4];rgba[p*4+3]=max;}calls.push(['read',o]);return {imageData:data(rgba,w,h,4),sourceBounds:b,level:0};},
       createImageDataFromBuffer:async(v:any,o:any)=>data(v,o.width,o.height,o.components),
@@ -40,6 +40,17 @@ test('native lighting group passes effects through to source16 without duplicati
   const masks=h.calls.filter(c=>c[0]==='mask');assert.equal(masks.length,2);assert.ok(masks.every(c=>c[1].layerID===id&&c[1].replace===false));assert.deepEqual(masks[0][1].targetBounds,{left:13,top:7});
   assert.deepEqual(maskSamples[0],[0,257,16448,32896,65535],'the one group mask retains protected zeroes and native grayscale feathers');
   assert.equal(h.calls.filter(c=>c[0]==='batch').flatMap(c=>c[1]).filter(c=>c.using?._value==='hideAll').length,1);assert.equal(progress[progress.length-1],14);assert.ok(h.resources.every(r=>r.disposed));
+});
+
+test('verified native ICC fields inherit the current document profile and reject an actual ICC mismatch before writes',async()=>{
+  const h=host(16,32,24,true),bytes=new Uint8Array([1,2,3]),hash=Array.from(sha256(bytes),x=>x.toString(16).padStart(2,'0')).join('');h.doc.colorProfileName=h.snapshot.profile=h.fields.source.profile='ProPhoto RGB';
+  h.fields.channels=h.fields.channels.filter(c=>c.kind==='shadow');h.fields.channels[0].rgbAmount=new Float32Array(128*96*3).fill(.1);
+  h.snapshot.lightingColor=h.fields.lightingColor={version:'native-rgb-v1',width:128,height:96,depth:16,profileName:'ProPhoto RGB',profileHash:hash,pixelsHash:'a'.repeat(64),calibration:'b'.repeat(64)};
+  const profiles:string[]=[];const create=h.ps.imaging.createImageDataFromBuffer;h.ps.imaging.createImageDataFromBuffer=async(v:any,o:any)=>{if(o.components===4)profiles.push(o.colorProfile);return create(v,o);};
+  h.adapter.lightingColor={captureProfile:async()=>bytes,rememberWrittenProfile:()=>{}} as any;
+  await h.adapter.applyRelightLayers(h.snapshot,h.fields,'ICC lighting');assert.deepEqual(profiles,['']);assert.equal(h.doc.colorProfileName,'ProPhoto RGB');
+  const oldWrites=h.calls.filter(c=>c[0]==='write').length;h.adapter.lightingColor={captureProfile:async()=>new Uint8Array([9]),rememberWrittenProfile:()=>{}} as any;
+  await assert.rejects(()=>h.adapter.applyRelightLayers(h.snapshot,h.fields,'ICC lighting'),/ICC/);assert.equal(h.calls.filter(c=>c[0]==='write').length,oldWrites);
 });
 test('native lighting group is placed above every existing source layer',async()=>{
   const h=host(8,8,6,true),create=h.doc.createLayerGroup;
@@ -167,4 +178,19 @@ for(const depth of [8,16] as const)test(`native RGB${depth} lighting writes inde
   assert.equal(h.calls.filter(c=>c[0]==='mask'&&c[1].layerID===id).length,1);
   assert.deepEqual(h.calls.filter(c=>c[0]==='resume'),[['resume',true]]);
   assert.ok(h.resources.every(r=>r.disposed));
+});
+
+test('replacing an owned lighting group with a raster removes every old channel',async()=>{
+  const h=host(8,8,6,true),id=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'Lighting'),old=h.doc.layers.find((l:any)=>l.id===id),oldIds=old.layers.map((l:any)=>l.id);
+  const replacement=await h.adapter.apply(h.snapshot,{width:8,height:6,rgba:new Uint8Array(8*6*4).fill(255)},'Redraw');
+  assert.deepEqual(h.doc.layers.map((l:any)=>l.id),[replacement,1]);assert.ok(oldIds.every((id:number)=>h.calls.some(c=>c[0]==='delete'&&c[1]===id)));
+});
+
+test('failed replacement restores the old lighting group and all its channels',async()=>{
+  for(const failure of ['delete','write']){
+    const h=host(8,8,6,true),id=await h.adapter.applyRelightLayers(h.snapshot,h.fields,'Lighting'),group=h.doc.layers.find((l:any)=>l.id===id),children=[...group.layers],history=h.doc.activeHistoryState.id;
+    if(failure==='delete')children[2].delete=async()=>{throw Error('injected deletion failure');};else h.ps.imaging.putPixels=async()=>{throw Error('injected write failure');};
+    await assert.rejects(h.adapter.applyRelightLayers(h.snapshot,h.fields,'Replacement'),/injected/);
+    assert.deepEqual(h.doc.layers,[group,h.original]);assert.deepEqual(group.layers,children);assert.equal(h.doc.activeHistoryState.id,history);assert.equal(h.adapter.applicationMode(h.snapshot),'replace');
+  }
 });

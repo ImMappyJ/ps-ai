@@ -27,6 +27,27 @@ async function panelHarness(source:Raster={width:2,height:2,rgba:new Uint8Array(
 async function open(h:Awaited<ReturnType<typeof panelHarness>>){h.workbench.show();await new Promise(r=>setTimeout(r,65));}
 async function scene(h:Awaited<ReturnType<typeof panelHarness>>){h.click('relight-save');await new Promise(r=>setTimeout(r,10));return JSON.parse(String(h.files['relight-draft.json'])).scene;}
 
+for(const fails of [false,true])test(`native candidate conversion suspends the dialog and restores edited state on ${fails?'failure':'success'}`,async()=>{
+  const h=await panelHarness();try{
+    await open(h);h.el('relight-intensity').value='2.7';h.change('relight-intensity');
+    assert.equal(typeof (h.workbench as any).withNativeColor,'function');
+    const run=()=> (h.workbench as any).withNativeColor(async()=>{assert.equal(h.workbench.isOpen,false);assert.equal(h.el('relight-dialog').hasAttribute('open'),false);if(fails)throw Error('ICC conversion failed');return 42;});
+    if(fails)await assert.rejects(run,/ICC conversion failed/);else assert.equal(await run(),42);
+    assert.equal(h.workbench.isOpen,true);assert.equal(h.session.editor.snapshot().lights[0].intensity,2.7);
+    assert.equal(h.posts.length,0);assert.equal(h.pixelRequests.length,0);
+  }finally{await h.close();}
+});
+
+test('native lighting re-extraction retains ownership while the dialog is temporarily closed',async()=>{
+  const h=await panelHarness();let calls=0;try{
+    h.results.push({jobId:'native-result',fingerprint:h.session.fingerprint,image:h.capture().image,outputKind:'lighting-layers',lightingState:'composite',nativeColor:true} as RelightResult);
+    (h.workbench as any).host.reextract=async(id:string,settings:any,current:()=>boolean)=>{calls++;assert.equal(id,'native-result');assert.equal(h.workbench.isOpen,false);assert.equal(current(),true);await Promise.resolve();assert.equal(current(),true);h.results[0].localExtraction=settings;};
+    await open(h);h.el('relight-result-list').firstChild.id='native-result-button';h.click('native-result-button');h.el('relight-fidelity').value='.42';h.change('relight-fidelity');await new Promise(r=>setTimeout(r,70));
+    assert.equal(calls,1);assert.equal(h.workbench.isOpen,true);assert.equal(h.results[0].localExtraction?.fidelity,.42);
+    assert.match(h.el('relight-status').textContent,/已更新此候选/);assert.equal(h.posts.length,0);
+  }finally{await h.close();}
+});
+
 function slider(h:Awaited<ReturnType<typeof panelHarness>>,id='intensity'){
   const node=h.el(`relight-${id}-slider`);assert.ok(node,`${id} has a native horizontal slider`);return node;
 }

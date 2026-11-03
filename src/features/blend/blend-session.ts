@@ -4,6 +4,7 @@ import type {RelightSource} from '../relight/relight-scene';
 import {validateRelightExtractionSettings,type RelightExtractionSettings} from '../relight/relight-layers';
 import {validateBlendSource} from './blend-layers';
 import {rasterDepth} from '../../imaging/image';
+import {validateNativeLightingSource} from '../../imaging/native-lighting';
 
 export type BlendOutputKind='lighting-layers'|'full-result';
 /** Local processing only. This identity never grants a new source history baseline. */
@@ -28,7 +29,8 @@ export function withBlendProcessing(metadata:BlendTaskMetadata,outputKind:BlendO
 }
 export function assertBlendLightingCapture(capture:Capture):void {
   const s=capture.snapshot;
-  if(!/^sRGB(?: IEC61966-2\.1)?$/i.test(s.profile.trim())||!['rgb','rgbcolor','rgbcolormode'].includes(String(s.mode).toLowerCase())||s.nativeDepth!==8&&s.nativeDepth!==16||rasterDepth(capture.image)!==s.nativeDepth)throw new Error('保留细节的光影方式仅支持已标记的 sRGB RGB 8/16 位原文档；请明确选择 AI 重绘主体');
+  if(s.lightingColor){if(!capture.nativeLighting||s.lightingColor.profileName!==s.profile||s.lightingColor.depth!==s.nativeDepth)throw new Error('原 ICC 光影缓存缺失，请重新读取');validateNativeLightingSource(capture.nativeLighting,s.lightingColor);}
+  if(!s.lightingColor&&!/^sRGB(?: IEC61966-2\.1)?$/i.test(s.profile.trim())||!['rgb','rgbcolor','rgbcolormode'].includes(String(s.mode).toLowerCase())||s.nativeDepth!==8&&s.nativeDepth!==16||rasterDepth(capture.image)!==s.nativeDepth)throw new Error('保留细节的光影方式需要已验证的原 ICC RGB 8/16 位来源；旧非 sRGB 任务请重新读取');
   if(s.captureGeometry?.kind!=='blend-analysis'||s.blendOpaqueScope!==true)throw new Error('光影方式暂不支持作用范围内的透明/半透明来源；请缩小到不透明区域，或明确选择 AI 重绘主体');
 }
 /** Assert original task identity before reading or deriving saved local pixels. */

@@ -1,6 +1,6 @@
 import {IMAGE_BUDGETS} from '../../imaging/budget';
 import {rasterDepth,type Raster} from '../../imaging/image';
-import {estimateLightingFields,lightingAmounts} from '../../imaging/lighting-fields';
+import {estimateLightingFields,lightingColorIdentity} from '../../imaging/lighting-fields';
 import type {RelightSource} from '../relight/relight-scene';
 import type {RelightLayerFields,RelightLayersOptions,RelightFieldChannel,BlendLayerFields} from '../relight/relight-layers';
 export type {BlendLayerFields} from '../relight/relight-layers';
@@ -27,14 +27,15 @@ export function validateBlendSource(value:unknown):RelightSource {
 /** Transfer observed environment lighting to original pixels without inventing a scene. */
 export async function deriveBlendLayers(source:Raster,target:Raster,sourceIdentity:RelightSource,options:RelightLayersOptions={}):Promise<RelightLayerFields> {
   const identity=validateBlendSource(sourceIdentity);
-  if(!/^sRGB(?: IEC61966-2\.1)?$/i.test(identity.profile.trim())||!['rgb','rgbcolor','rgbcolormode'].includes(identity.documentMode.toLowerCase()))throw new Error('溶图光影提取目前需要已标记的 sRGB RGB 8/16 位原文档；其他来源可明确选择 AI 重绘主体');
+  const lightingColor=lightingColorIdentity(options,identity.profile,identity.documentDepth);
+  if(!lightingColor&&!/^sRGB(?: IEC61966-2\.1)?$/i.test(identity.profile.trim())||!['rgb','rgbcolor','rgbcolormode'].includes(identity.documentMode.toLowerCase()))throw new Error('溶图光影提取需要已验证的原 ICC RGB 8/16 位来源；旧任务请重新读取');
   if(!source||identity.documentDepth!==rasterDepth(source))throw new Error('溶图光影来源位深与冻结身份不符');
-  const {base,width,height,n,sourceMax,support,observed,guide,ratios,pause,extraction}=await estimateLightingFields(source,target,options,true,'blend');
+  const {width,height,n,support,observed,guide,pause,amountAt}=await estimateLightingFields(source,target,options,true,'blend');
   const amounts={shadow:new Float32Array(n),light:new Float32Array(n)},rgbAmounts={shadow:new Float32Array(n*3),light:new Float32Array(n*3)};let clipped=0;
   for(let y=0;y<height;y++){if(y%16===0)await pause();for(let x=0;x<width;x++){
     const p=y*width+x;if(!support[p])continue;let limited=false;
     for(let c=0;c<3;c++){
-      const value=lightingAmounts(ratios[c][p],base.rgba[p*4+c]/sourceMax,extraction.fidelity);limited ||= value.limited;
+      const value=amountAt(p,c);limited ||= value.limited;
       rgbAmounts.shadow[p*3+c]=value.negative;rgbAmounts.light[p*3+c]=value.positive;
       amounts.shadow[p]=Math.max(amounts.shadow[p],value.negative);amounts.light[p]=Math.max(amounts.light[p],value.positive);
     }
@@ -47,5 +48,5 @@ export async function deriveBlendLayers(source:Raster,target:Raster,sourceIdenti
   }
   const warnings=['RGB 光影由环境参考的多尺度颜色比率估计，保留原图内容；结构错位仍可能留下宽泛光影伪影，细窄明暗边界会被柔化。'];
   if(clipped/observed>.01)warnings.push('部分暗部比率或高光超出安全范围，已限制极端增益或输出色域。');
-  return {version:'blend-fields-v1',width,height,source:identity,guide,channels,summary:{method:'rgb-guided-v2',clippedFraction:clipped/observed,warnings,channels:states}};
+  return {version:'blend-fields-v1',width,height,source:identity,guide,channels,...(lightingColor?{lightingColor}:{}),summary:{method:'rgb-guided-v2',clippedFraction:clipped/observed,warnings,channels:states}};
 }

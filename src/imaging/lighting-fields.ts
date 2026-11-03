@@ -1,5 +1,6 @@
 import {resize,convertDepth,rasterMax,type Raster} from './image';
 import {planRelightMemory} from './budget';
+import {nativeLightingIdentity,type NativeLightingSource,type LightingColorService} from './native-lighting';
 
 export interface LightingExtractionSettings {fidelity:number;detailProtection:number}
 export const DEFAULT_LIGHTING_EXTRACTION:Readonly<LightingExtractionSettings>=Object.freeze({fidelity:1,detailProtection:.65});
@@ -10,7 +11,11 @@ export function validateLightingExtractionSettings(value?:unknown):LightingExtra
   for(const key of ['fidelity','detailProtection'])if(typeof v[key]!=='number'||!Number.isFinite(v[key])||v[key]<0||v[key]>1)throw new Error('光影提取设置须为 0–1 的有限数值');
   return {fidelity:v.fidelity as number,detailProtection:v.detailProtection as number};
 }
-export interface LightingFieldsOptions {signal?:AbortSignal;yieldControl?:()=>Promise<void>;editMask?:Uint8Array;extraction?:LightingExtractionSettings}
+export interface LightingFieldsOptions {signal?:AbortSignal;yieldControl?:()=>Promise<void>;editMask?:Uint8Array;extraction?:LightingExtractionSettings;nativeLighting?:NativeLightingSource;colorService?:LightingColorService}
+export function lightingColorIdentity(options:LightingFieldsOptions,profile:string,depth:8|16){
+  if(!options.nativeLighting)return undefined;
+  const id=nativeLightingIdentity(options.nativeLighting);if(!options.colorService||id.profileName!==profile||id.depth!==depth)throw new Error('原 ICC 光影来源或转换服务不一致');return id;
+}
 export const clamp=(v:number,min=0,max=1)=>Math.max(min,Math.min(max,v));
 function check(signal?:AbortSignal):void {if(signal?.aborted){const error=new Error('光影层处理已取消');error.name='AbortError';throw error;}}
 export function validateLightingRaster(image:Raster):void {
@@ -171,15 +176,41 @@ export async function estimateLightingFields(source:Raster,target:Raster,options
   const radius=Math.max(2,Math.round(Math.min(width,height)/(profile==='blend'?96:14))),smoothRadius=Math.max(1,Math.round(Math.min(width,height)/(profile==='blend'?320:160))),rawGuide=new Float32Array(n);
   for(let p=0;p<n;p++)rawGuide[p]=luminance(comparison.rgba[p*4]/max,comparison.rgba[p*4+1]/max,comparison.rgba[p*4+2]/max);
   const guide=await blur(await blur(rawGuide,width,height,radius,pause,support,profile==='blend'),width,height,radius,pause,support,profile==='blend'),ratios:Float32Array[]=[];
+  let nativeFrom:Float32Array|undefined,nativeTo:Float32Array|undefined;
+  const native=options.nativeLighting,service=options.colorService;
+  if(native){
+    if(!service||native.width!==width||native.height!==height)throw new Error('原 ICC 分析网格或转换服务不一致');
+    const corrected:Raster={width,height,rgba:new Uint16Array(n*4)};
+    for(let p=0;p<n;p++){for(let c=0;c<3;c++){const a=comparison.rgba[p*4+c]/max,b=result.rgba[p*4+c]/targetMax,delta=b-a;corrected.rgba[p*4+c]=Math.round((a+Math.sign(delta)*Math.max(0,Math.abs(delta)-.5/255))*65535);}corrected.rgba[p*4+3]=Math.round(result.rgba[p*4+3]/targetMax*65535);}
+    nativeFrom=await service.toLinear(native,comparison,options.signal);nativeTo=await service.toLinear(native,corrected,options.signal);await pause();
+    if([nativeFrom,nativeTo].some(v=>!(v instanceof Float32Array)||v.length!==n*4||v.some(x=>!Number.isFinite(x))))throw new Error('原 ICC 线性比较数据无效');
+  }
   // The model sees sRGB8. Ignore only its half-code uncertainty, including an
   // identical native16 return; never quantize the content that will be applied.
   for(let c=0;c<3;c++){
     const from=new Float32Array(n),to=new Float32Array(n);
-    for(let p=0;p<n;p++){const a=comparison.rgba[p*4+c]/max,b=result.rgba[p*4+c]/targetMax,delta=b-a;from[p]=linear(a);to[p]=linear(a+Math.sign(delta)*Math.max(0,Math.abs(delta)-.5/255));}
+    for(let p=0;p<n;p++){const a=comparison.rgba[p*4+c]/max,b=result.rgba[p*4+c]/targetMax,delta=b-a;from[p]=nativeFrom?nativeFrom[p*4+c]:linear(a);to[p]=nativeTo?nativeTo[p*4+c]:linear(a+Math.sign(delta)*Math.max(0,Math.abs(delta)-.5/255));}
     const values=await multiscaleRatio(from,to,width,height,pause,support,extraction.detailProtection,profile);
     ratios.push(await guided(values,guide,width,height,smoothRadius,pause,support,profile==='blend'));
   }
-  return {base,width,height,n,sourceMax,support,observed,radius,guide,ratios,pause,extraction};
+  nativeFrom=undefined;nativeTo=undefined;
+  let amountAt=(p:number,c:number)=>lightingAmounts(ratios[c][p],base.rgba[p*4+c]/sourceMax,extraction.fidelity);
+  if(native&&service){
+    const desiredLinear=await service.toLinear(native,undefined,options.signal),limited=new Uint8Array(n);
+    if(!(desiredLinear instanceof Float32Array)||desiredLinear.length!==n*4||desiredLinear.some(v=>!Number.isFinite(v)))throw new Error('原 ICC 线性来源无效');
+    for(let p=0;p<n;p++)for(let c=0;c<3;c++){
+      const raw=ratios[c][p],bounded=clamp(raw,-MAX_LOG_GAIN,MAX_LOG_GAIN),d=bounded*(1-Math.exp(-((Math.abs(bounded)/.008)**2)))*extraction.fidelity,gain=Math.exp(d),v=desiredLinear[p*4+c]*gain+BLACK_FLOOR*Math.max(0,gain-1);desiredLinear[p*4+c]=v;
+      if(raw!==bounded||v<0||v>1)limited[p]=1;
+    }
+    const desired=await service.fromLinear(native,desiredLinear,options.signal),nativeMax=native.depth===16?65535:255;
+    if(desired.length!==n*4||!(native.depth===16?desired instanceof Uint16Array:desired instanceof Uint8Array))throw new Error('原 ICC 编码结果无效');
+    amountAt=(p,c)=>{
+      // Exact no-effect bypass: a host round trip must not recolor native detail.
+      const b=native.nativePixels[p*4+c]/nativeMax,d=Math.abs(ratios[c][p])<1e-7||extraction.fidelity===0?b:desired[p*4+c]/nativeMax;
+      return {negative:d<b&&b>0?clamp(1-d/b):0,positive:d>b&&b<1?clamp((d-b)/(1-b)):0,limited:!!limited[p]};
+    };
+  }
+  return {base,width,height,n,sourceMax,support,observed,radius,guide,ratios,pause,extraction,amountAt};
 }
 
 /** Convert a bounded linear-light ratio into RGB Multiply/Screen amounts on original pixels. */

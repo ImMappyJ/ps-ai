@@ -118,15 +118,24 @@ for(const view of ['source','ai'] as const)test(`capture invalidation lets the s
 
 test('an unsupported redraw source keeps its previous preview and metadata when local lighting fails',async()=>{
   const h=await panelHarness({source,output,selection});try{
-    await blend(h);h.ps.app.activeDocument.colorProfileName='Adobe RGB (1998)';
+    await blend(h);h.ps.constants.DocumentMode.GRAYSCALE='gray';h.ps.app.activeDocument.mode='gray';h.ps.app.activeDocument.colorProfileName='Gray Gamma 2.2';
     h.click('generate');await h.wait();assert.equal(h.posts.length,0,'default lighting rejects before upload');assert.equal(h.uploads.length,0);
     h.el('blend-output-kind').value='full-result';h.change('blend-output-kind');h.click('generate');await h.wait();
     assert.equal(h.posts.length,1);const id=h.records()[0].id,previous=h.el('detail-preview').getAttribute('src');
     h.el('blend-result-output').value='lighting-layers';h.change('blend-result-output');await settleLocal(h);
     assert.equal(h.el('detail-preview').getAttribute('src'),previous);assert.equal((h.records()[0].blend as any).outputKind,'full-result');
     assert.equal(h.el('blend-result-output').value,'full-result');assert.match(h.el('blend-processing-status').textContent,/保留原候选/);assert.equal(h.posts.length,1);
-    h.el('language').value='en-US';h.change('language');await h.wait();assert.match(h.el('blend-processing-status').textContent,/Local adjustment failed/);assert.match(h.el('blend-processing-status').textContent,/tagged sRGB/);
+    h.el('language').value='en-US';h.change('language');await h.wait();assert.match(h.el('blend-processing-status').textContent,/Local adjustment failed/);assert.match(h.el('blend-processing-status').textContent,/verified native ICC/);
     h.click('export-ai-reference');await h.wait();assert.ok(h.files[`ps-ai-${id.slice(0,8)}-ai-reference.png`]);
+  }finally{await h.close();}
+});
+
+test('explicit wide-gamut Blend redraw does not require the native lighting conversion service',async()=>{
+  const h=await panelHarness({source,output,selection});try{
+    await blend(h);h.ps.app.activeDocument.colorProfileName='Adobe RGB (1998)';h.el('blend-output-kind').value='full-result';h.change('blend-output-kind');h.click('generate');await h.wait();
+    assert.equal(h.posts.length,1);const record=h.records()[0];assert.equal((record.snapshot as any).profile,'Adobe RGB (1998)');assert.equal((record.snapshot as any).lightingColor,undefined);
+    const prior=h.el('detail-preview').getAttribute('src');h.el('blend-result-output').value='lighting-layers';h.change('blend-result-output');await settleLocal(h);
+    assert.equal((h.records()[0].blend as any).outputKind,'full-result');assert.equal(h.el('detail-preview').getAttribute('src'),prior);assert.equal(h.posts.length,1);assert.match(h.el('blend-processing-status').textContent,/重新读取/);
   }finally{await h.close();}
 });
 
@@ -151,7 +160,7 @@ test('blend local processing retains a native RGB16 saved source with 16-bit out
 
 test('a successful local redraw conversion clears a saved extraction error without another submission',async()=>{
   const h=await panelHarness({source,output,selection});try{
-    await blend(h);h.ps.app.activeDocument.colorProfileName='Adobe RGB (1998)';h.el('blend-output-kind').value='full-result';h.change('blend-output-kind');h.click('generate');await h.wait();
+    await blend(h);h.ps.constants.DocumentMode.GRAYSCALE='gray';h.ps.app.activeDocument.mode='gray';h.ps.app.activeDocument.colorProfileName='Gray Gamma 2.2';h.el('blend-output-kind').value='full-result';h.change('blend-output-kind');h.click('generate');await h.wait();
     const record=h.records()[0];(record.blend as any).outputKind='lighting-layers';record.state='output-error';record.detail='previous extraction failed';h.files['history.json']=JSON.stringify([record]);await h.refreshHistory();h.selectHistory(record.id);h.click('load-history');await h.wait();
     assert.equal(h.el('apply').textContent,'查看提取失败原因');
     h.el('blend-result-output').value='full-result';h.change('blend-result-output');await settleLocal(h);
