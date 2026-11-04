@@ -6,9 +6,9 @@ Start with a small edit: **connect → read the range → describe and generate 
 
 > This guide covers **0.7.0 stable**, including eight-mode navigation and 12 Portrait/Landscape prompt presets. The user authorized publication on 2026-11-04. The new layout and presets have offline validation; installed-panel operation and photographic quality remain unverified. Earlier native API/model evidence retains its recorded scope. Check the version/build identity; historical screenshots and outputs retain their original captions.
 
-Create, Settings and Results are native PS27 screenshots captured during release preparation under a separate Preview demonstration identity: source preview, read-only model scanning and existing historical candidate loading were performed, without new generation. The Relighting interface screenshot remains historical 0.5.0. Screenshots use the Chinese interface.
+The new 0.7.0 Create, preset and Settings figures are rendered from current HTML/CSS and preset data: **source-UI illustrations, not native Photoshop recordings**. The designated reference is `3F3F3F.webp`. Historical result, layer and lighting figures retain their individual evidence labels and do not validate the new presets. Interface figures use Chinese.
 
-Local models fill three roles: diffusion model, vision/text encoder and VAE, without fixed filenames or authors. The 0.6.0 source selects GGUF or native Safetensors loading by extension, restricted to compatible Qwen 2.1 architecture and the fixed sampling chain. Native loading needs no GGUF extension package. One INT8 combination has real inference, PNG and small RGB8/16 Photoshop API evidence; see the [tested example and limits](../setup/COMFYUI.en.md#native-tested). The read-only route label follows the selected filename. **Nodes checked** means node/file-name checks passed and still warns that the selected weights are unverified. Scanning/connecting neither inspects weight internals nor generates automatically.
+Local models fill three roles: diffusion model, vision/text encoder and VAE, without fixed filenames or authors. The released 0.7.0 selects GGUF or native Safetensors loading by extension, restricted to compatible Qwen 2.1 architecture and the fixed sampling chain. Native loading needs no GGUF extension package. One INT8 combination has real inference, PNG and small RGB8/16 Photoshop API evidence; see the [tested example and limits](../setup/COMFYUI.en.md#native-tested). The read-only route label follows the selected filename. **Nodes checked** means node/file-name checks passed and still warns that the selected weights are unverified. Scanning/connecting neither inspects weight internals nor generates automatically.
 
 <a id="current-ui"></a>
 
@@ -19,21 +19,21 @@ Local models fill three roles: diffusion model, vision/text encoder and VAE, wit
 3. **Describe the change.** Try “make the metal ornament matte silver, preserving its shape.” Review the candidate count, resolution, depth and destination summary; expand **Generate and output** when needed.
 4. **Generate and inspect.** Use **Generate candidates** at the bottom. Keep the source unchanged; inspect edges, color, faces and text in Results, then apply as a new layer or save a PNG. One Ctrl+Z reverses one application.
 
-<p align="center"><a href="../../assets/guide/workflow-create-zh.png"><img src="../../assets/guide/workflow-create-zh.png" width="420" alt="Current native Photoshop Create panel with captured range and draft prompt, before generation"></a></p>
+<p align="center"><a href="../../assets/guide/070-create-zh.png"><img src="../../assets/guide/070-create-zh.png" width="420" alt="0.7.0 source-UI illustration; Chinese interface; not a native Photoshop capture"></a></p>
 
 **Next step** offers an action based on connection, source and input state; navigation does not submit generation. Expand protection, references and settings as needed. Switching Create / Results / History / Settings preserves drafts and running tasks. Opening the panel does not start a backend or generate.
 
 <details>
 <summary>Connection settings and practical defaults</summary>
 
-<p align="center"><a href="../../assets/guide/workflow-settings-zh.png"><img src="../../assets/guide/workflow-settings-zh.png" width="420" alt="Current native Settings panel after model scanning, with connection still unchecked"></a></p>
+<p align="center"><a href="../../assets/guide/070-settings-zh.png"><img src="../../assets/guide/070-settings-zh.png" width="420" alt="0.7.0 source-UI illustration; Chinese interface; not a native Photoshop capture"></a></p>
 
 | Setting | Suggestion |
 | --- | --- |
 | Candidates | 1–4 per batch, generated sequentially; a locked seed increments per candidate |
 | Resolution / steps | Common choices are 768, 992 and 1024; default 25 steps, more is not necessarily better |
 | Context margin | Default 15%, adding reference context only; background, scene and Blend read the full canvas |
-| Edge blend (native pixels) | Local edits, costume repair and character references: automatic width by default; manual 0–1024, 0 disables |
+| Edge blend (native pixels) | Local edits (including clothing presets) and character references: automatic width by default; manual 0–1024, 0 disables |
 | Range guide | A visual hint; Photoshop masks enforce the actual boundary. Some modes disable it |
 | Preserve source transparency | Useful for clothing/material edits; disable when intentionally extending or removing silhouettes |
 | Alignment / color matching | Use where appropriate; do not cancel deliberate lighting changes with color matching |
@@ -69,11 +69,34 @@ Choose a category and preset under Photo presets, then preview its selection gui
 | Landscape | Clear blue sky, sunset sky, distant mountain mist, autumn foliage, water reflection cleanup | Objects and materials; select the relevant area |
 | Landscape | Remove distractions | Built-in removal instruction |
 
+<a id="preset-walkthrough"></a>
+
+#### Walkthrough: recolor clothing
+
+1. Save a Photoshop copy and select only the clothing. Protect the face, hands and text where precise preservation is needed.
+2. Choose **Photo presets → Portrait → Clothing color · navy blue**. Browsing previews guidance and leaves your current prompt unchanged.
+3. Click **Use preset**. Confirm the local-edit task and change the color in the editable prompt if desired.
+4. Preview the range. Orange is editable and blue is protected; outward blending may extend beyond the selection. Disable it when a precise boundary is required.
+5. Generate 1 candidate. Inspect texture, prints, edges and color before applying or exporting.
+
+<p align="center"><a href="../../assets/guide/070-preset-portrait-zh.png"><img src="../../assets/guide/070-preset-portrait-zh.png" width="400" alt="0.7.0 Chinese source-UI illustration: browsing Clothing color retains the existing metal-accessory prompt"></a></p>
+
+#### Walkthrough: sunset sky
+
+1. In your landscape photo copy, select the sky. Keep ridgelines, buildings and branches outside the range or protect them.
+2. Choose **Photo presets → Landscape → Sunset sky**, read its guidance and click **Use preset**. It uses local editing.
+3. Adapt clouds, color and lighting to the photo; preview the range and generate 1 candidate.
+4. Inspect the sky/terrain relationship and thin boundaries. The preset does not automatically relight the landscape.
+
+<p align="center"><a href="../../assets/guide/070-preset-landscape-zh.png"><img src="../../assets/guide/070-preset-landscape-zh.png" width="400" alt="0.7.0 Chinese source-UI illustration: Sunset sky asks for a sky selection and protected ridgelines, buildings and branches"></a></p>
+
+These figures illustrate controls and prompts, not newly generated results. Use a landscape photo you have permission to edit for the sky exercise. For studio background replacement, **select the person to keep without inverting** instead.
+
 Presets do not create selections, read pixels or submit generation. They retain protection, references, candidate count, model, depth and edge settings; check these before generating. Sky presets edit the selected region without automatically relighting the whole image. Ordinary outward blending can still cover pixels beyond the selection: use protection or disable edge blending for precise ridgeline/building preservation. No skin smoothing, face reshaping or identity-lock algorithm is added. Presets are editable starting points; offline tests do not establish photographic quality or installed-panel acceptance.
 
-To protect faces or text, select them and use **Set protection**, then select the edit area (the reference subject for default AI assets). Protection is subtracted with feathers retained. Ordinary editing context does not enlarge the apply boundary. After changing documents, prepare a new selection; history can restore its own range in the original document during the same plugin session.
+To protect faces or text, select them and use **Set protection**, then select the edit area (the reference subject for default AI assets). Protection is subtracted with feathers retained. Context supplies reference pixels; when outward blending is enabled, its extra editable coverage is shown by the orange fade. After changing documents, prepare a new selection; history can restore its own range in the original document during the same plugin session.
 
-**Edge blending in 0.7.0 (0.6.1 packages retain the older local-edit-only behavior):** local object/material editing, costume/prop repair and character reference editing share an outward gradient mask. Automatic width uses 15% of the shorter native selection side, clamped to 8–512 px. Disable automatic width to set 0–1024 px manually; 0 disables blending. Inspect the orange transition in the range preview before generating. Selection interiors retain their coverage, protection is subtracted last, and the Photoshop selection stays unchanged. The fade softens boundaries but cannot remove a color cast throughout the result; “Match unselected context colors” remains a separate preference. Blend lighting/redraw, relighting, backgrounds and assets do not use it. New tasks save the resolved width and versioned raw/effective/protection planes; old history keeps its exact saved formula. Parameter reuse restores its saved radius, or 0 for markerless tasks, with automatic width off.
+**Edge blending in 0.7.0 (0.6.1 packages retain the older local-edit-only behavior):** local object/material editing (including clothing presets) and character reference editing share an outward gradient mask. Legacy costume tasks retain their saved blending behavior. Automatic width uses 15% of the shorter native selection side, clamped to 8–512 px. Disable automatic width to set 0–1024 px manually; 0 disables blending. Inspect the orange transition in the range preview before generating. Selection interiors retain their coverage, protection is subtracted last, and the Photoshop selection stays unchanged. The fade softens boundaries but cannot remove a color cast throughout the result; “Match unselected context colors” remains a separate preference. Blend lighting/redraw, relighting, backgrounds and assets do not use it. New tasks save the resolved width and versioned raw/effective/protection planes; old history keeps its exact saved formula. Parameter reuse restores its saved radius, or 0 for markerless tasks, with automatic width off.
 
 If Undo loses your selection, **Restore last selection and reread** restores the saved range for this document and mode within the same session, then reads current pixels. It does not submit a task or restore old candidates' apply permission.
 
@@ -83,7 +106,7 @@ If Undo loses your selection, **Restore last selection and reread** restores the
 
 ### Place butterflies around a person, not only inside them
 
-Current source uses **Lighting & assets → AI assets** (Portrait in published 0.6.0 / 0.6.1 packages). **Objects and particles** suits butterflies, petals and arcs; **Lighting and atmosphere** suits haze and smoke. These are prompt presets, not separate models.
+Version 0.7.0 uses **Lighting & assets → AI assets** (Portrait in published 0.6.0 / 0.6.1 packages). **Objects and particles** suits butterflies, petals and arcs; **Lighting and atmosphere** suits haze and smoke. These are prompt presets, not separate models.
 
 1. Select the person in Photoshop and keep **Reference subject · independent placement**.
 2. Choose a **Rectangle around the subject**, adjust expansion (50% by default), or explicitly choose **Full canvas**. A second arbitrary hand-drawn placement region is not supported in this increment.
@@ -118,7 +141,7 @@ Older two-image Qwen samples retained people, backgrounds or guide boundaries an
 
 Releasing a slider or confirming a value recalculates locally and saves with the candidate, **without generating again**. Group opacity is also adjustable. Changing the underlying content or position can make saved lighting unsuitable.
 
-The current source supports lighting on tagged RGB8/16 originals with opaque editable coverage. Non-sRGB sources must pass actual ICC extraction and conversion checks. Lighting is calculated and applied in the original document's color space, preserving its source layers and profile. Older non-sRGB history tasks lack the required native color data and need a fresh capture and generation. Explicit AI redraw keeps its existing path; to change a non-sRGB redraw task to a lighting group, select lighting and capture/generate again. Grayscale, CMYK, Lab, 32-bit HDR and unverifiable ICC profiles remain unsupported for lighting groups.
+Version 0.7.0 supports lighting on tagged RGB8/16 originals with opaque editable coverage. Non-sRGB sources must pass actual ICC extraction and conversion checks. Lighting is calculated and applied in the original document's color space, preserving its source layers and profile. Older non-sRGB history tasks lack the required native color data and need a fresh capture and generation. Explicit AI redraw keeps its existing path; to change a non-sRGB redraw task to a lighting group, select lighting and capture/generate again. Grayscale, CMYK, Lab, 32-bit HDR and unverifiable ICC profiles remain unsupported for lighting groups.
 
 Model input remains sRGB8, with gamut and precision loss. The original remains the content base, but lighting and redraw cannot be fully separated: large offsets can leave patches, while hard shadows and narrow rim lights can weaken. Export the raw AI reference separately if needed; the plugin does not switch to redraw automatically. Synthetic Photoshop 27 API checks passed sRGB, Adobe RGB, ProPhoto RGB and the installed image P3 profile at 8/16 bits, including application and undo; installed-panel operation, real inference and photographic quality still require separate acceptance. The published 0.6.1 retains its version-specific limits.
 
@@ -132,7 +155,7 @@ Read failures retain lights and old candidates but cannot authorize a new task w
 2. Read the current image and range, set protection if needed, describe something like “match warm window light from the left,” then generate.
 3. Compare source, blend preview and AI reference. Inspect the subject, edges and detail before applying. The background is context; application changes only the subject minus protection.
 
-New tasks in 0.5.2 default to **Preserve detail · lighting only**, applying a lighting group without a base-image copy. Adjust fidelity/detail locally without resubmission, or explicitly choose **AI redraw subject**. Old history retains its original method. Lighting has the same source requirements as Relighting, with no automatic fallback.
+New tasks in 0.7.0 default to **Preserve detail · lighting only**, applying a lighting group without a base-image copy. Adjust fidelity/detail locally without resubmission, or explicitly choose **AI redraw subject**. Old history retains its original method. Lighting has the same source requirements as Relighting, with no automatic fallback.
 
 Blend reads the full composite and disables alignment and context color matching; ComfyUI omits the grayscale guide. Weak AI lighting cannot be amplified into nonexistent light by extraction. Photographic results can be subtle, and patches/shadows need inspection. The gallery's old Blend example uses **AI redraw**, not the new lighting extraction.
 
@@ -182,7 +205,7 @@ These use the designated `3F3F3F.webp` image and its edited copies. Local edits 
 
 Select thumbnails in Results and use **100% view** to inspect details. Applying creates a masked layer while retaining originals; within the same capture you can replace that round's candidate layer. Lighting output uses a group. One Undo reverses one application; opacity changes add separate history, and panel sliders do not synchronize after Photoshop Undo.
 
-<p align="center"><a href="../../assets/guide/workflow-results-zh.png"><img src="../../assets/guide/workflow-results-zh.png" width="420" alt="Current native Results panel with a real historical scene candidate; original source closed or session ended, export only"></a></p>
+<p align="center"><a href="../../assets/guide/workflow-results-zh.png"><img src="../../assets/guide/workflow-results-zh.png" width="420" alt="Historical native Results panel with a real historical scene candidate; original source closed or session ended, export only"></a></p>
 
 This screenshot loads an existing real scene candidate in the branch's final runtime. Its source is closed or its session has ended, so only export actions are offered. No remote recovery, generation or layer application occurred, and the old candidate's source permissions were not changed.
 
@@ -214,7 +237,7 @@ If cancelling or changing the selection leaves an old candidate showing **Check 
 
 **Assumed sRGB** means an approximation with possible color differences, not recovered ICC. Its notice survives same-session rereads and saved candidates; apply binds only to that copy. References still require current ICC or a reliable declaration from the exact selected file by default.
 
-**Reference fix in current source (not included in published 0.6.1 packages):** For untagged RGB8/16 references, enable “Assume sRGB for this import if the reference has no usable profile” before choosing the file. This interprets color only in a temporary duplicate and preserves the original file and any open original document. Usable current ICC and reliable declarations keep priority. The option resets for every picker action, including cancellation or failure. When approximation is actually used, its notice appears beside the reference and in generated Results and saved History. Reusing history parameters does not restore consent. For accurate color, verify and embed the correct ICC in a copy before importing; the approximation does not establish the original color space.
+**Reference import in 0.7.0:** For untagged RGB8/16 references, enable “Assume sRGB for this import if the reference has no usable profile” before choosing the file. This interprets color only in a temporary duplicate and preserves the original file and any open original document. Usable current ICC and reliable declarations keep priority. The option resets for every picker action, including cancellation or failure. When approximation is actually used, its notice appears beside the reference and in generated Results and saved History. Reusing history parameters does not restore consent. For accurate color, verify and embed the correct ICC in a copy before importing; the approximation does not establish the original color space.
 
 If repeated Undo removes a known working copy's tag, only exact session-proven sources offer **Create recovered-color copy and reread**. This preserves the old document and redo history, creating a new source without granting old candidates new apply permission. Otherwise check color manually. Legacy file grants live in **Settings → File access and privacy**, outside routine reading.
 
@@ -235,4 +258,4 @@ Documents are limited to 45 million pixels and 30,000 per side. CMYK, Lab, Index
 
 **Settings → Host diagnostics → Image round-trip validation** writes to test documents to check selections, masks, Undo and rollback. Save work first; inspect privacy before sharing reports. Technical boundaries are in the [backend contract](../development/BACKEND.en.md) and [relighting implementation](../development/RELIGHT.en.md).
 
-In the current source, an error report has a **Dismiss error** button. Dismissal hides only that report, without deleting tasks/history or cancelling work. A successful matching retry removes the resolved report; unrelated operations and older asynchronous completions cannot clear a newer error. Cancelling the reference picker is not a successful import.
+In 0.7.0, an error report has a **Dismiss error** button. Dismissal hides only that report, without deleting tasks/history or cancelling work. A successful matching retry removes the resolved report; unrelated operations and older asynchronous completions cannot clear a newer error. Cancelling the reference picker is not a successful import.

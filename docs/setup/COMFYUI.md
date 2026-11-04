@@ -20,7 +20,7 @@ PS-AI 直接连接你的 ComfyUI，插件不附带后端或模型。本页从 Wi
 | --- | --- |
 | 已有兼容 ComfyUI | 保留现有安装和权重，先看[模型兼容条件](#model-compatibility)，再[扫描并连接](#connection)；运行中的后端也可使用[配置工具](#environment-tools) |
 | 新装 ComfyUI | 按[后端准备](#backend)下载适合硬件的官方 Portable，再补所选路线真正缺少的节点与模型 |
-| GGUF 主模型 | 0.5.2 与 0.6.0 均有此路线；需要能识别 Qwen 2.1 的 `UnetLoaderGGUF`，见[GGUF 节点基线](#gguf-nodes) |
+| GGUF 主模型 | 0.7.0 保留此路线；旧 0.5.2 也支持；需要能识别 Qwen 2.1 的 `UnetLoaderGGUF`，见[GGUF 节点基线](#gguf-nodes) |
 | 原生 Safetensors 主模型 | 0.6.0 起提供；使用内置 `UNETLoader`，不需要安装 GGUF 扩展包，仍需共享 Qwen 节点、匹配编码器和 RGBA VAE；先看[已测组合](#native-tested) |
 
 1. **Photoshop 27.0 或更高版本。** 本项目记录的宿主是 Windows Photoshop 27.0。先按[首页安装说明](../../README.md#安装发行包)安装 PS-AI 的 CCX 或 Portable 包，在 Photoshop“增效工具”中打开 PS-AI。两种 Portable 是不同东西：PS-AI Portable 是插件，下面的 ComfyUI Portable 是推理后端。
@@ -139,10 +139,10 @@ ComfyUI/
 | `vae` | [qwen_image_2.1_vae_bf16.safetensors](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/df94239739eef7205973a145ffa6f441f7b64e84/vae/qwen_image_2.1_vae_bf16.safetensors) | 0.68 GB |
 
 <p align="center">
-    <a href="../../assets/guide/workflow-settings-zh.png"><img src="../../assets/guide/workflow-settings-zh.png" width="420" alt="发行准备时 Photoshop Preview 设置面板实拍，已扫描模型，连接仍待检查"></a>
+    <a href="../../assets/guide/070-settings-zh.png"><img src="../../assets/guide/070-settings-zh.png" width="420" alt="0.7.0 源码界面示意，不是 Photoshop 实拍"></a>
 </p>
 
-上图是发行准备时在 Photoshop 27 中使用独立 Preview 演示标识的面板实拍，仅执行只读模型扫描；状态仍为“待检查”，没有提交生成。扫描到文件不代表架构兼容，也不构成 0.5.2 完整宿主或全新机器安装验收。
+上图为 0.7.0 当前源码渲染的设置界面示意，不是 Photoshop 实拍。示例映射只说明控件位置，不证明用户本机节点、模型或安装已经通过检查。
 
 这是测试组合，不代表推荐所有用途。生成模型是第三方量化版本，使用前阅读它的模型卡以及上游 [Qwen 许可](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE)：当前许可限定非商业研究／评估，商业用途需另行授权。权重不随插件分发。
 
@@ -192,7 +192,7 @@ Get-FileHash .\ComfyUI\models\vae\qwen_image_2.1_vae_bf16.safetensors -Algorithm
 
 1. 打开“设置 → 模型与连接”，选择 **ComfyUI**。
 2. 本机 Portable 填 `http://127.0.0.1:8188`，与浏览器测试一致；已有安装也可使用它实际监听的 HTTP(S) 源地址，例如 `http://192.168.1.20:8188` 或 `https://comfy.example.com`。
-3. 点“扫描模型”。0.6.0 读取 GGUF 与原生主模型加载器的可用列表，保留明确选择；不会把已选原生路线自动换成 GGUF 预设。未选角色仅按预设完整文件名或子目录内唯一同名文件提示，未解决时手动选择；不会猜测另一个量化版本。0.5.2 仅扫描 GGUF 主模型路线。
+3. 点“扫描模型”。0.7.0 读取 GGUF 与原生主模型加载器的可用列表，保留明确选择；不会把已选原生路线自动换成 GGUF 预设。未选角色仅按预设完整文件名或子目录内唯一同名文件提示，未解决时手动选择；不会猜测另一个量化版本。0.5.2 仅扫描 GGUF 主模型路线。
 4. 查看只读的当前加载路线，再点“连接”，检查所选路线的文件名、共享节点及字段／连接类型后保存配置。源码候选显示“节点已检查”，并提示“所选权重的真实推理尚未验证”；不会把外部验收记录自动绑定到当前文件。改动地址、模型或位深需重新检查；不用的加载器缺失可接受，网络失败或损坏 schema 仍是错误。之后再做自己的真实生成检查。
 
 地址不能带账号密码、路径或查询参数。反向代理需在根路径转发 HTTP 和 WebSocket；HTTPS 需有效证书。插件没有集成 API Key 认证。远端后端会收到图片、参考图和提示词，请勿公开无认证的服务。

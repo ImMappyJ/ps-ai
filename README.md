@@ -8,9 +8,9 @@
 
 [下载 0.7.0 正式版](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.7.0) · [图文教程](docs/usage/USER_GUIDE.md) · [从零配置 ComfyUI](docs/setup/COMFYUI.md#beginner) · [连接云平台](docs/setup/PLATFORMS.md)
 
-<p align="center"><a href="assets/guide/workflow-overview.png"><img src="assets/guide/workflow-overview.png" width="960" alt="PS-AI 概览：旧版 Photoshop 创作面板实拍，以及已有真实布光和换背景输出"></a></p>
+<p align="center"><a href="assets/guide/070-overview.png"><img src="assets/guide/070-overview.png" width="960" alt="0.7.0 源码界面示意，不是 Photoshop 实拍"></a></p>
 
-上图是组合概览：左为发行准备时在 Photoshop 中使用独立 Preview 演示标识的创作面板实拍，右为已有真实 Qwen-Image 2.1 输出与本地合成预览，非单张宿主截图。新界面仅预览并填写草稿，没有提交新的生成。布光示例使用 `3F3F3F.webp` 与生成房间，光效还原 1／细节保护 0.65；效果对比非 Photoshop 回填实拍，见[布光教程](docs/usage/USER_GUIDE.md#relight)。
+上图展示 0.7.0 的三个工作区、12 个预设与指定参考素材 `3F3F3F.webp`；面板依据当前源码渲染，是界面示意，不是 Photoshop 录屏或新预设效果验收。可直接跟着[衣物改色与日落天空教程](docs/usage/USER_GUIDE.md#preset-walkthrough)操作。
 
 > **版本说明：**本页对应 **0.7.0 正式版**。三个工作区收敛为 8 个模式，新增 12 个人像／风光提示预设；同时包含 0.6.1 之后的历史选区恢复、边缘融合、参考图读取、多图层预览和原 ICC 光影组修复。兼容 GGUF／Safetensors 路线与原有安全检查保留。新布局及预设已通过离线测试，安装面板与真实照片效果仍待实测；其他原生 API 记录保留各自的日期和范围。请核对“设置”中的版本／构建标识，历史截图不代表新版逐项验收。
 
@@ -63,7 +63,7 @@ powershell.exe -NoProfile -File .\scripts\install-ccx.ps1 -PackagePath $package
 ## 使用前了解
 
 - **效果需要检查。** 脸、文字、纹理和轮廓可能变化，角色参考不保证身份一致；不提供常规磨皮、去痘精修。光影层与溶图仍可能留下光斑或削弱细窄阴影，真人溶图变化可能偏弱。图片参考特效／氛围尚未达到视觉验收目标。
-- **颜色有边界。** 优先采用 Photoshop 当前 ICC；未标记 RGB8/16 无法确认色彩时，0.5.2 在独立的“假定 sRGB”副本中继续，可能偏色。参考图仍需明确色彩。模型输入为 sRGB8，SDR16 不等于原生 16 位生成或 HDR。
+- **颜色有边界。** 优先采用 Photoshop 当前 ICC；未标记 RGB8/16 无法确认色彩时，0.7.0 在独立的“假定 sRGB”副本中继续，可能偏色。参考图默认要求可靠色彩，也可为本次导入明确允许近似 sRGB；此选择不会随历史复用。模型输入为 sRGB8，SDR16 不等于原生 16 位生成或 HDR。
 - **保留原稿。** 支持 RGB／已知色彩的灰度 8/16 位，文档上限 4500 万像素、单边 30000；不支持 CMYK、Lab、索引色、多通道或 32 位 HDR。来源改变、关闭或会话失效后，旧候选保留导出但不能强行回填；原尺寸交付请应用后通过 Photoshop 导出。
 - **确认数据与许可。** 图片、参考和提示词发送给所选后端；本地服务也可保存输入输出。Qwen 2.1 权重限非商业研究／评估，商业使用需另获授权，见[模型许可](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE)。
 

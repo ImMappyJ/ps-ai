@@ -8,9 +8,9 @@ Change a material, remove distractions, replace backgrounds or clothing, and arr
 
 [Download 0.7.0 stable](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.7.0) · [Illustrated guide](usage/USER_GUIDE.en.md) · [Configure ComfyUI from zero](setup/COMFYUI.en.md#beginner) · [Connect cloud services](setup/PLATFORMS.en.md)
 
-<p align="center"><a href="../assets/guide/workflow-overview.png"><img src="../assets/guide/workflow-overview.png" width="960" alt="PS-AI overview: earlier Create panel in Photoshop and existing real relighting and background outputs"></a></p>
+<p align="center"><a href="../assets/guide/070-overview.png"><img src="../assets/guide/070-overview.png" width="960" alt="0.7.0 source-UI illustration; Chinese interface; not a native Photoshop capture"></a></p>
 
-This composed overview pairs a native Photoshop Create panel captured during release preparation under a separate Preview demonstration identity with existing real Qwen-Image 2.1 outputs and local composite previews; it is not one host screenshot. The new interface was used for preview and a draft prompt, without submitting new generation. Relighting uses `3F3F3F.webp` and a generated room, fidelity 1 / detail protection 0.65. The output comparison is not a Photoshop apply screenshot. See [relighting](usage/USER_GUIDE.en.md#relight).
+The overview shows the three 0.7.0 workspaces, 12 presets and the designated `3F3F3F.webp` reference. The panel is rendered from current source: a UI illustration, not a Photoshop recording or a new preset-quality test. Follow the [clothing-color and sunset-sky walkthroughs](usage/USER_GUIDE.en.md#preset-walkthrough).
 
 > **Version note:** This page covers **0.7.0 stable**: eight modes in three workspaces and 12 Portrait/Landscape prompt presets, plus post-0.6.1 historical-selection recovery, edge blending, reference import, multilayer preview and original-ICC lighting-group fixes. Compatible GGUF/Safetensors routes and existing safety checks remain. The new layout/presets have offline coverage; installed panels and photographic quality remain unverified. Earlier native API records retain their dates and scope. Check Settings for the version/build identity; historical screenshots do not establish acceptance of this release.
 
@@ -63,7 +63,7 @@ Quit Photoshop and back up settings and required PNGs before updating. Replace o
 ## Before you use it
 
 - **Inspect results.** Faces, text, texture and silhouettes may change; character references do not guarantee identity. Routine skin retouching is outside scope. Relighting and blending can leave lighting patches or weaken narrow shadows; photographic blending can be subtle. Image-context effects/atmosphere have not met the visual acceptance target.
-- **Color has limits.** Photoshop's current ICC takes priority. For unresolved untagged RGB8/16, 0.5.2 continues in a separate **Assumed sRGB** copy, with possible color differences. References still need verified color. Model input is sRGB8; SDR16 is not native 16-bit generation or HDR.
+- **Color has limits.** Photoshop's current ICC takes priority. For unresolved untagged RGB8/16, 0.7.0 continues in a separate **Assumed sRGB** copy, with possible color differences. Reference import defaults to verified color; a one-use explicit approximate-sRGB option is available and is never restored by history reuse. Model input is sRGB8; SDR16 is not native 16-bit generation or HDR.
 - **Keep originals.** RGB and profiled Grayscale 8/16-bit are supported, up to 45 million pixels and 30,000 per side; CMYK, Lab, Indexed, Multichannel and 32-bit HDR are unsupported. Changed, closed or previous-session sources cannot receive stale candidates, which remain exportable. Apply and export through Photoshop for original-size delivery.
 - **Check data and licenses.** Images, references and prompts go to the chosen backend; local services may also retain them. Qwen 2.1 weights are restricted to noncommercial research/evaluation; commercial use needs separate authorization. See the [model license](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE).
 

@@ -20,7 +20,7 @@ Make two choices before downloading:
 | --- | --- |
 | Existing compatible ComfyUI | Keep the installation and weights, check [model compatibility](#model-compatibility), then [scan and connect](#connection); a running service can also use the [configuration tools](#environment-tools) |
 | New ComfyUI installation | Follow [backend preparation](#backend) for official Portable matching your hardware, then add only the nodes/models missing for your chosen route |
-| GGUF diffusion weights | Available in 0.5.2 and 0.6.0; requires `UnetLoaderGGUF` capable of recognizing Qwen 2.1; see the [GGUF node baseline](#gguf-nodes) |
+| GGUF diffusion weights | Retained in 0.7.0 and available in older 0.5.2; requires `UnetLoaderGGUF` capable of recognizing Qwen 2.1; see the [GGUF node baseline](#gguf-nodes) |
 | Native Safetensors diffusion weights | Available from 0.6.0; built-in `UNETLoader` needs no GGUF extension package but still requires shared Qwen nodes, a matching encoder and RGBA VAE; see the [tested combination](#native-tested) |
 
 1. **Photoshop 27.0 or later.** The recorded host is Windows Photoshop 27.0. Follow the [README installation steps](../README.en.md#install-a-release-package) for the PS-AI CCX or Portable package, then open PS-AI from Photoshop's Plugins menu. PS-AI Portable is the plugin; ComfyUI Portable below is a separate inference backend.
@@ -109,7 +109,7 @@ Reuse existing components that meet these requirements with their actual filenam
 
 | Component | Requirements for replacement |
 | --- | --- |
-| Diffusion model | Compatible Qwen-Image 2.1 architecture and fixed `QwenImage21Cache` / `KSampler` semantics (`cfg=1`, `euler` / `simple`, `denoise=1`). A compatible `UnetLoaderGGUF` loads `.gguf`; this source branch adds `.safetensors` → `UNETLoader(weight_dtype=default)`. Format selects a loader, not a compatible architecture. Turbo/LoRA requiring other sampling settings is not a direct replacement merely because its name contains “2.1.” |
+| Diffusion model | Compatible Qwen-Image 2.1 architecture and fixed `QwenImage21Cache` / `KSampler` semantics (`cfg=1`, `euler` / `simple`, `denoise=1`). A compatible `UnetLoaderGGUF` loads `.gguf`; released 0.7.0 also supports `.safetensors` → `UNETLoader(weight_dtype=default)`. Format selects a loader, not a compatible architecture. Turbo/LoRA requiring other sampling settings is not a direct replacement merely because its name contains “2.1.” |
 | Vision / text encoder | Compatible Qwen3-VL **8B** `.safetensors` meeting `CLIPLoader(type=qwen_image, device=default)` and `TextEncodeQwenImage21` text, multi-image and conditioning contracts. The current branch does not accept 4B, Qwen2.5-VL or encoder GGUF as substitutes; see the [pinned core's encoder branch](https://github.com/Comfy-Org/ComfyUI/blob/8ff6dc384ba5c410266b40e137799e049459d4f2/comfy/sd.py#L1955). |
 | VAE | Compatible `.safetensors` loadable by `VAELoader`, matching Qwen 2.1 latent format, scaling and normalization. The [official configuration](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/vae/config.json) specifies 64 latent channels, 16× spatial scaling and four-channel RGBA input/output. Editing uses this same VAE in `TextEncodeQwenImage21` to encode the source and in `VAEDecode` to decode the result; an arbitrary image VAE is insufficient. |
 
@@ -139,10 +139,10 @@ ComfyUI/
 | `vae` | [qwen_image_2.1_vae_bf16.safetensors](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/df94239739eef7205973a145ffa6f441f7b64e84/vae/qwen_image_2.1_vae_bf16.safetensors) | 0.68 GB |
 
 <p align="center">
-  <a href="../../assets/guide/workflow-settings-zh.png"><img src="../../assets/guide/workflow-settings-zh.png" width="420" alt="Current native Photoshop Settings panel after scanning models, with connection still unchecked; Chinese UI"></a>
+  <a href="../../assets/guide/070-settings-zh.png"><img src="../../assets/guide/070-settings-zh.png" width="420" alt="0.7.0 source-UI illustration; Chinese interface; not a native Photoshop capture"></a>
 </p>
 
-This native Photoshop 27 screenshot was captured during release preparation under a separate Preview demonstration identity. Only read-only model scanning was performed; connection remains unchecked and no generation was submitted. File visibility does not establish architecture compatibility or complete 0.5.2 host/clean-machine acceptance.
+This 0.7.0 Settings figure is rendered from current source, not captured in Photoshop. Example mappings illustrate the controls and do not establish node, model or installation acceptance on your machine.
 
 This is a tested combination, not a recommendation for every use. The diffusion model is a third-party quantization. Read its model card and the upstream [Qwen license](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE): current terms permit non-commercial research / evaluation; commercial use requires separate permission. Weights are not distributed with the plugin.
 
@@ -192,7 +192,7 @@ The source is Comfy-Org/Qwen-Image-2.1 revision `aacf31a6d48e707f352ecba714cee06
 
 1. Open **Settings → Backend and models** and choose **ComfyUI**.
 2. For local Portable, enter `http://127.0.0.1:8188`, matching the browser check. Existing installations can use their actual HTTP(S) origin, such as `http://192.168.1.20:8188` or `https://comfy.example.com`.
-3. **Scan models**. Version 0.6.0 reads available GGUF and native diffusion-loader lists and preserves explicit choices; it never replaces a selected native route with the GGUF preset automatically. Unselected roles receive only exact preset or unique nested-basename suggestions. Choose unresolved custom files yourself; a different quantization is never guessed. Published 0.5.2 scans only the GGUF diffusion route.
+3. **Scan models**. Version 0.7.0 reads available GGUF and native diffusion-loader lists and preserves explicit choices; it never replaces a selected native route with the GGUF preset automatically. Unselected roles receive only exact preset or unique nested-basename suggestions. Choose unresolved custom files yourself; a different quantization is never guessed. Published 0.5.2 scans only the GGUF diffusion route.
 4. Review the read-only loading route, then choose **Connect** to check selected filenames, shared nodes, fields and socket types and save settings. The panel reports **Nodes checked**, with a warning that the selected weights' real inference remains unverified; external acceptance records are not automatically assigned to your files. Address/model/depth changes require a new check. An absent unused loader is acceptable; network failures and malformed schemas remain errors. Then validate your own real generation.
 
 Addresses cannot contain credentials, paths or query strings. A reverse proxy must forward HTTP and WebSocket at its root; HTTPS needs a valid certificate. API-key authentication is not integrated. Remote backends receive images, references and prompts; keep unauthenticated services private.
