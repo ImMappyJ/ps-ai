@@ -10,6 +10,7 @@ body{
   font-family:system-ui;font-size:12px;line-height:1.45;overflow:hidden;
 }
 #panel-shell{display:flex;flex-direction:column;height:100%;min-height:0;min-width:0}
+#photo-preset-preview{white-space:pre-wrap;max-height:180px;overflow-y:auto}#photo-presets .fields label{min-width:0}#photo-presets select{width:100%}
 #pending-notice{flex-shrink:0;margin:0 0 8px;padding-left:8px;border-color:var(--warning)}#pending-summary{margin:0 0 4px;color:var(--warning)}#pending-notice button{height:auto;min-height:28px;white-space:normal;font-size:11px}
 #history-id{font-size:11px}#history-details{white-space:pre-wrap;word-wrap:break-word}#detach-confirmation{margin-top:8px;border-color:var(--warning)}#detach-warning{color:var(--warning)}#detach-confirmation button{height:auto;min-height:32px;padding:6px;white-space:normal;font-size:11px}
 #view-history{overflow:hidden}.history-page{display:flex;flex-direction:column;height:100%;min-height:0;min-width:0}

@@ -3,6 +3,9 @@ import type {Language} from '../infrastructure/config/profile';
 // Chinese source messages are stable keys. Model prompts and saved parameter values
 // are deliberately independent of the display language.
 export const english:Record<string,string>={
+  '照片修图':'Photo editing','光影与素材':'Lighting & assets','风光':'Landscape',
+  '场景预设（可选）':'Photo presets (optional)','选择预设':'Choose a preset','使用预设':'Use preset',
+  '先预览，再使用：切换任务并替换描述，不会自动生成。请按说明准备选区，生成后检查效果。':'Preview first, then use: switches task and replaces the prompt without generating. Prepare the selection as described and inspect the generated result.',
   '恢复此历史选区':'Restore this saved selection','复用参数与选区':'Reuse parameters and selection',
   '此历史没有完整、可验证的原始选区，请重新圈选；已有候选仍可导出。':'This record has no complete, verifiable original selection. Select the area again; existing candidates can still be exported.',
   '此历史选区需在本次会话的原文档中恢复；请切回原文档或重新圈选。':'Restore this selection in its original document during this plugin session. Switch back to that document or select a new area.',

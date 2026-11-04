@@ -6,7 +6,7 @@
 
 PS-AI 直接连接你的 ComfyUI，插件不附带后端或模型。本页从 Windows + NVIDIA 的环境选择讲到第一张结果。云端 API 请看[平台配置](PLATFORMS.md)。
 
-> **先核对版本：**请使用 [0.6.0 正式版](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.6.0)，支持 GGUF 与兼容的 `.safetensors` 原生路线。指定 INT8 组合的实测边界见[实测示例](#native-tested)；用户已反馈候选测试成功并批准发布，不代表所有安装方式或模型均已验收。旧 0.5.2 包仅支持 GGUF，不会因修改设置获得新路线。
+> **先核对版本：**请使用 [0.7.0 正式版](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.7.0)，支持 GGUF 与兼容的 `.safetensors` 原生路线。指定 INT8 组合的实测边界见[实测示例](#native-tested)；0.6.0 的用户候选测试反馈不代表 0.7.0 的安装面板、预设或所有模型均已验收。旧 0.5.2 包仅支持 GGUF，不会因修改设置获得新路线。
 
 起步顺序：选已有环境或新装环境 → 按版本选 GGUF 或原生路线 → 准备对应节点与三个模型角色 → 启动并连接 → 真实生成、检查新图层并撤销。
 
@@ -25,7 +25,7 @@ PS-AI 直接连接你的 ComfyUI，插件不附带后端或模型。本页从 Wi
 
 1. **Photoshop 27.0 或更高版本。** 本项目记录的宿主是 Windows Photoshop 27.0。先按[首页安装说明](../../README.md#安装发行包)安装 PS-AI 的 CCX 或 Portable 包，在 Photoshop“增效工具”中打开 PS-AI。两种 Portable 是不同东西：PS-AI Portable 是插件，下面的 ComfyUI Portable 是推理后端。
 2. **一块兼容的 NVIDIA 显卡、可用驱动及足够空间。** 本项目参考机器为 RTX 5080 16 GiB 显存、约 48 GB 内存；这不是最低配置。已测 GGUF 示例合计约 14.63 GB，原生 INT8 示例约 17.28 GB，可复用相同编码器与 VAE；其他组合另核对磁盘、显存和算子支持。另留 Portable、解压副本、Python 依赖、下载缓存与生成图片的空间。其他显卡、CPU、macOS 未完成相同验证。
-3. **匹配插件版本与教程。** 从 [0.6.0 正式版](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.6.0)选择 CCX 或 Portable，无需编译源码。核对“设置”中的版本／构建标识及包附带说明；旧 0.5.2 包不支持原生路线。版本匹配不代表你的机器或模型已经通过实测，后面仍需完成小范围生成、应用与撤销检查。
+3. **匹配插件版本与教程。** 从 [0.7.0 正式版](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.7.0)选择 CCX 或 Portable，无需编译源码。核对“设置”中的版本／构建标识及包附带说明；旧 0.5.2 包不支持原生路线。版本匹配不代表你的机器或模型已经通过实测，后面仍需完成小范围生成、应用与撤销检查。
 
 本地已打包插件 + ComfyUI 的默认 8 位路径不需要 Node.js、全局 Python、Git、ComfyUI-Manager 或手动导入工作流。Node.js 24+ 只在[云平台本机适配服务](PLATFORMS.md)或源码构建时需要。环境工具包是可选检查／配置工具，不会替你安装后端、依赖或下载模型。本页是操作说明，不是一次全新机器安装或新版本宿主验收记录。
 

@@ -6,13 +6,13 @@
 
 Change a material, remove distractions, replace backgrounds or clothing, and arrange new lighting. Compare candidates before applying to a new layer with an editable mask. Original layers remain intact; one Undo reverses one application.
 
-[Download 0.6.1 stable](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.6.1) · [Illustrated guide](usage/USER_GUIDE.en.md) · [Configure ComfyUI from zero](setup/COMFYUI.en.md#beginner) · [Connect cloud services](setup/PLATFORMS.en.md)
+[Download 0.7.0 stable](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.7.0) · [Illustrated guide](usage/USER_GUIDE.en.md) · [Configure ComfyUI from zero](setup/COMFYUI.en.md#beginner) · [Connect cloud services](setup/PLATFORMS.en.md)
 
-<p align="center"><a href="../assets/guide/workflow-overview.png"><img src="../assets/guide/workflow-overview.png" width="960" alt="PS-AI overview: current Create panel in Photoshop and existing real relighting and background outputs"></a></p>
+<p align="center"><a href="../assets/guide/workflow-overview.png"><img src="../assets/guide/workflow-overview.png" width="960" alt="PS-AI overview: earlier Create panel in Photoshop and existing real relighting and background outputs"></a></p>
 
 This composed overview pairs a native Photoshop Create panel captured during release preparation under a separate Preview demonstration identity with existing real Qwen-Image 2.1 outputs and local composite previews; it is not one host screenshot. The new interface was used for preview and a draft prompt, without submitting new generation. Relighting uses `3F3F3F.webp` and a generated room, fidelity 1 / detail protection 0.65. The output comparison is not a Photoshop apply screenshot. See [relighting](usage/USER_GUIDE.en.md#relight).
 
-> **Version note:** This page covers **0.6.1 stable**, adding adaptive large-Blend analysis budgets and outward gradient masks only for ordinary editing. Compatible GGUF/Safetensors diffusion weights and unified AI assets remain; older 0.5.2 packages are GGUF-only. New behavior has offline coverage; real photos, installed-panel interaction and edge quality still need acceptance. Memory guards and existing color support remain unchanged. The 0.6.0 user candidate test does not establish acceptance of these new changes. Live cloud API generation remains unvalidated. Check the version/build identity in Settings. Screenshots retain their historical captions.
+> **Version note:** This page covers **0.7.0 stable**: eight modes in three workspaces and 12 Portrait/Landscape prompt presets, plus post-0.6.1 historical-selection recovery, edge blending, reference import, multilayer preview and original-ICC lighting-group fixes. Compatible GGUF/Safetensors routes and existing safety checks remain. The new layout/presets have offline coverage; installed panels and photographic quality remain unverified. Earlier native API records retain their dates and scope. Check Settings for the version/build identity; historical screenshots do not establish acceptance of this release.
 
 First choose an existing or new environment, select the GGUF or native Safetensors route supported by your build, and reuse matching components for the three roles. Follow [Configure ComfyUI from zero](setup/COMFYUI.en.md#beginner). One native INT8 combination has completed real inference and PNG checks. Its real outputs also passed bounded Photoshop API checks on small RGB8/16 fixtures and one large source. Installed panels, photographic application and other combinations require separate acceptance; see the [tested scope](setup/COMFYUI.en.md#native-tested).
 
@@ -37,14 +37,14 @@ The local workflow is specific to Qwen 2.1. Diffusion model, vision/text encoder
 
 ## Install a release package
 
-Choose one plugin package from [Releases](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.6.0) and verify its matching `.sha256`:
+Choose one plugin package from [Releases](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.7.0) and verify its matching `.sha256`:
 
 | Format | Installation |
 | --- | --- |
-| **CCX** | Install Adobe Creative Cloud desktop, double-click `ps-ai-0.6.0-experimental.ccx` and follow Adobe's prompts. Restart and open **Plugins → PS-AI** |
-| **Portable** | Fully quit Photoshop, extract `ps-ai-0.6.0-portable-experimental.zip`, and put the entire `PS-AI-FOR-ME` folder in Photoshop's `Plug-ins`. Check that `manifest.json` sits directly inside it, then restart |
+| **CCX** | Install Adobe Creative Cloud desktop, double-click `ps-ai-0.7.0-experimental.ccx` and follow Adobe's prompts. Restart and open **Plugins → PS-AI** |
+| **Portable** | Fully quit Photoshop, extract `ps-ai-0.7.0-portable-experimental.zip`, and put the entire `PS-AI-FOR-ME` folder in Photoshop's `Plug-ins`. Check that `manifest.json` sits directly inside it, then restart |
 
-Portable has prior Windows PS 27.0 evidence and this release's user-reported successful test. Other hosts, CCX installation and loading with developer mode disabled have no case-by-case acceptance record for this release. Archive names retain the historical `experimental` suffix; the GitHub release channel is stable. Do not open CCX as an image or copy it into Plug-ins. Environment tools contain scripts and instructions, without ComfyUI or weights.
+Portable has historical Windows PS 27.0 evidence. CCX/Portable installation of 0.7.0, other hosts and loading with developer mode disabled have no case-by-case acceptance record for this release. Archive names retain the historical `experimental` suffix; the GitHub release channel is stable. Do not open CCX as an image or copy it into Plug-ins. Environment tools contain scripts and instructions, without ComfyUI or weights.
 
 <details>
 <summary>CCX does not open, updating and uninstalling</summary>

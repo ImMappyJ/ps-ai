@@ -7,8 +7,9 @@
 <div id="view-create" class="panel-page" data-panel-page="create" role="tabpanel" aria-labelledby="nav-create">
 <div id="workflow-guide" class="workflow-guide" role="status"><div class="workflow-copy"><span class="eyebrow" data-i18n="下一步">下一步</span><h3 id="workflow-title"></h3><p id="workflow-help" class="hint"></p></div><button id="workflow-next"></button></div>
 <h3 class="step-heading" data-i18n="1 · 选择任务">1 · 选择任务</h3>
-<div class="row tabs workspace-tabs"><button data-i18n="局部修图" id="tab-local" class="active">局部修图</button><button id="tab-cosplay" data-i18n="人像">人像</button><button data-i18n="生图" id="tab-t2i">生图</button></div>
+<div class="row tabs workspace-tabs"><button data-i18n="照片修图" id="tab-local" class="active">照片修图</button><button id="tab-cosplay" data-i18n="光影与素材">光影与素材</button><button data-i18n="生图" id="tab-t2i">生图</button></div>
 <label><span data-i18n="任务模式">任务模式</span><select id="mode"></select></label>
+<section id="photo-presets" class="form-section"><div class="row fields"><label><span data-i18n="场景预设（可选）">场景预设（可选）</span><select id="preset-category"><option value="portrait" selected data-i18n="人像">人像</option><option value="landscape" data-i18n="风光">风光</option></select></label><label><span data-i18n="选择预设">选择预设</span><select id="photo-preset"></select></label></div><p id="photo-preset-preview" class="hint" style="display:none"></p><button id="apply-photo-preset" data-i18n="使用预设" disabled>使用预设</button><p class="hint" data-i18n="先预览，再使用：切换任务并替换描述，不会自动生成。请按说明准备选区，生成后检查效果。">先预览，再使用：切换任务并替换描述，不会自动生成。请按说明准备选区，生成后检查效果。</p></section>
 <p id="mode-help" class="hint" style="display:none"></p>
 <div id="asset-input-group" style="display:none">
 <label><span data-i18n="素材类型">素材类型</span><select id="asset-preset"><option value="objects" selected data-i18n="物体与粒子">物体与粒子</option><option value="atmosphere" data-i18n="光效与氛围">光效与氛围</option></select></label>
