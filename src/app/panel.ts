@@ -30,6 +30,7 @@ import {planRelightMemory,downsampleSnapshotMask,resampleGray} from '../imaging/
 import {observeRelightSource} from './relight-source-monitor';
 import {suggestModelMappings} from '../diagnostics/model-discovery';
 import {HistoryPreview} from './history-preview';
+import {taskModes as modes,currentTask,photoPresets} from './photo-presets';
 import {historySelectionScope,readHistorySelection} from './history-selection';
 import {loadCandidateSnapshot} from './candidate-preparation';
 declare const require:(name:string)=>any;
@@ -62,7 +63,6 @@ let activeOperation:OperationContext|undefined,panelVisible=false,initialization
 let historyDetail=false,historyScrollTop=0;
 const views=new PanelViews(document,()=>{clearConfirmation=undefined;historyUi();renderDiagnostic();}),candidatePreview=new CandidatePreview(),sourceCaption=new SourceCaption(el('source-info'),el('source-color-warning'));
 el('build-id').textContent=BUILD_ID;
-const modes={local:[['edit','局部物体 / 材质修改'],['remove','移除杂物'],['background','换背景（选择主体）']],cosplay:[['effect','AI 素材'],['costume','服装 / 道具修复'],['reference','角色参考辅助'],['scene','场景替换'],['relight','光影重塑'],['blend','溶图']],t2i:[['generate','文字生图']]};
 let workspace:Workspace='local',capture:Capture|undefined,protection:Protection|undefined,reference:ReferenceRaster|undefined;
 let lastSelection:{range:SelectionRange;workspace:Workspace;mode:string}|undefined;
 let current:JobRecord|undefined,busy=false,stopBatch=false,zoomed=false;
@@ -169,6 +169,7 @@ function assetContext():AssetContext|undefined {
 function assetPlacement():AssetPlacement|undefined {return assetContext()==='subject-v1'?validateAssetPlacement({version:'subject-v1',scope:el('asset-scope').value,occlusion:el('asset-occlusion').value}):undefined;}
 function captureMargin():number {return Number(el(assetContext()==='subject-v1'?'asset-margin':'margin').value)/100;}
 function inputUi(){
+  photoPresetUi();
   el('reference-color-warning').style.display=reference?.colorReason==='assumed-srgb'?'block':'none';
   el('reference-color-warning').textContent=reference?.colorReason==='assumed-srgb'?t('参考图色彩：假定 sRGB；颜色可能有偏差。'):'';
   const mode=el('mode').value,blend=mode==='blend',structuredRelight=mode==='relight',nextPromptKind=blend?'blend':mode==='remove'||structuredRelight?undefined:'ordinary';
@@ -269,7 +270,20 @@ function candidateUi(){
   el('applied-opacity').style.display=applied?'flex':'none';
 }
 function invalidateCapture(){invalidateBlendProcessing();capture=undefined;const visible=el('selection-previews').style.display!=='none';el('selection-previews').style.display='none';if(visible)sourceCaption.show('范围参数已改变，请重新预览选区');}
-function setWorkspace(value:Workspace,mode=modes[value][0][0]){if(mode==='atmosphere'){mode='effect';el('asset-preset').value='atmosphere';}if(workspace!==value||el('mode').value!==mode)invalidateCapture();workspace=value;const select=el('mode');select.innerHTML='';for(const [id,label] of modes[value])option(select,id,label);select.value=mode;for(const w of ['local','cosplay','t2i'])el(`tab-${w}`).className=w===value?'active':'';if(value==='t2i')el('destination').value='document';else el('destination').value='selection';inputUi();}
+function setWorkspace(value:Workspace,mode=modes[value][0][0]){if(mode==='atmosphere')el('asset-preset').value='atmosphere';({workspace:value,mode}=currentTask(value,mode));if(workspace!==value||el('mode').value!==mode)invalidateCapture();workspace=value;const select=el('mode');select.innerHTML='';for(const [id,label] of modes[value])option(select,id,label);select.value=mode;for(const w of ['local','cosplay','t2i'])el(`tab-${w}`).className=w===value?'active':'';if(value==='t2i')el('destination').value='document';else el('destination').value='selection';inputUi();}
+function selectedPhotoPreset(){return photoPresets.find(p=>p.id===el('photo-preset').value&&p.category===el('preset-category').value);}
+function presetCopy(copy:{zh:string;en:string}):string{return settings.language==='en-US'?copy.en:copy.zh;}
+function renderPhotoPresets(){
+  const select=el('photo-preset'),previous=select.value;select.innerHTML='';option(select,'','选择预设');
+  for(const preset of photoPresets.filter(p=>p.category===el('preset-category').value))option(select,preset.id,presetCopy(preset.label));
+  select.value=photoPresets.some(p=>p.id===previous&&p.category===el('preset-category').value)?previous:'';photoPresetUi();
+}
+function photoPresetUi(){
+  const preset=selectedPhotoPreset(),blocked=busy||sourceCaptures>0;
+  el('preset-category').disabled=blocked;el('photo-preset').disabled=blocked;el('apply-photo-preset').disabled=blocked||!preset;
+  el('photo-preset-preview').style.display=preset?'block':'none';
+  el('photo-preset-preview').textContent=preset?[presetCopy(preset.selection),...(preset.prompt?[presetCopy(preset.prompt)]:[])].join('\n\n'):'';
+}
 function lock(value:boolean){busy=value;for(const id of ['generate','capture','restore-selection','protect','clear-protection','reference','reference-assume-srgb','clear-reference','tab-local','tab-cosplay','tab-t2i','mode','prompt','output-depth','usage','guide','preserve-alpha','align-subject','match-color','destination','count','steps','resolution','seed','lock-seed','margin','p0','recover','load-history','restore-history-selection','repeat-history','apply','new-document','connect','scan-models','save-settings','import-settings','export-settings','model-unet','model-clip','model-vae','backend-url','backend-kind','gateway-model','api-key','save-key','clear-key','stop-relay','language','auto-view-results','open-setup','close-setup','setup-connect','setup-check','setup-example','relight-scope','remember-source-access','forget-source-access'])el(id).disabled=value;candidateUi();renderSetup();inputUi();relightWorkbench?.refreshAvailability();}
 function showGatewayModels(selected=settings.gatewayModel??DEFAULT_GATEWAY_MODEL){const select=el('gateway-model');select.innerHTML='';for(const id of new Set([selected,...(gatewayCatalogBase===el('backend-url').value?gatewayCatalog?.models.map(m=>m.id)??[]:[])]))option(select,id,id);select.value=selected;}
 function showSettings(available?:Record<'unet'|'clip'|'vae',string[]>,value=settings) {for(const key of ['unet','clip','vae'] as const){const select=el(`model-${key}`);select.innerHTML='';for(const name of new Set([value.models[key],...(available?.[key]??[])]))option(select,name,name);select.value=value.models[key];}displayedConnection=connectionId(value);draftConnections=value.connections;el('backend-kind').value=displayedConnection;el('backend-url').value=value.baseUrl;el('output-depth').value=String(value.outputDepth??8);el('auto-view-results').checked=value.autoViewResults!==false;showGatewayModels(value.gatewayModel??(isPlatform(displayedConnection)?PLATFORMS[displayedConnection].model:DEFAULT_GATEWAY_MODEL));el('api-key').value='';void keyStatus();inputUi();}
@@ -289,7 +303,7 @@ function renderLanguage(){
   connection(connectionState);sourceCaption.render();renderModelScanReport();
   // UXP keeps the collapsed caption when existing option text is edited.
   el('source-access-status').textContent=t(sourceAccessMessage);
-for(const id of ['usage','destination','output-depth','backend-kind','relight-scope','asset-input','asset-preview-view','asset-preset','asset-scope','asset-occlusion','blend-output-kind','blend-result-output']){
+for(const id of ['usage','destination','output-depth','backend-kind','relight-scope','asset-input','asset-preview-view','asset-preset','asset-scope','asset-occlusion','blend-output-kind','blend-result-output','preset-category']){
     const select=el(id),value=select.value;
     const items=Array.from(select.querySelectorAll('option')) as HTMLOptionElement[];
     const labels=items.map(node=>[node.getAttribute('value')!,node.getAttribute('data-i18n')!]);
@@ -297,7 +311,7 @@ for(const id of ['usage','destination','output-depth','backend-kind','relight-sc
     for(const [key,label] of labels){const node=document.createElement('option');node.setAttribute('value',key);node.setAttribute('data-i18n',label);node.textContent=t(label);select.appendChild(node);}
     select.value=value;
   }
-  const mode=el('mode').value;el('mode').innerHTML='';for(const [id,label] of modes[workspace])option(el('mode'),id,label);el('mode').value=mode;
+  const mode=el('mode').value;el('mode').innerHTML='';for(const [id,label] of modes[workspace])option(el('mode'),id,label);el('mode').value=mode;renderPhotoPresets();
   for(const name of Object.keys(foldLabels))fold(name,el(`${name}-body`).style.display!=='none');
   const index=el('candidate-select').value;el('candidate-select').innerHTML='';candidates.forEach((c,i)=>option(el('candidate-select'),String(i),t('候选 {0} · {1}×{2}',i+1,c.image.width,c.image.height)));if(candidates.length)el('candidate-select').value=index;
   el('zoom').textContent=zoomed?t('适应预览'):t('100% 查看');inputUi();renderSetup();candidateUi();
@@ -1229,7 +1243,15 @@ on('cancel',cancelSelected);on('open-pending',()=>showPending());on('next-pendin
 on('history-cancel',async()=>{if(!busy)await cancelSelected();});
 on('clear-history',()=>clearHistory());on('confirm-clear-history',()=>clearHistory(true));on('keep-history',async()=>{if(!busy){clearConfirmation=undefined;historyUi();}});on('retry-history-cleanup',retryHistoryCleanup);
 on('stop-tracking',()=>stopTracking());on('confirm-stop-tracking',()=>stopTracking(true));on('keep-tracking',async()=>{detachAcknowledgedId=undefined;historyUi();});
-el('mode').addEventListener('change',()=>{invalidateCapture();inputUi();if(workspace==='cosplay'&&el('mode').value==='reference'){fold('reference',true);el('guide').checked=false;status(t("角色参考默认使用原图 + 参考图；范围辅助可能影响颜色，请按需试验"));}});
+el('mode').addEventListener('change',()=>{invalidateCapture();inputUi();if(el('mode').value==='reference'){fold('reference',true);el('guide').checked=false;status(t("角色参考默认使用原图 + 参考图；范围辅助可能影响颜色，请按需试验"));}});
+el('preset-category').addEventListener('change',()=>{if(!busy&&sourceCaptures===0)renderPhotoPresets();});
+el('photo-preset').addEventListener('change',photoPresetUi);
+on('apply-photo-preset',async()=>{
+  if(busy||sourceCaptures>0)return;const preset=selectedPhotoPreset();if(!preset)return;
+  setWorkspace(preset.mode==='blend'?'cosplay':'local',preset.mode);invalidateCapture();
+  if(preset.prompt)el('prompt').value=presetCopy(preset.prompt);
+  inputUi();status(presetCopy(preset.selection));
+});
 el('destination').addEventListener('change',inputUi);
 for(const id of ['prompt','count','resolution','destination','backend-url','model-unet','model-clip','model-vae','gateway-model'])for(const event of ['input','change'])el(id).addEventListener(event,workflowUi);
 el('asset-input').addEventListener('change',()=>{invalidateCapture();inputUi();});

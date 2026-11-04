@@ -4,7 +4,7 @@
 
 Start with a small edit: **connect → read the range → describe and generate → inspect and apply**. [Install the plugin](../README.en.md#install-a-release-package), then [configure ComfyUI from zero](../setup/COMFYUI.en.md#beginner) for a local backend, or connect a [cloud service](../setup/PLATFORMS.en.md).
 
-> This guide covers **0.6.0 stable**, supporting compatible GGUF/Safetensors diffusion weights. On 2026-10-31 the user reported successful candidate testing and approved release; no case-by-case record establishes every mode, installation method or clean-machine acceptance. Match the package with the version/build identity in Settings. Historical interfaces, real outputs and local composite previews are labeled separately.
+> This guide covers **0.7.0 stable**, including eight-mode navigation and 12 Portrait/Landscape prompt presets. The user authorized publication on 2026-11-04. The new layout and presets have offline validation; installed-panel operation and photographic quality remain unverified. Earlier native API/model evidence retains its recorded scope. Check the version/build identity; historical screenshots and outputs retain their original captions.
 
 Create, Settings and Results are native PS27 screenshots captured during release preparation under a separate Preview demonstration identity: source preview, read-only model scanning and existing historical candidate loading were performed, without new generation. The Relighting interface screenshot remains historical 0.5.0. Screenshots use the Chinese interface.
 
@@ -44,22 +44,36 @@ Settings JSON transfers addresses, model mappings and language, without keys, mo
 
 ## Choose a mode and selection
 
+**0.7.0 layout:** Photo editing, Lighting & assets and Generate contain 8 modes. Replace scene is merged into Replace background; Clothing and props is replaced by local-edit presets. Character reference moves to Photo editing. Old History remains readable/applicable under its saved guards; parameter reuse opens the corresponding shared mode. Older packages and historical screenshots may still show the old layout.
+
 | Workspace / mode | What to select and describe |
 | --- | --- |
-| <a id="edit"></a>Local edit · Objects and materials | Select the object; describe material, color and shapes to retain |
-| <a id="remove"></a>Local edit · Remove objects | Select the distraction with some surroundings; a built-in instruction replaces the prompt field |
-| <a id="background"></a><a id="background-fix"></a>Local edit · Replace background | **Select the subject to keep; do not invert.** Describe the new scene, ground and lighting |
-| <a id="costume"></a>Portrait · Clothing and props | Select clothing/props, avoiding faces and hands that should stay |
-| <a id="reference"></a>Portrait · Character reference | Select the edit area, import a reference and name the features to borrow; identity is not guaranteed |
-| <a id="scene"></a>Portrait · Replace scene | Keep the subject selected, as for backgrounds; describe environment, time and lighting |
-| <a id="effect"></a><a id="atmosphere"></a>Portrait · AI assets | Select the reference subject, then choose placement; Objects and particles / Lighting and atmosphere share one entry, with text-only generation also available |
+| <a id="edit"></a><a id="costume"></a>Photo editing · Objects and materials | Select objects, clothing or props; describe material, color and shapes to retain, or use a clothing preset |
+| <a id="remove"></a>Photo editing · Remove objects | Select the distraction with some surroundings; a built-in instruction replaces the prompt field |
+| <a id="background"></a><a id="background-fix"></a><a id="scene"></a>Photo editing · Replace background | **Select the subject to keep; do not invert.** Describe the new scene, ground and lighting |
+| <a id="reference"></a>Photo editing · Character reference | Select the edit area, import a reference and name the features to borrow; identity is not guaranteed |
+| <a id="effect"></a><a id="atmosphere"></a>Lighting & assets · AI assets | Select the reference subject, then choose placement; Objects and particles / Lighting and atmosphere share one entry, with text-only generation also available |
 | <a id="generate"></a>Generate · Text to image | Describe subject, setting, composition and style; no references, usually no selection |
-| Portrait · [Relighting](#relight) | Current selection, or explicitly choose Entire image, then arrange lights |
-| Portrait · [Image Blending](#blend) | Select the foreground already placed in a visible environment |
+| Lighting & assets · [Relighting](#relight) | Current selection, or explicitly choose Entire image, then arrange lights |
+| Lighting & assets · [Image Blending](#blend) | Select the foreground already placed in a visible environment |
+
+### Portrait and landscape presets
+
+Choose a category and preset under Photo presets, then preview its selection guidance and full prompt. Only **Use preset** switches tasks and replaces the prompt. Edit it as needed, preview the selection and generate. Browsing presets or changing UI language never rewrites the existing prompt; explicit use inserts the current language. Removal uses its built-in instruction and retains your prompt draft.
+
+| Category | Presets | Existing operation |
+| --- | --- | --- |
+| Portrait | Clothing repair, clothing color (navy blue by default), prop surface repair | Objects and materials |
+| Portrait | Soft gray studio background, soft outdoor background | Replace background; select the person to retain |
+| Portrait | Match portrait to environment | Image Blending; place the person and background in Photoshop first |
+| Landscape | Clear blue sky, sunset sky, distant mountain mist, autumn foliage, water reflection cleanup | Objects and materials; select the relevant area |
+| Landscape | Remove distractions | Built-in removal instruction |
+
+Presets do not create selections, read pixels or submit generation. They retain protection, references, candidate count, model, depth and edge settings; check these before generating. Sky presets edit the selected region without automatically relighting the whole image. Ordinary outward blending can still cover pixels beyond the selection: use protection or disable edge blending for precise ridgeline/building preservation. No skin smoothing, face reshaping or identity-lock algorithm is added. Presets are editable starting points; offline tests do not establish photographic quality or installed-panel acceptance.
 
 To protect faces or text, select them and use **Set protection**, then select the edit area (the reference subject for default AI assets). Protection is subtracted with feathers retained. Ordinary editing context does not enlarge the apply boundary. After changing documents, prepare a new selection; history can restore its own range in the original document during the same plugin session.
 
-**Edge blending in current source (published 0.6.1 packages retain the older local-edit-only behavior):** local object/material editing, costume/prop repair and character reference editing share an outward gradient mask. Automatic width uses 15% of the shorter native selection side, clamped to 8–512 px. Disable automatic width to set 0–1024 px manually; 0 disables blending. Inspect the orange transition in the range preview before generating. Selection interiors retain their coverage, protection is subtracted last, and the Photoshop selection stays unchanged. The fade softens boundaries but cannot remove a color cast throughout the result; “Match unselected context colors” remains a separate preference. Blend lighting/redraw, relighting, backgrounds and assets do not use it. New tasks save the resolved width and versioned raw/effective/protection planes; old history keeps its exact saved formula. Parameter reuse restores its saved radius, or 0 for markerless tasks, with automatic width off.
+**Edge blending in 0.7.0 (0.6.1 packages retain the older local-edit-only behavior):** local object/material editing, costume/prop repair and character reference editing share an outward gradient mask. Automatic width uses 15% of the shorter native selection side, clamped to 8–512 px. Disable automatic width to set 0–1024 px manually; 0 disables blending. Inspect the orange transition in the range preview before generating. Selection interiors retain their coverage, protection is subtracted last, and the Photoshop selection stays unchanged. The fade softens boundaries but cannot remove a color cast throughout the result; “Match unselected context colors” remains a separate preference. Blend lighting/redraw, relighting, backgrounds and assets do not use it. New tasks save the resolved width and versioned raw/effective/protection planes; old history keeps its exact saved formula. Parameter reuse restores its saved radius, or 0 for markerless tasks, with automatic width off.
 
 If Undo loses your selection, **Restore last selection and reread** restores the saved range for this document and mode within the same session, then reads current pixels. It does not submit a task or restore old candidates' apply permission.
 
@@ -69,7 +83,7 @@ If Undo loses your selection, **Restore last selection and reread** restores the
 
 ### Place butterflies around a person, not only inside them
 
-Version 0.6.0 combines effects and atmosphere into **Portrait → AI assets**. **Objects and particles** suits butterflies, petals and arcs; **Lighting and atmosphere** suits haze and smoke. These are prompt presets, not separate models.
+Current source uses **Lighting & assets → AI assets** (Portrait in published 0.6.0 / 0.6.1 packages). **Objects and particles** suits butterflies, petals and arcs; **Lighting and atmosphere** suits haze and smoke. These are prompt presets, not separate models.
 
 1. Select the person in Photoshop and keep **Reference subject · independent placement**.
 2. Choose a **Rectangle around the subject**, adjust expansion (50% by default), or explicitly choose **Full canvas**. A second arbitrary hand-drawn placement region is not supported in this increment.
@@ -88,7 +102,7 @@ Older two-image Qwen samples retained people, backgrounds or guide boundaries an
 
 ## Relight an image
 
-1. Choose **Portrait → Relighting**, then Current selection or Entire image. Include the ground if you want shadows there.
+1. Choose **Lighting & assets → Relighting** (Portrait in older builds), then Current selection or Entire image. Include the ground if you want shadows there.
 2. Open the workbench and check the current composite. After changing the background/document, use **Reread current document**; edited lights remain. Add a background beneath cutouts in a copy so the editable area is opaque.
 3. Add, move and adjust up to eight lights; duplicate, disable or lock them. The local illustration expresses intent. Dragging, workbench Undo and hiding markers do not generate images.
 4. Explicitly use **Generate AI result**, inspect, then apply or export. Changing lights after generation marks the old result as outdated.
@@ -188,7 +202,7 @@ This screenshot loads an existing real scene candidate in the branch's final run
 
 Unresolved tasks stay visible. Repeated failed status reads retain unknown state and the original ID for later recovery; unknown does not mean remote failure. Only unknown tasks allow a second confirmation to **Stop local tracking**. This does not cancel remote work or billing; generating again can duplicate it. Clearing history also does not cancel or clear the backend. Retry interrupted local cleanup with **Retry local cleanup**.
 
-**History range reuse in current source (not included in published 0.6.1 packages):** new captured tasks save their own native selection, feathers and protection. Browsing history does not restore anything. Whole-image relighting keeps its full-canvas scope without creating a Photoshop selection. Old records without a verifiable raw selection remain usable for parameters and export; another document or plugin session requires a new selection. Clearing a record also clears its saved planes.
+**History range reuse in 0.7.0 (not included in published 0.6.1 packages):** new captured tasks save their own native selection, feathers and protection. Browsing history does not restore anything. Whole-image relighting keeps its full-canvas scope without creating a Photoshop selection. Old records without a verifiable raw selection remain usable for parameters and export; another document or plugin session requires a new selection. Clearing a record also clears its saved planes.
 
 If cancelling or changing the selection leaves an old candidate showing **Check source**, click it to compare the entire document against the surviving Photoshop history baseline, at native depth and ICC. When the check passes, click Apply again; the candidate uses its saved effective mask, regardless of the current selection. Actual pixel changes, missing history, a closed/reopened source or a new plugin session keep application blocked. Reuse the range to generate again where available, or export the old candidate. No automatic history rewind or inference occurs. This path passed Photoshop 27 API checks with owned sRGB8, ProPhoto RGB16 and transparent fixtures, including feathers, protection, owned-layer replacement and single Undo; installed-panel and photographic quality acceptance remain separate.
 

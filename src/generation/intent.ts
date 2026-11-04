@@ -4,7 +4,7 @@ export type OutputKind='edit'|'asset'|'t2i';
 export interface Intent {kind:OutputKind;prompt:string;referenceSlot?:number;assetContext?:AssetContext}
 export function isBackgroundMode(mode:string):boolean {return mode==='background'||mode==='scene';}
 export function intent(workspace:Workspace,mode:string,prompt:string,hasReference:boolean,guide:boolean,usage:string,bindings:'images'|'semantic'='images',structuredRelight=false,assetContext?:AssetContext):Intent {
-  const modes={local:['edit','remove','background'],cosplay:['blend','relight','effect','costume','reference','scene','atmosphere'],t2i:['generate']};
+  const modes={local:['edit','remove','background','reference'],cosplay:['blend','relight','effect','costume','reference','scene','atmosphere'],t2i:['generate']};
   if(!modes[workspace]?.includes(mode))throw new Error('不支持的工作区或模式');
   if(mode!=='remove'&&mode!=='blend'&&!prompt.trim())throw new Error('请描述希望生成或修改的内容');
   if(mode==='reference'&&!hasReference)throw new Error('角色参考辅助需要选择一张参考图');

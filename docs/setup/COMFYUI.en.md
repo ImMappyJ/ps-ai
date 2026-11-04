@@ -6,7 +6,7 @@
 
 PS-AI connects directly to your ComfyUI. The plugin includes no backend or weights. This page covers environment selection on Windows with NVIDIA through the first result. For cloud APIs, see [platform setup](PLATFORMS.en.md).
 
-> **Check your build first:** Use [0.6.0 stable](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.6.0) for GGUF and compatible native `.safetensors` routes. See the [tested example](#native-tested) for the exact INT8 evidence and limits. The user reported successful candidate testing and approved release; this does not establish every installation method or model. Older 0.5.2 packages remain GGUF-only and cannot gain native loading through settings changes.
+> **Check your build first:** Use [0.7.0 stable](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.7.0) for GGUF and compatible native `.safetensors` routes. See the [tested example](#native-tested) for the exact INT8 evidence and limits. The 0.6.0 user candidate test does not establish 0.7.0 installation, preset or every-model acceptance. Older 0.5.2 packages remain GGUF-only and cannot gain native loading through settings changes.
 
 Setup order: choose an existing or new environment → choose a GGUF or native route supported by your build → prepare its nodes and three model roles → start and connect → generate, inspect the new layer and undo.
 
@@ -25,7 +25,7 @@ Make two choices before downloading:
 
 1. **Photoshop 27.0 or later.** The recorded host is Windows Photoshop 27.0. Follow the [README installation steps](../README.en.md#install-a-release-package) for the PS-AI CCX or Portable package, then open PS-AI from Photoshop's Plugins menu. PS-AI Portable is the plugin; ComfyUI Portable below is a separate inference backend.
 2. **A compatible NVIDIA GPU, working driver and enough disk space.** The reference machine has an RTX 5080 with 16 GiB VRAM and about 48 GB RAM; these are not established minimum requirements. Tested examples total about 14.63 GB for GGUF or 17.28 GB for native INT8, sharing the same encoder/VAE. Assess disk, VRAM and operator support for other combinations. Allow additional space for Portable, extraction, dependencies, download caches and images. Other GPUs, CPU and macOS lack equivalent validation.
-3. **Match the plugin build to the tutorial.** Choose CCX or Portable from [0.6.0 stable](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.6.0), without compiling source. Check the version/build identity in Settings and package notes. Older 0.5.2 packages do not support native loading. A matching version does not validate your machine or weights; still complete the small generation, application and Undo checks below.
+3. **Match the plugin build to the tutorial.** Choose CCX or Portable from [0.7.0 stable](https://github.com/ImMappyJ/ps-ai/releases/tag/v0.7.0), without compiling source. Check the version/build identity in Settings and package notes. Older 0.5.2 packages do not support native loading. A matching version does not validate your machine or weights; still complete the small generation, application and Undo checks below.
 
 The default 8-bit path with a packaged plugin and local ComfyUI needs no Node.js, global Python, Git, ComfyUI-Manager or manual workflow import. Node.js 24+ is needed only for the [cloud platform relay](PLATFORMS.en.md) or source builds. Optional environment tools check or prepare configuration; they do not install the backend/dependencies or download models. These are instructions, not a record of a clean-machine installation or new host acceptance.
 

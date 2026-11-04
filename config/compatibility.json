@@ -2,6 +2,14 @@
   "schemaVersion": 1,
   "preset": "qwen-image-2.1-gguf-q4-experimental",
   "releaseAcceptance": {
+    "version": "0.7.0",
+    "date": "2026-11-04",
+    "basis": "User explicitly authorized creating the PR, publishing a new release and building local installation packages. This is publication authorization, not photographic or installed-panel acceptance.",
+    "validation": "1191 offline tests, TypeScript checks, production build, seven archive checks and a fresh code review passed for the feature implementation. Final tagged archives are tested, rebuilt and verified by the release workflow.",
+    "scope": "Eight-mode navigation and 12 bilingual Portrait/Landscape presets; includes changes merged since 0.6.1 for outward-v2 masks, explicit reference color approximation, historical selections/source proof, multilayer capture bounds and original-ICC lighting groups. Earlier native API checks retain their recorded scope; no new preset inference or installed-panel acceptance.",
+    "finalArtifacts": "Consult release-manifest.json for final tagged source, workflow identity, sizes and digests"
+  },
+  "release061Acceptance": {
     "version": "0.6.1",
     "date": "2026-11-01",
     "basis": "User explicitly requested a new release after the implementation PR was merged; this is publication authorization, not a new native visual acceptance report",
@@ -19,7 +27,7 @@
     "scope": "User report without a case-by-case test record; does not establish every mode, model, CCX installation, upgrade, clean-machine or platform acceptance",
     "finalArtifacts": "Rebuilt by the release workflow from the merged source; consult release-manifest.json for final source and digests"
   },
-  "status": "0.6.1 stable release; new large-Blend and ordinary-edit edge behavior has offline coverage. Existing Windows Photoshop 27.0 evidence remains scoped to its recorded cases; broader host stability is unverified",
+  "status": "0.7.0 stable channel; photo task layout and presets have offline coverage. Native API evidence for earlier merged changes remains scoped to its recorded cases; preset visual quality, installed-panel interaction and broader host stability are unverified.",
   "photoshop": {
     "tested": "27.0",
     "minimumManifest": "27.0",

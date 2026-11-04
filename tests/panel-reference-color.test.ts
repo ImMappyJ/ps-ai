@@ -45,7 +45,7 @@ test('reference source changes offer reselect guidance without capturing the unr
 test('actual approximate reference use is saved and shown in results and reopened history without restoring consent',async()=>{
   const {h}=await referencePanel();let record:any;try{
     assert.ok(h.el('reference-assume-srgb'));h.el('reference-assume-srgb').checked=true;h.click('reference');await h.wait();
-    h.click('tab-cosplay');h.el('mode').value='reference';h.change('mode');h.el('resolution').value='32';h.el('count').value='1';h.click('generate');await h.wait();
+    h.click('tab-local');h.el('mode').value='reference';h.change('mode');h.el('resolution').value='32';h.el('count').value='1';h.click('generate');await h.wait();
     record=h.records()[0];assert.ok(record);assert.equal(record.params.referenceColorReason,'assumed-srgb');assert.ok(h.uploads.some(u=>u.name.endsWith('-reference.png')));
     assert.match(h.el('candidate-color-warning').textContent,/参考图色彩.*假定 sRGB/);await h.refreshHistory();h.selectHistory(record.id);await h.wait();assert.match(h.el('history-details').textContent,/参考图色彩.*假定 sRGB/);
   }finally{await h.close();}

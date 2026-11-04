@@ -2,66 +2,56 @@
 
 ## 中文
 
-本版本通道：**{{CHANNEL}}**。标签对应源码：[{{SOURCE_SHA}}]({{SOURCE_URL}})。[该版本提交记录]({{COMMITS_URL}})；实际变更与贡献者由下方 GitHub 生成信息和比较链接补充。
+本版本通道：**{{CHANNEL}}**。标签源码：[{{SOURCE_SHA}}]({{SOURCE_URL}})，[提交记录]({{COMMITS_URL}})。本次包含 0.6.1 之后合并的功能和修复。
 
-### 0.6.1 的主要变化
+### 0.7.0 的主要变化
 
-- **大图溶图自动控制分析内存**：根据候选准备预算选择并保存分析尺寸，减少大照片在读取来源时因固定分析尺寸触发 `image-budget` 的情况。保留原生尺寸的选区／保护蒙版，以及用户选择的模型分辨率和输出位深。
-- **普通编辑向外渐变融合**：在选区外增加渐变蒙版，默认 8 个原图像素，可调 0–64，设为 0 关闭。只用于普通编辑；溶图光影组、溶图 AI 重绘、布光、AI 素材和其他模式不启用。保护区继续生效，结果仍为带可编辑蒙版的新图层。
-- **大范围普通编辑分段处理**：把候选准备也计入预算；需要时使用有界分析图和原生尺寸分段写入，避免仅来源读取可行、候选处理却超额。
-- **历史与输出校验加固**：保存新的融合参数、原始选区与保护蒙版；重载时核对尺寸、来源、位深和蒙版关系。旧历史保持原行为；输出位深不符会在读取原图或解码前拒绝。
-- **双语说明同步**：补充融合范围、预算行为和色彩支持边界。保留 0.6.0 的兼容 GGUF／Safetensors 加载路线与统一 AI 素材流程。
+- **功能重新排布**：照片修图、光影与素材、生图三个工作区，共 8 个模式。场景替换并入换背景；服装／道具修复改为局部编辑预设；角色参考移入照片修图。旧历史仍按保存的来源与蒙版应用，复用参数进入对应共享模式。
+- **12 个人像／风光预设**：人像包含服装修复、服装改色、道具修复、棚拍背景、户外背景与环境融合；风光包含蓝天、日落、薄雾、秋色、水面与杂物移除。先预览选区说明和提示词，再明确使用；不会自动读取图片或生成。切换语言不改写已输入的描述。
+- **边缘融合升级**：普通局部修改、服装与参考编辑共用 outward-v2；自动宽度为选区短边的 15%，限制 8–512 原图像素，手动可设 0–1024，0 关闭。保护区仍生效，旧历史保留原公式。
+- **历史选区与来源验证**：保存原始选区、羽化与保护区；可在同会话原文档恢复并复用当前像素。明确的全原生像素核验可验证旧候选来源，没有通过验证的旧任务不会获得新的应用权限。
+- **参考图与预览修复**：增加单次明确允许的无配置 RGB8/16 参考图近似 sRGB 读取，保留原图与近似标识；修复多图层顶层无交集像素时的选区预览，以及过期错误提示的清理。
+- **原 ICC 光影组**：支持通过实际 ICC 检查的已标记 RGB8/16 来源，在原文档色彩空间中提取和应用溶图／重绘光影层，保留来源、蒙版与撤销检查。旧非 sRGB 光影记录缺少所需原生数据时，须重新捕获生成。
 
-开发验证：实现提交通过 1073 项离线测试、类型检查、生产构建和 PR 打包 CI；正式包再由发布流水线完成测试、构建和归档校验。本次没有重新运行真实推理、安装后的面板交互或 Photoshop 原生照片验收；过去的宿主与推理记录仍以兼容清单中各自的日期和范围为准。
+开发验证：功能实现通过 **1191 项离线测试**、类型检查、构建、7 项归档检查和独立代码审查。发布流水线对最终标签重新执行完整打包检查。此前合并修复的 Photoshop 原生 API 记录按兼容清单中的日期和范围保留；本次没有新增 12 个预设的真实推理、安装面板或照片效果验收。
 
-发布依据：2026-11-01，用户在实现 PR 合并后明确要求发布新版本。这是发布授权，不是新版照片、蒙版边缘或安装验收通过的反馈。0.6.0 的用户候选测试记录单独保留，不扩展为本次新功能的验收。
+发布依据：用户于 **2026-11-04** 明确授权创建 PR、发布新版本和生成本地安装包。这是发布授权，不代表新增预设或所有安装方式均已验收。
 
-### 已知限制
+### 安装与限制
 
-保留 512 MB 图像内存预算、4500 万文档像素、边长与 PNG 解码保护；不能保证任意大图片都能处理。本次没有新增色彩空间支持：现有 RGB／已解析配置文件的灰度 8/16 位路径继续保留，模型输入仍为 sRGB8；溶图光影提取仍要求已标记的 sRGB RGB8/16 和可编辑范围不透明，CMYK、Lab 和 32 位 HDR 等仍不支持。向外渐变可以缓和接缝，但不能保证消除生成内容的色差。
+- [CCX 安装包]({{CCX_URL}})：使用 Adobe Creative Cloud 桌面应用安装；不要作为图片打开。
+- [Portable 安装包]({{PORTABLE_URL}})：退出 Photoshop 后，将完整 `PS-AI-FOR-ME` 文件夹放入 Photoshop 的 `Plug-ins`。
+- [环境工具包]({{ENVIRONMENT_URL}})：包含检查／安装脚本、配置、指南及独立平台网关，不含 ComfyUI、Node.js、模型或 API Key。
+- 各包附 `.sha256`；`release-manifest.json` 记录本批文件、源码与工作流身份。校验和用于完整性检查，不是数字签名。
 
-本次发布为正式通道，但不保证所有模型组合和使用场景。新大图路径、蒙版边缘、真实照片光影保真和安装交互仍需实际检查。平台真实 Key、其他宿主／系统、全模式安装与长期稳定性不由离线测试保证。旧 `selection-v1` 素材的五个真实 ComfyUI 样本视觉检查失败，这不是 `subject-v1` 三图流程的测试结论；有限 Qwen 溶图对照中真人变化仍弱。请检查原始输出，不把透明像素或成功回填当作视觉质量通过。
+更新前保存文档并退出 Photoshop；CCX 与 Portable 的私有设置和历史不自动迁移。最低宿主为 Photoshop **{{HOST_MINIMUM}}**。文件名保留历史 `experimental` 后缀，正式通道不扩大验收范围。详见[中文指南]({{DOCS_ZH_URL}})。
 
-- [CCX 插件包]({{CCX_URL}})：通过 Adobe Creative Cloud 桌面应用安装；双击无反应时，使用同版本环境工具的 `scripts/install-ccx.ps1 -PackagePath`。不要用 Photoshop 的“打开”导入。
-- [Portable 插件包]({{PORTABLE_URL}})：解压后将完整 `PS-AI-FOR-ME` 文件夹复制到实际 Photoshop 安装目录的 `Plug-ins`，清单直接位于该文件夹下。
-- [环境工具包]({{ENVIRONMENT_URL}})：包含后端检查、已有环境准备、CCX 安装脚本、配置示例、使用指南及独立平台网关；不含 ComfyUI、Node.js、模型或 API Key。
-- 每个包均附同名 `.sha256`；`release-manifest.json` 记录本批文件大小、SHA256、源码和工作流身份。这些是完整性校验，不是数字签名。
-
-安装或更新前保存文档并退出 Photoshop。只保留一种插件安装形式；CCX 与 Portable 的设置、候选和历史不自动迁移，切换前导出设置和需要的 PNG。升级只替换本插件；旧会话候选需重新捕获后才能应用。详见[本版本中文指南]({{DOCS_ZH_URL}})。
-
-manifest 的最低宿主为 Photoshop **{{HOST_MINIMUM}}**。现有人工记录主要来自 Windows Photoshop 27.0；这不代表所有支持版本、系统或安装方式均已验收。发行文件保留 `experimental` 命名；选择 stable 仅声明 GitHub 发行通道，不扩大验证范围。
-
-自动流水线运行离线测试、类型检查、生产构建和归档校验。它不会运行 Photoshop、GPU 推理、下载大模型或调用付费平台。平台输出、新版面板、图像质量、颜色/透明度/16 位和安装的实际验收，以[该标签的说明]({{SOURCE_URL}})为准；CI 通过不等于 Photoshop 全模式实测通过。请在已保存副本中使用，检查结构、颜色和边缘。代码采用 GPL-3.0-only，权重另行授权。
+保留 512 MB 图像工作预算、4500 万文档像素上限及输出保护；并非任意大图都能处理。模型输入为 sRGB8，存在色域／精度损失；SDR16 不等于 HDR 或模型原生 16 位。光影组要求可靠 ICC 的 RGB8/16 与不透明编辑区域；CMYK、Lab、32 位 HDR 等仍不支持。天空预设只编辑指定区域，不自动给全图重新布光。人脸身份、边缘、光影和透明素材仍须检查；没有新增磨皮、瘦脸或身份锁定算法。平台真实 Key 出图、全模式安装与长期稳定性不由离线测试保证。
 
 ## English
 
-Release channel: **{{CHANNEL}}**. Tagged source: [{{SOURCE_SHA}}]({{SOURCE_URL}}). [Commits at this source]({{COMMITS_URL}}); GitHub-generated changes, contributors and the actual comparison link follow below.
+Release channel: **{{CHANNEL}}**. Tagged source: [{{SOURCE_SHA}}]({{SOURCE_URL}}), [commit history]({{COMMITS_URL}}). This version includes changes merged since 0.6.1.
 
-### Main changes in 0.6.1
+### Main changes in 0.7.0
 
-- **Adaptive analysis memory for large Blend sources**: choose and persist analysis dimensions within the candidate-preparation budget, reducing `image-budget` capture failures caused by fixed analysis sizes. Native selection/protection masks, requested model resolution and output depth remain intact.
-- **Outward gradient masks for ordinary editing**: add an outward transition of 8 native pixels by default, adjustable from 0 to 64; 0 disables it. Only ordinary edit mode uses this behavior. Blend lighting, Blend AI redraw, Relight, AI assets and other modes are excluded. Protection remains effective and the result retains an editable layer mask.
-- **Bounded processing for large ordinary edits**: account for candidate preparation as well as capture, using a bounded analysis raster and native-size strip writing when necessary.
-- **Stronger history and output validation**: persist the new transition settings, raw selection and protection planes, then validate dimensions, source, depth and mask relationships when reloading. Legacy history retains its behavior. Output depth mismatches reject before source reads or decoding.
-- **Updated bilingual guidance**: document transition scope, budgeting and color limits, retaining the compatible GGUF/Safetensors routes and unified AI assets introduced in 0.6.0.
+- **Eight-mode task layout** across Photo editing, Lighting & assets and Generate. Replace scene shares Replace background; clothing/prop repair becomes local-edit presets; Character reference moves to Photo editing. Saved candidates retain their original source/mask guards, while parameter reuse opens the corresponding shared task.
+- **12 Portrait/Landscape presets** covering clothing repair/color, props, studio/outdoor backgrounds and environmental blending; skies, sunset, mist, autumn foliage, water and distraction removal. Preview guidance and prompts before explicit use. Browsing never captures or generates; language changes leave existing prompts untouched.
+- **Upgraded outward blending** for ordinary edits, clothing and reference editing: outward-v2 automatically uses 15% of the shorter selection side, clamped to 8–512 native pixels. Manual width is 0–1024; 0 disables it. Protection and legacy formulas remain intact.
+- **Historical selections and source proof** save raw selections, feathers and protection for explicit same-session restoration and reuse with current pixels. Explicit full native pixel verification can prove an old candidate's source; unverified records gain no new application permission.
+- **Reference and preview fixes** add a one-use explicit approximate-sRGB option for untagged RGB8/16 references, preserving originals and approximation notices. Multilayer capture handles a nonintersecting empty top layer correctly, and resolved diagnostic feedback clears without hiding unrelated errors.
+- **Original-ICC lighting groups** support verified tagged RGB8/16 sources, extracting/applying Blend and redraw lighting layers in the original document color space. Source, masks and Undo guards remain. Older non-sRGB lighting records without native color data require fresh capture/generation.
 
-Development validation: the implementation passed 1073 offline tests, type checking, a production build and PR package CI. The release workflow tests, rebuilds and verifies the final archives. No new live inference, installed-panel interaction or native Photoshop photo acceptance was performed for these changes. Earlier host and inference evidence retains the dates and scope recorded in the compatibility manifest.
+Development validation: **1191 offline tests**, type checking, build, seven archive checks and independent review passed for the implementation. The release workflow reruns packaging checks on the final tag. Earlier merged fixes retain their dated Photoshop API evidence in the compatibility manifest. The new presets have no additional live inference, installed-panel or photographic-quality acceptance.
 
-Release basis: on 2026-11-01, the user explicitly requested a new release after the implementation PR was merged. This authorizes publication; it is not a new photo, mask-edge or installation acceptance report. The 0.6.0 candidate test remains a separate historical record.
+On **2026-11-04**, the user explicitly authorized the PR, new release and local installation packages. Publication authorization does not establish preset quality or acceptance of every installation method.
 
-### Known limits
+### Installation and limits
 
-The 512 MB image-memory budget, 45-million-pixel document cap, side-length and PNG decode guards remain. Arbitrarily large images are not guaranteed to fit. This release adds no new color-space support: existing RGB and resolved-profile Grayscale 8/16-bit paths remain, with sRGB8 model inputs. Blend lighting still requires tagged sRGB RGB8/16 with opaque editable coverage. CMYK, Lab, 32-bit HDR and other unsupported modes remain excluded. Outward gradients can soften seams but cannot guarantee removal of generated color differences.
+- [CCX package]({{CCX_URL}}): install with Adobe Creative Cloud desktop, not Photoshop File → Open.
+- [Portable package]({{PORTABLE_URL}}): quit Photoshop, then copy the entire `PS-AI-FOR-ME` folder into Photoshop's `Plug-ins` directory.
+- [Environment tools]({{ENVIRONMENT_URL}}): scripts, configuration, guides and standalone gateway; no ComfyUI, Node.js, models or API keys.
+- Matching `.sha256` files and `release-manifest.json` identify the exact batch, source and workflow. These provide integrity checks, not digital signatures.
 
-This is a stable-channel release, not a guarantee of every model combination or scenario. New large-source paths, mask edges, photographic lighting fidelity and installation interactions still need actual inspection. Offline tests do not establish live platform keys, every host/system, all-mode installation acceptance or long-term stability. Five historical `selection-v1` ComfyUI asset samples failed visual inspection, which is not a verdict for the `subject-v1` three-image flow. Portrait changes remained weak in limited Qwen Blend comparisons. Transparent pixels and successful application do not prove visual quality.
+Save documents and quit Photoshop before upgrading. CCX/Portable private settings and history do not migrate automatically. Minimum host: Photoshop **{{HOST_MINIMUM}}**. Historical `experimental` filenames remain; the stable channel does not expand acceptance. See the [English guide]({{DOCS_EN_URL}}).
 
-- [CCX plugin]({{CCX_URL}}): install through Adobe Creative Cloud desktop. If double-clicking does nothing, use `scripts/install-ccx.ps1 -PackagePath` from the matching environment tools. Photoshop File → Open does not install plugins.
-- [Portable plugin]({{PORTABLE_URL}}): extract and copy the entire `PS-AI-FOR-ME` folder into the actual Photoshop `Plug-ins` directory, with its manifest directly inside that folder.
-- [Environment tools]({{ENVIRONMENT_URL}}): backend checks, preparation for an existing environment, CCX installer, examples, guides and the standalone platform gateway. ComfyUI, Node.js, models and API keys are separate.
-- Each package has a matching `.sha256`. `release-manifest.json` records this batch's sizes, SHA256 hashes, source and workflow identity. These are integrity checks, not a digital signature.
-
-Save documents and quit Photoshop before installation or upgrade. Keep one installation method. CCX and Portable use separate settings and history; export settings and required PNGs before switching. Replace only this plugin. Capture again before applying candidates from older sessions. See the [versioned English guide]({{DOCS_EN_URL}}).
-
-The manifest requires Photoshop **{{HOST_MINIMUM}}** or later. Existing manual evidence mainly covers Windows Photoshop 27.0; it does not establish acceptance of every host, system or installation method. Archive names retain `experimental`; choosing stable only selects the GitHub release channel.
-
-Automation runs offline tests, type checking, production builds and archive verification. It does not run Photoshop, GPU inference, model downloads or paid providers. Consult the [tagged source and guides]({{SOURCE_URL}}) for actual platform, panel, image, color/alpha/depth and installation acceptance. Passing CI does not establish full Photoshop acceptance. Use saved copies and inspect structure, colors and edges. Code: GPL-3.0-only; model licenses are separate.
+The 512 MB working budget, 45 MP document cap and output guards remain; arbitrarily large images are not guaranteed to fit. Model inputs are sRGB8 with gamut/precision loss; SDR16 is neither HDR nor native 16-bit model precision. Lighting groups require verified-ICC RGB8/16 and opaque editable coverage. CMYK, Lab and 32-bit HDR remain unsupported. Sky presets edit the selected area without automatically relighting the entire image. Inspect identity, edges, lighting and transparency; no skin-smoothing, face-reshaping or identity-lock algorithm is added. Offline tests do not establish live cloud inference, every installation mode or long-term stability.

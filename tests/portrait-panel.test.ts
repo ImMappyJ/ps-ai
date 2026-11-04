@@ -1,8 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {panelHarness} from './uxp-harness';import {defaultSettings} from '../src/infrastructure/config/profile';
 
-test('Portrait label translates without changing persisted workspace or relight prompts',async()=>{
+test('Lighting and assets label translates without changing persisted workspace or relight prompts',async()=>{
   const h=await panelHarness();try{
-    await h.wait();assert.equal(h.el('tab-cosplay').textContent,'人像');
+    await h.wait();assert.equal(h.el('tab-cosplay').textContent,'光影与素材');
     const prompt='左暖右冷，保留五官',ordinary='保留普通修图草稿';
     h.el('prompt').value=ordinary;h.click('tab-cosplay');h.el('mode').value='relight';h.change('mode');h.el('resolution').value='32';
     h.click('generate');await h.wait();
@@ -10,7 +10,7 @@ test('Portrait label translates without changing persisted workspace or relight 
     assert.equal(h.el('relight-dialog').hasAttribute('open'),true);assert.equal(h.el('prompt-group').style.display,'none');
     h.el('relight-supplement').value=prompt;h.change('relight-supplement');h.click('relight-close');await h.wait();
     h.el('language').value='en-US';h.change('language');await h.wait();
-    assert.equal(h.el('tab-cosplay').textContent,'Portrait');assert.equal(h.el('mode').value,'relight');assert.equal(h.el('prompt').value,ordinary);
+    assert.equal(h.el('tab-cosplay').textContent,'Lighting & assets');assert.equal(h.el('mode').value,'relight');assert.equal(h.el('prompt').value,ordinary);
     h.click('generate');await h.wait();assert.equal(h.el('relight-supplement').value,prompt);assert.equal(h.posts.length,0);
     h.click('relight-generate');await h.wait();
     assert.equal(h.posts.length,1);const record=h.records()[0];
