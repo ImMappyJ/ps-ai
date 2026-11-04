@@ -6,11 +6,11 @@
 
 ## 兼容契约
 
-本规范记录 2026-10-31 的源码路线与沟通边界。**已发布 0.5.2 仅支持 GGUF 主模型；0.6.0 是未发布源码候选，新增原生 Safetensors 主模型路线。**指定 INT8 组合已有真实推理／PNG 与有限 Photoshop API 证据，已安装面板及 CCX／Portable 验收仍待完成；源码能力不能写成已发布能力。
+本规范于 2026-11-05 同步至 **0.7.0 正式版**：兼容 GGUF 与原生 Safetensors 主模型路线。原生路线自 0.6.0 加入；旧 0.5.2 发布包仅支持 GGUF。指定 INT8 组合保留 2026-10-31 的真实推理／PNG 与有限 Photoshop API 证据；发布不代表新增预设、所有安装形式或模型组合已完成验收。
 
 | 组件角色 | 路线与约束 |
 | --- | --- |
-| 生成模型 | `.gguf` → `UnetLoaderGGUF`；本分支新增 `.safetensors` → 内置 `UNETLoader(weight_dtype=default)`。两者都要求兼容 Qwen-Image 2.1 架构及固定 `QwenImage21Cache`、`cfg=1`、`euler/simple`、`denoise=1` |
+| 生成模型 | `.gguf` → `UnetLoaderGGUF`；`.safetensors` → 内置 `UNETLoader(weight_dtype=default)`。两者都要求兼容 Qwen-Image 2.1 架构及固定 `QwenImage21Cache`、`cfg=1`、`euler/simple`、`denoise=1` |
 | 视觉／文本编码器 | 匹配的 Qwen3-VL 8B Safetensors；保持 `CLIPLoader(type=qwen_image, device=default)` 和 `TextEncodeQwenImage21` 的文字／多图条件契约 |
 | VAE 编解码器 | 匹配 Qwen 2.1 的 Safetensors RGBA VAE，保留 64 latent 通道、16 倍缩放、归一化及布局；同一 VAE 编码编辑输入并解码输出 |
 
@@ -45,9 +45,9 @@ README、双语配置／使用指南、清单、教程脚本、字幕、卡片�
 
 ## Compatibility contract
 
-This standard records the source routes and communication boundary on 2026-10-31. **Published 0.5.2 is GGUF-only. The unreleased 0.6.0 source candidate adds native Safetensors diffusion loading.** One INT8 combination has real inference/PNG and bounded Photoshop API evidence. Installed panels and CCX/Portable acceptance remain pending; source capability is not released capability.
+Updated on 2026-11-05 for **released 0.7.0**, which supports compatible GGUF and native Safetensors diffusion routes. Native loading arrived in 0.6.0; older 0.5.2 remains GGUF-only. The specified INT8 combination retains its dated 2026-10-31 inference/PNG and bounded Photoshop API evidence. Publication does not validate new presets, all installation methods or every model combination.
 
-Diffusion `.gguf` selects `UnetLoaderGGUF`; this branch adds `.safetensors` through built-in `UNETLoader(weight_dtype=default)`. Both retain compatible Qwen-Image 2.1 architecture, `QwenImage21Cache`, `cfg=1`, `euler/simple` and `denoise=1`. The other two roles remain the matching Qwen3-VL 8B Safetensors vision/text encoder and Qwen 2.1 RGBA Safetensors VAE, including its 64 latent channels, 16× scaling, normalization and encode/decode contracts.
+Diffusion `.gguf` selects `UnetLoaderGGUF`; released 0.7.0 also supports `.safetensors` through built-in `UNETLoader(weight_dtype=default)`. Both retain compatible Qwen-Image 2.1 architecture, `QwenImage21Cache`, `cfg=1`, `euler/simple` and `denoise=1`. The other two roles remain the matching Qwen3-VL 8B Safetensors vision/text encoder and Qwen 2.1 RGBA Safetensors VAE, including its 64 latent channels, 16× scaling, normalization and encode/decode contracts.
 
 Three roles do not mean three fixed files. Format chooses a loader, not an architecture. Authors, filenames and inventory visibility do not establish compatibility. Arbitrary SD/SDXL/Flux, other Qwen architectures, Turbo/LoRA requiring different sampling and workflow imports remain outside this graph.
 
@@ -55,7 +55,7 @@ Keep schemaVersion 1, `models.unet` / `models.clip` / `models.vae` and full load
 
 ## Evidence and communication
 
-Record four levels separately: **correct-loader file visibility → selected-route/shared node fields and socket validation → real-weight text-to-image and source/reference editing → Photoshop layer/mask, source preservation and one Undo**. Earlier levels never prove later ones. Record date, build, node/weight identities and hashes, cases and untested scope. Retain the manifest's existing GGUF baseline nodes, hashes and `workflow.loader`; list new source routes separately.
+Record four levels separately: **correct-loader file visibility → selected-route/shared node fields and socket validation → real-weight text-to-image and source/reference editing → Photoshop layer/mask, source preservation and one Undo**. Earlier levels never prove later ones. Record date, build, node/weight identities and hashes, cases and untested scope. Retain the manifest's existing GGUF baseline nodes, hashes and `workflow.loader`; list native routes separately.
 
 Current native evidence belongs only to pinned `qwen_image_2.1_int8_convrot.safetensors` with the recorded INT8 Qwen3-VL 8B encoder and BF16 RGBA VAE: real tasks/PNGs, explicitly configured P0 8/16-bit runs, GGUF comparisons and original-UUID recovery/atomic cancellation. A public astronaut photo completed inference, but raw results recolored the entire spacesuit and failed strict local instruction acceptance; completion does not establish visual quality. Photoshop 27.0.0 standalone production-adapter API checks used real outputs for small RGB8/16 selection/protection/editable masks, source preservation, one Undo, injected cancellation rollback and stale-source rejection. Tagged/assumed-sRGB multilayer capture without file pickers and one 4096×3072 RGB16 native-mask/strip application/Undo case also passed. Installed panels, photographic application, other large-source/wide-gamut cases, complete upgrade/history and CCX/Portable remain separate. The [tested example](../setup/COMFYUI.en.md#native-tested) and manifest record the exact combination and runtime with preexisting local backend modifications. Upstream version alone does not reproduce it or establish general performance/minimum VRAM.
 

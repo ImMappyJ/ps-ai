@@ -48,6 +48,7 @@ Use saved copies and inspect generated structure, colors, edges and transparency
 export function environmentSourceNames(){
   const names=['LICENSE','scripts/check-environment.ps1','scripts/prepare-environment.ps1','scripts/install-ccx.ps1','config/settings.example.json','config/compatibility.json','README.md','docs/README.en.md','docs/setup/COMFYUI.md','docs/setup/COMFYUI.en.md','docs/setup/PLATFORMS.md','docs/setup/PLATFORMS.en.md','src/generation/workflow.ts','src/infrastructure/config/profile.ts','comfyui/ps_ai_sdr16/__init__.py'];
   const guide=[
+    '070-overview.png','070-create-zh.png','070-settings-zh.png','070-preset-portrait-zh.png','070-preset-landscape-zh.png',
     'workflow-create-zh.png','workflow-settings-zh.png','workflow-results-zh.png','workflow-overview.png',
     '050-create-zh.png','050-results-zh.png','050-history-zh.png','050-settings-zh.png','050-settings-en.png','050-relight-zh.png','050-layers-zh.png','050-selection-error-zh.png',
     ...['edit','remove','background','costume','reference','scene','effect','atmosphere','generate','blend'].map(mode=>'050-mode-'+mode+'-zh.png'),
